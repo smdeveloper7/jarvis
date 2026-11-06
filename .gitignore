@@ -1,0 +1,8 @@
+# 실행 중에 바뀌는 개인 상태
+registry.yaml
+tasks/
+state/
+.claude/settings.local.json
+
+__pycache__/
+*.pyc

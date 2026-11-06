@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__paseo__create_agent",
+      "mcp__paseo__send_agent_prompt",
+      "mcp__paseo__archive_agent"
+    ],
+    "deny": [
+      "mcp__paseo__respond_to_permission",
+      "mcp__paseo__kill_agent",
+      "Bash(paseo permit *)",
+      "PowerShell(paseo permit *)"
+    ]
+  }
+}

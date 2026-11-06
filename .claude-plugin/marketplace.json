@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "jarvis",
+  "description": "jarvis 플러그인 하나를 담은 마켓플레이스",
+  "owner": {
+    "name": "smdeveloper7"
+  },
+  "plugins": [
+    {
+      "name": "jarvis",
+      "source": "./",
+      "version": "0.1.0",
+      "description": "JARVIS 공통 스킬과 훅(git-message 스킬, 커밋·PR 문구 검사)"
+    }
+  ]
+}

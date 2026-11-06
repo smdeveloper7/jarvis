@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "jarvis",
+  "version": "0.1.0",
+  "description": "JARVIS 운영에 필요한 공통 스킬과 훅: git-message 스킬, 커밋·PR 문구 검사 훅. 모든 세션(JARVIS, Coordinator, Worker)에 걸린다",
+  "author": {
+    "name": "smdeveloper7"
+  },
+  "license": "MIT",
+  "keywords": ["manager", "coordinator", "paseo", "git-message"],
+  "userConfig": {
+    "python": {
+      "type": "string",
+      "title": "Python 실행 명령",
+      "description": "훅을 돌릴 Python 3. Windows 는 python.exe 절대 경로(C:/.../python.exe)를 권장합니다. 비어 있으면 훅이 돌지 않습니다.",
+      "required": true
+    }
+  },
+  "homepage": "https://github.com/smdeveloper7/jarvis",
+  "repository": "https://github.com/smdeveloper7/jarvis"
+}
