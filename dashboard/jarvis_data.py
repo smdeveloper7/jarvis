@@ -62,6 +62,19 @@ def registry(jarvis):
     return out
 
 
+def boss_name(jarvis):
+    """사장실 명패: registry.yaml 맨 위 `boss: <이름>`, 없으면 JARVIS_BOSS 환경변수, 없으면 '사장'."""
+    try:
+        with open(os.path.join(jarvis, 'registry.yaml'), encoding='utf-8') as f:
+            for line in f:
+                m = re.match(r'^boss:\s*(.+?)\s*$', line)
+                if m:
+                    return m.group(1).split(' #')[0].strip().strip('"').strip("'") or BOSS
+    except OSError:
+        pass
+    return BOSS
+
+
 def norm(p):
     return (p or '').replace('\\', '/').rstrip('/').casefold()
 
@@ -235,8 +248,9 @@ def conversation(path):
     return out
 
 
-def messages(rows, transcript_path, hours=24, now=None, max_messages=300):
+def messages(rows, transcript_path, hours=24, now=None, max_messages=300, boss=None):
     """받은 쪽 대화 기록의 머리말 메시지로 흐름을 만든다. 보낸 쪽: 배정은 부모, 그 밖은 작업 ID 의 Coordinator 나 자식."""
+    BOSS = boss or globals()['BOSS']
     now = time.time() if now is None else now
     since = int((now - hours * 3600) * 1000) if hours > 0 else 0
     by_paseo = {r['paseoId']: r for r in rows}
@@ -324,7 +338,7 @@ def office(jarvis, rows):
             projects.append({'key': r['lane'], 'name': r['lane']})
     pending = sum(1 for d in decisions(jarvis) if d['status'] not in ('waiting', 'decided'))
     pending += sum(1 for r in rows if r.get('state') == 'blocked')
-    return {'boss': BOSS, 'projects': projects, 'pending': pending}
+    return {'boss': boss_name(jarvis), 'projects': projects, 'pending': pending}
 
 
 # ---------- state/ 파일 ----------

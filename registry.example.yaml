@@ -1,5 +1,6 @@
 # registry.yaml 의 예시. 이 파일을 registry.yaml 로 복사해 쓴다(registry.yaml 은 git 에 올리지 않는다).
 # JARVIS 가 관리한다. 프로젝트마다 root(Coordinator 가 일하는 폴더)와 지금 Coordinator 에이전트 ID.
+boss: "<이름>"                # 대시보드 사장실 명패
 projects:
   wf3-wf4:
     name: "WF3/WF4"

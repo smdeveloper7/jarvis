@@ -890,7 +890,7 @@ def messages(hours=24, now=None, root=PROJECTS, rows=(), names=None):
     Every top-level transcript touched in the window counts, closed sessions included (sub-agent ones do not).
     """
     if root == PROJECTS and names is None:   # JARVIS: 배정·보고 머리말 메시지와 부모-자식 관계로
-        return jd.messages([a for a in rows if a.get('kind') == 'paseo'], transcript_path, hours, now, MAX_MESSAGES)
+        return jd.messages([a for a in rows if a.get('kind') == 'paseo'], transcript_path, hours, now, MAX_MESSAGES, jd.boss_name(HUB))
     now = time.time() if now is None else now
     since = int((now - hours * 3600) * 1000) if hours > 0 else 0
     names = roster() if names is None else names
