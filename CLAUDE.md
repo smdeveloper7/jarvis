@@ -25,6 +25,7 @@
    - 첫 지시: `rules/coordinator.md` 전문 + `rules/worker.md` 의 경로(`C:/Users/SMDEVELOPER/JARVIS/rules/worker.md`) + 이번 일.
    - 만든 에이전트 ID 를 `registry.yaml` 의 `coordinator` 에 적는다.
 4. 넘기는 글 형식: `[배정] W-YYYYMMDD-NN` 다음 줄에 사용자 요청 원문, 필요하면 완료 조건 한 줄.
+   Worker 를 쓸지, 어떻게 나눌지 같은 방법은 적지 않는다. Coordinator 가 정한다.
 
 ## 받는 글
 
@@ -54,7 +55,15 @@ Coordinator 가 차례를 끝낼 때 오는 자동 알림은 `[보고]` 가 아�
 - 이미 돌린 평가 질문의 재실행
 - 비용이 큰 일(대량 실행, 긴 일괄 작업)
 
+## 기록
+
+- 작업일지는 의미 있는 작업 단위가 끝났을 때만 남긴다(`projects/AGENTS.md` "작업일지"). 단순 확인·질의응답은 남기지 않는다.
+- 결정은 이유와 함께 남긴다. Coordinator·Worker 는 기록하지 않는다.
+
 ## 답하는 형식
+
+사용자와 다른 에이전트에게 쓰는 글은 모두 한국어로 쓴다.
+
 
 - 맡김: `WF3/WF4 에 맡겼습니다 (W-1106-01).`
 - 질문: `WF3/WF4 가 묻습니다: … ① … ② … (추천 ①)`
