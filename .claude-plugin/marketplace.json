@@ -9,8 +9,8 @@
     {
       "name": "jarvis",
       "source": "./",
-      "version": "0.1.0",
-      "description": "JARVIS 공통 스킬과 훅(git-message 스킬, 커밋·PR 문구 검사)"
+      "version": "0.2.0",
+      "description": "JARVIS 공통 장치(폴더 보호 훅, git-message 스킬·검사 훅)"
     }
   ]
 }

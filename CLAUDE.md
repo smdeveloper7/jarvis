@@ -35,6 +35,7 @@
 | `[질문]` | Coordinator 가 기준으로 정하지 못한 판단 | 아래 "판단" |
 | `[승인요청]` | Worker 나 Coordinator 의 도구 권한 요청 | 아래 "판단" |
 | `[보고]` | 끝남 | 사용자에게 한두 줄로 알리고 기록 |
+| `[점유]`, `[해제]` | 프로젝트끼리 겹칠 수 있는 공유 자원을 쓰기 시작함·끝냄 | `state/occupancy.json` 갱신. 겹치면 차례 조정 |
 
 Coordinator 가 차례를 끝낼 때 오는 자동 알림은 `[보고]` 가 아니면 끝난 것으로 보지 않는다.
 
@@ -59,6 +60,84 @@ Coordinator 가 차례를 끝낼 때 오는 자동 알림은 `[보고]` 가 아�
 
 - 작업일지는 의미 있는 작업 단위가 끝났을 때만 남긴다(`projects/AGENTS.md` "작업일지"). 단순 확인·질의응답은 남기지 않는다.
 - 결정은 이유와 함께 남긴다. Coordinator·Worker 는 기록하지 않는다.
+- 할 일(Notion 할일 DB) 추가·조회·정리는 JARVIS 가 `notion-todo` 스킬로 직접 한다. Coordinator 에게 넘기지 않는다.
+- 상태가 바뀌면 그 자리에서 아래 `state/` 파일에 쓴다. 대화 기억에만 두지 않는다. 대시보드와 Obsidian 기록이 이 파일을 읽는다.
+
+## 상태 파일 (`state/`, git 에 올리지 않음)
+
+### `state/tasks/W-YYYYMMDD-NN.md` — 작업 하나
+
+```
+---
+id: W-20261106-01
+project: nipa                 # registry.yaml 의 프로젝트 키
+title: <한 줄>
+status: assigned              # assigned | working | question | done | cancelled
+coordinator: <에이전트 ID>
+workers: []                   # [보고] 에 나온 Worker ID
+assigned_at: 2026-11-06T19:12:00+09:00
+updated_at: 2026-11-06T19:13:00+09:00
+done_at:
+verified: none                # confirmed(Coordinator 가 직접 확인) | reported(보고만) | none
+release: none                 # none | dev_only(운영 반영 대기) | released
+---
+## 요청
+<사용자 요청 원문>
+
+## 보고
+<마지막 [보고] 원문>
+
+## 경과
+- 19:12 배정
+- 19:13 보고
+```
+
+배정할 때 만들고, `[진행]`·`[질문]`·`[보고]` 를 받을 때마다 `status`, `updated_at`, `경과` 를 고친다.
+
+### `state/decisions/D-YYYYMMDD-NN.md` — 사용자나 기준으로 정한 판단 하나
+
+```
+---
+id: D-20261106-01
+task: W-20261106-02
+project: nipa
+status: open                  # open(지금 결정 필요) | waiting(until 까지 미룸) | decided
+decided_by:                   # user | criteria
+criterion:                    # criteria.md 항목 번호(decided_by: criteria 일 때)
+options: ["① 근거 조건 붙여 유지", "② 수치 제거"]
+recommended: "①"
+raised_at: 2026-11-06T19:20:00+09:00
+until:                        # waiting 일 때 날짜, 또는 "사용자가 다시 말할 때"
+decided_at:
+decision:
+---
+## 질문
+## 결정과 이유
+```
+
+`[질문]` 이 오면 `open` 으로 만든다. 기준으로 정하면 바로 `decided`, `decided_by: criteria`. 사용자가 "나중에" 라고 하면 `waiting`. 지우지 않는다. Coordinator 가 프로젝트 기준으로 정한 것은 이 파일을 만들지 않고 작업 파일의 `보고` 에만 남긴다.
+
+### `state/occupancy.json` — 프로젝트끼리 겹칠 수 있는 공유 자원 점유
+
+```
+{"updated_at": "...", "items": [
+  {"resource": "langflow-dev:WF4", "project": "nipa", "task": "W-…", "agent": "<에이전트 ID>",
+   "since": "...", "until": "...", "note": "..."}
+]}
+```
+
+Coordinator 의 `[점유]` 를 받으면 더하고 `[해제]` 를 받으면 뺀다. 다른 프로젝트 Coordinator 가 같은 자원을 쓰려 하면 지금 쓰는 쪽과 예상 시각을 알려 주고 차례를 정한다.
+
+### `state/releases.json` — 운영 반영 대기
+
+```
+{"items": [
+  {"task": "W-…", "project": "nipa", "what": "WF4 A2 프롬프트", "env": "dev",
+   "since": "...", "status": "pending", "released_at": ""}
+]}
+```
+
+`[보고]` 의 "운영 반영 대기" 에 항목이 있으면 `pending` 으로 더한다. 사용자가 운영 반영을 마쳤다고 하면 `released` 로 바꾼다.
 
 ## 답하는 형식
 

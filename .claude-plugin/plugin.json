@@ -1,19 +1,30 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "jarvis",
-  "version": "0.1.0",
-  "description": "JARVIS 운영에 필요한 공통 스킬과 훅: git-message 스킬, 커밋·PR 문구 검사 훅. 모든 세션(JARVIS, Coordinator, Worker)에 걸린다",
+  "version": "0.2.0",
+  "description": "JARVIS 운영 공통 장치: JARVIS 폴더 보호 훅, git-message 스킬과 커밋·PR 문구 검사 훅. 모든 세션(JARVIS, Coordinator, Worker)에 걸린다",
   "author": {
     "name": "smdeveloper7"
   },
   "license": "MIT",
-  "keywords": ["manager", "coordinator", "paseo", "git-message"],
+  "keywords": [
+    "manager",
+    "coordinator",
+    "paseo",
+    "git-message"
+  ],
   "userConfig": {
     "python": {
       "type": "string",
       "title": "Python 실행 명령",
       "description": "훅을 돌릴 Python 3. Windows 는 python.exe 절대 경로(C:/.../python.exe)를 권장합니다. 비어 있으면 훅이 돌지 않습니다.",
       "required": true
+    },
+    "jarvis_dir": {
+      "type": "string",
+      "title": "JARVIS 폴더",
+      "description": "JARVIS 폴더의 절대 경로(예: C:/Users/<나>/JARVIS). 다른 세션이 이 폴더 파일을 Edit/Write 하지 못하게 막고, 대시보드가 이 폴더의 상태 파일을 읽습니다. 비우면 막지 않습니다.",
+      "required": false
     }
   },
   "homepage": "https://github.com/smdeveloper7/jarvis",
