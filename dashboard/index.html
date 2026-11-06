@@ -255,7 +255,7 @@ button.subs-t:active { background: var(--color-paper-3) }
 .tag[data-state="rest"] { color: var(--color-muted); font-weight: 600 }
 .tag.hub { background: var(--color-ink); color: var(--color-paper) }
 .tag.dup { max-width: 15em; box-shadow: inset 0 0 0 1px var(--color-accent) }
-.sign { position: absolute; left: 0; top: 0; padding: 0 var(--space-xs); border-radius: var(--radius-ctl); color: var(--color-muted); font-size: var(--text-xs); font-weight: 600; line-height: 18px; white-space: nowrap; pointer-events: none; will-change: transform; border: 1px solid var(--color-rule) }
+.sign { position: absolute; left: 0; top: 0; padding: 0 var(--space-xs); border-radius: var(--radius-ctl); color: var(--color-muted); background: var(--color-paper); font-size: var(--text-xs); font-weight: 600; line-height: 18px; white-space: nowrap; pointer-events: none; will-change: transform; border: 1px solid var(--color-rule) }
 .sign.room { color: var(--color-ink); font-weight: 700; border-color: var(--color-rule-2); background: var(--color-paper-2) }
 .hinfo { display: grid; gap: var(--space-xs); min-width: 0 }
 .hdemo .hsub { margin: 0; font-size: var(--text-meta); color: var(--color-muted) }
@@ -1001,8 +1001,8 @@ function officeLayout(projects) {
     box(0.12, 0.55, ROOM.d - 1.4, o.M.wall, ROOM.x0, 0.27, z0 + (ROOM.d - 1.4) / 2)          // 방 옆벽(앞쪽 문)
     box(ROOM.x1 - ROOM.x0, 0.55, 0.12, o.M.wall, (ROOM.x0 + ROOM.x1) / 2, 0.27, z1)          // 방 앞벽
     box(0.12, 1.05, ROOM.d - 1.5, o.M.wall, ROOM.booth, 0.52, z0 + (ROOM.d - 1.5) / 2)       // 칸막이: Coordinator | Worker
-    floorText(p.name, ROOM.x1 - 1.8, z0 + 0.35, 0, 0, 'room')
-    if (i === 0) { floorText('Coordinator', ROOM.x0 + 1.4, z0 + 0.3); floorText('Workers', ROOM.booth + 1.8, z0 + 0.3) }   // 구역 표지판은 첫 방에만(방마다 같은 배치)
+    floorText(p.name, ROOM.x1 - 1.4, z1 + 0.35, 0, 0, 'room')
+    if (i === 0) { floorText('Coordinator', (ROOM.x0 + ROOM.booth) / 2, z1 + 0.35); floorText('Workers', (ROOM.booth + ROOM.x1) / 2 - 1.2, z1 + 0.35) }   // 구역 표지판: 첫 방 앞벽 바깥(사람·이름표와 겹치지 않게)
     const out = seat => [[seat.x, walk], [ROOM.x0 + 0.5, walk], [ROOM.x0 + 0.5, door], [ROOM.corridorX, door]]
     const room = { key: p.key, name: p.name, coords: [], workers: [] }
     for (const dz of [1.35, 3.1]) {   // 칸막이 안 책상 둘: 둘째는 같은 프로젝트에 Coordinator 가 또 생겼을 때만 쓴다(규칙 위반 표시)
@@ -1122,7 +1122,8 @@ function updateHero() {
 // JARVIS: 사장은 사장실, JARVIS 는 비서 자리, Coordinator 는 자기 프로젝트 방의 칸막이 안 책상(늘 그 자리),
 // Worker 는 그 방 작업 공간 책상에서 일하고 끝나면 라운지로 간다
 function seatAt(f, desk) { f.g.position.set(desk.seat.x, 0.18, desk.seat.z); f.g.rotation.y = Math.PI; f.path = []; f.rest = { y: 0.18, rot: Math.PI } }
-function nameTag(f, nm) { if (f.tag.textContent !== nm) { f.tag.textContent = nm; f.tag.title = nm; f.tw = 0 } }
+function nameTag(f, nm, full) { if (f.tag.textContent !== nm) { f.tag.textContent = nm; f.tag.title = full || nm; f.tw = 0 } }
+const shortTask = t => (t || '').replace(/^W-\d{8}-/, 'W-')   // 방 안 이름표: W-20261106-02-B -> W-02-B
 function officeSync() {
   const o = hero.o, hubA = agents.find(a => a.lane === 'HUB')
   const projects = (officeInfo.projects || []).length ? officeInfo.projects : [{ key: '', name: '프로젝트' }]
@@ -1165,7 +1166,7 @@ function officeSync() {
       if (f.desk >= 0) used.add(f.desk)
       fresh = true
     }
-    nameTag(f, a.task || a.name || a.sessionId.slice(0, 8))
+    nameTag(f, shortTask(a.task) || a.name || a.sessionId.slice(0, 8), a.name)
     const s = sceneOf(a), was = f.state
     f.state = s
     if (f.desk < 0 || (s === 'rest' && (fresh || was !== 'rest'))) goLounge(f, !fresh)

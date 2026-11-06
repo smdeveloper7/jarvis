@@ -23,6 +23,7 @@ BOSS = os.environ.get('JARVIS_BOSS') or '사장'   # 사장실 명패: JARVIS �
 TAGS = ('배정', '보고', '질문', '진행', '승인요청', '점유', '해제', '완료')
 TAG_RE = re.compile(r'^\[(' + '|'.join(TAGS) + r')\]', re.M)
 TASK_RE = re.compile(r'W-\d{8}-\d+')
+TASK_LABEL_RE = re.compile(r'W-\d{8}-\d+(?:-[A-Za-z0-9]+)?')   # 이름표: 한 작업을 나눈 Worker(-B, -C)까지
 WORKER_DONE_S = 30 * 60   # 끝난 Worker 를 '끝남' 구역에 두는 시간. 넘으면 목록에서 뺀다
 
 
@@ -162,7 +163,7 @@ def row_of(r, role, proj, now_ms):
     elif role == 'coordinator':
         row.update(group='resident', lane=proj or '프로젝트', task='')
     elif role == 'worker':
-        m = TASK_RE.search(title)
+        m = TASK_LABEL_RE.search(title)
         row.update(group='task', lane=proj, task=m.group(0) if m else title)
     else:
         row.update(group='other', lane='', task='')
