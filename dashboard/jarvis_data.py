@@ -19,6 +19,7 @@ from datetime import datetime
 
 PASEO = os.path.abspath(os.path.expanduser(os.environ.get('PASEO_HOME') or '~/.paseo'))
 JARVIS_NAME = os.environ.get('JARVIS_NAME') or 'JARVIS'
+BOSS = os.environ.get('JARVIS_BOSS') or '사장'   # 사장실 명패: JARVIS 에게 채팅하는 사람(이름 대신 직책)
 TAGS = ('배정', '보고', '질문', '진행', '승인요청', '점유', '해제', '완료')
 TAG_RE = re.compile(r'^\[(' + '|'.join(TAGS) + r')\]', re.M)
 TASK_RE = re.compile(r'W-\d{8}-\d+')
@@ -193,6 +194,45 @@ def tagged_prompts(path):
 
 KIND = {'배정': 'assign', '보고': 'report', '완료': 'report', '질문': 'notice', '승인요청': 'notice',
         '진행': 'other', '점유': 'other', '해제': 'other'}
+NOTICE_MARKS = ('<agent-response>', '[Message received]', 'Server: srv_')   # Paseo 가 넣는 알림: 사람 채팅이 아님
+
+
+def conversation(path):
+    """대화 기록에서 머리말 없는 사람 메시지와 차례를 끝낸 답: [(ms, 'chat'|'answer'|'first', text)].
+    'first' 는 첫 사용자 메시지(머리말이 있든 없든)로, Worker 가 받은 첫 지시를 찾는 데 쓴다."""
+    out, first = [], True
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if d.get('isMeta') or d.get('isSidechain'):
+                    continue
+                msg = d.get('message') or {}
+                c = msg.get('content')
+                if d.get('type') == 'user':
+                    if isinstance(c, list) and any(isinstance(x, dict) and x.get('type') == 'tool_result' for x in c):
+                        continue
+                    text = c if isinstance(c, str) else ' '.join(
+                        x.get('text', '') for x in c or [] if isinstance(x, dict) and x.get('type') == 'text')
+                    text = (text or '').strip()
+                    if not text:
+                        continue
+                    t = iso_ms(d.get('timestamp')) or 0
+                    if first:
+                        out.append((t, 'first', text))
+                        first = False
+                    if not TAG_RE.search(text) and not any(m in text for m in NOTICE_MARKS) and not text.startswith('<'):
+                        out.append((t, 'chat', text))
+                elif d.get('type') == 'assistant' and msg.get('stop_reason') == 'end_turn':
+                    text = ' '.join(x.get('text', '') for x in c or [] if isinstance(x, dict) and x.get('type') == 'text').strip()
+                    if text:
+                        out.append((iso_ms(d.get('timestamp')) or 0, 'answer', text))
+    except OSError:
+        pass
+    return out
 
 
 def messages(rows, transcript_path, hours=24, now=None, max_messages=300):
@@ -211,10 +251,24 @@ def messages(rows, transcript_path, hours=24, now=None, max_messages=300):
         if p:
             kids.setdefault(p, []).append(r)
     msgs = []
+
+    def add(t, frm, to, kind, text):
+        first = text.splitlines()[0] if text else ''
+        msgs.append({'t': t, 'from': frm, 'to': to, 'kind': kind, 'sum': first[:200], 'text': text[:4000],
+                     'id': f'{frm}>{to}:{t}:{kind}'})
+
     for r in rows:
         tp = transcript_path(r['sessionId'], r['cwd'])
         if not tp:
             continue
+        if r['role'] in ('jarvis', 'worker'):
+            for t, kind, text in conversation(tp):
+                if t < since:
+                    continue
+                if r['role'] == 'jarvis' and kind in ('chat', 'answer'):   # 사장 <-> JARVIS
+                    add(t, BOSS, r['name'], 'chat', text) if kind == 'chat' else add(t, r['name'], BOSS, 'answer', text)
+                elif r['role'] == 'worker' and kind == 'first' and parent_of.get(r['name']):   # Coordinator 의 첫 지시
+                    add(t, parent_of[r['name']], r['name'], 'assign', text)
         for t, tag, text in tagged_prompts(tp):
             if t < since:
                 continue
@@ -231,6 +285,9 @@ def messages(rows, transcript_path, hours=24, now=None, max_messages=300):
             msgs.append({'t': t, 'from': frm, 'to': r['name'], 'kind': KIND.get(tag, 'other'),
                          'sum': first[:200], 'text': text[:4000], 'id': f"{r['sessionId']}:{t}:{tag}"})
     msgs.sort(key=lambda m: -m['t'])
+    # 사장 <-> JARVIS 는 오피스 장면에만 쓰고 흐름(그래프·목록)에서는 뺀다
+    boss = [m for m in msgs if BOSS in (m['from'], m['to'])]
+    msgs = [m for m in msgs if BOSS not in (m['from'], m['to'])]
     edges, count = {}, {}
     for m in msgs:
         e = edges.setdefault((m['from'], m['to']), {'from': m['from'], 'to': m['to'], 'count': 0, 'last': 0})
@@ -252,8 +309,22 @@ def messages(rows, transcript_path, hours=24, now=None, max_messages=300):
         nodes.append(dict(c, name=n, group=a.get('group', 'task'), lane=a.get('lane', ''), task=a.get('task', ''),
                           listed=bool(a), **{k: a.get(k) for k in ('state', 'status', 'kind', 'engine', 'sessionId')}))
     hub = next((r['name'] for r in rows if r['role'] == 'jarvis'), None)
-    return {'hours': hours, 'hub': hub, 'nodes': nodes, 'edges': sorted(edges.values(), key=lambda e: -e['count']),
-            'total': len(msgs), 'messages': msgs[:max_messages]}
+    return {'hours': hours, 'hub': hub, 'boss': BOSS, 'nodes': nodes, 'edges': sorted(edges.values(), key=lambda e: -e['count']),
+            'total': len(msgs), 'messages': msgs[:max_messages], 'bossMessages': boss[:50]}
+
+
+def office(jarvis, rows):
+    """오피스 장면에 필요한 것: 사장 이름, 프로젝트 방 목록(registry 순서 + 줄에만 있는 레인), 결정 대기 수."""
+    reg = registry(jarvis)
+    projects = [{'key': k, 'name': v.get('name') or k} for k, v in reg.items()]
+    seen = {p['key'] for p in projects}
+    for r in rows:
+        if r.get('role') in ('coordinator', 'worker') and r.get('lane') and r['lane'] not in seen:
+            seen.add(r['lane'])
+            projects.append({'key': r['lane'], 'name': r['lane']})
+    pending = sum(1 for d in decisions(jarvis) if d['status'] not in ('waiting', 'decided'))
+    pending += sum(1 for r in rows if r.get('state') == 'blocked')
+    return {'boss': BOSS, 'projects': projects, 'pending': pending}
 
 
 # ---------- state/ 파일 ----------

@@ -963,7 +963,9 @@ class Handler(BaseHTTPRequestHandler):
                 with open(os.path.join(ROOT, name), 'rb') as f:
                     return self.send(200, f.read(), ctype)
             if url.path == '/api/agents':
-                return self.send(200, {'now': int(time.time() * 1000), 'agents': agents()})
+                rows = agents()   # JARVIS: 오피스 방 배치에 쓸 사장·프로젝트·결정 대기 수를 같이 보낸다
+                return self.send(200, {'now': int(time.time() * 1000), 'agents': rows,
+                                       'office': jd.office(HUB, [a for a in rows if a.get('kind') == 'paseo'])})
             if url.path == '/api/usage':
                 return self.send(200, usage())
             if url.path == '/api/decisions':
