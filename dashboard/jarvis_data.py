@@ -103,11 +103,23 @@ def roles(recs, reg):
     jarvis.sort(key=lambda r: r.get('lastActivityAt') or '', reverse=True)
     jid = jarvis[0]['id'] if jarvis else None
     coord_of = {v.get('coordinator'): k for k, v in reg.items() if v.get('coordinator')}
-    root_of = {norm(v.get('root')): k for k, v in reg.items() if v.get('root')}
+    roots = {}
+    for k, v in reg.items():
+        if v.get('root'):
+            roots.setdefault(norm(v['root']), []).append(k)
+    root_of = {rt: ks[0] for rt, ks in roots.items() if len(ks) == 1}   # 같은 폴더를 여러 프로젝트가 쓰면 폴더로는 정하지 않는다
+
+    def title_proj(r):   # 제목 '<프로젝트>-coord' / '<프로젝트>-w-<W-ID>' 의 프로젝트 키
+        t = (r.get('title') or '').strip()
+        for k in sorted(reg, key=len, reverse=True):
+            if t == k + '-coord' or t.startswith(k + '-w-') or t.startswith(k + '-coord'):
+                return k
+        return None
+
     out = {}
     for r in recs:
         i = r['id']
-        proj = root_of.get(norm(r.get('cwd')))
+        proj = title_proj(r) or root_of.get(norm(r.get('cwd')))
         if i == jid:
             out[i] = ('jarvis', '')
         elif i in coord_of:
@@ -120,7 +132,7 @@ def roles(recs, reg):
         i = r['id']
         if out[i] is None:
             p = out.get(parent.get(i))
-            out[i] = ('worker', p[1] or root_of.get(norm(r.get('cwd'))) or '') if p and p[0] == 'coordinator' else ('other', '')
+            out[i] = ('worker', p[1] or title_proj(r) or root_of.get(norm(r.get('cwd'))) or '') if p and p[0] == 'coordinator' else ('other', '')
     return out, jid, by_id
 
 

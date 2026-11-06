@@ -56,6 +56,19 @@ try:
     md = jd.status_markdown(J)
     assert '| `W-20261106-02` | 고장확률 수정 | 질문 중 | - | 대기 | 원인 확인 / 결정 대기 |' in md, md
     assert jd.iso_ms('2026-11-06T10:00:00Z') == jd.iso_ms('2026-11-06T19:00:00+09:00')
+
+    # 같은 폴더를 쓰는 두 프로젝트: 소속은 제목(<키>-coord, <키>-w-…)과 부모로 정한다
+    reg = {'wf3-wf4': {'root': 'C:/p/nipa'}, 'nl2sql': {'root': 'C:/p/nipa'}, 'docs': {'root': 'C:/p/docs'}}
+    par = lambda i: {'paseo.parent-agent-id': i}
+    recs = [{'id': 'J', 'title': 'JARVIS', 'cwd': 'C:/J'},
+            {'id': 'A', 'title': 'wf3-wf4-coord', 'cwd': 'C:/p/nipa', 'labels': par('J')},
+            {'id': 'B', 'title': 'nl2sql-coord', 'cwd': 'C:/p/nipa', 'labels': par('J')},
+            {'id': 'C', 'title': '문서', 'cwd': 'C:/p/docs', 'labels': par('J')},
+            {'id': 'D', 'title': 'nl2sql-w-W-20261106-1', 'cwd': 'C:/p/nipa', 'labels': par('B')},
+            {'id': 'E', 'title': 'x', 'cwd': 'C:/p/nipa/wt', 'labels': par('A')}]
+    out, _, _ = jd.roles(recs, reg)
+    assert out['A'] == ('coordinator', 'wf3-wf4') and out['B'] == ('coordinator', 'nl2sql') and out['C'] == ('coordinator', 'docs'), out
+    assert out['D'] == ('worker', 'nl2sql') and out['E'] == ('worker', 'wf3-wf4'), out
     print('ok')
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
