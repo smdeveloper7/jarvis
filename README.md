@@ -36,7 +36,27 @@ Worker (작업당 하나, 끝나면 닫음)
 | `criteria.md` | JARVIS 가 사용자 대신 정할 수 있는 판단 기준. 사용자 결정에서 늘어남 |
 | `.claude/settings.json` | JARVIS 권한: Paseo 도구 전체 허용 |
 | `templates/project-settings.json` | 프로젝트 폴더에 둘 권한: 에이전트 만들기·지시·보관 허용, 권한 승인·강제 종료 금지 |
-| `skills/git-message`, `hooks/` | 플러그인으로 설치하면 모든 세션에 걸리는 커밋·PR 문구 규칙과 검사 훅 |
+| `skills/git-message`, `hooks/` | 플러그인으로 설치하면 모든 세션에 걸리는 장치: JARVIS 폴더 보호 훅, 커밋·PR 문구 규칙과 검사 훅 |
+| `state/` | JARVIS 가 쓰는 작업·결정·공유 자원 점유·운영 반영 대기 파일. git 에 올리지 않음 |
+| `dashboard/` | JARVIS 보드. lanekeeper 대시보드에 Paseo·`state/` 데이터를 붙인 로컬 화면 |
+
+## JARVIS 보드
+
+```
+JARVIS_DIR=C:/Users/<나>/JARVIS PORT=4991 python dashboard/server.py   # http://127.0.0.1:4991
+```
+
+[lanekeeper](https://github.com/holiday0726/lanekeeper) 대시보드 화면을 그대로 쓰고, 데이터만 바꿨습니다(`dashboard/jarvis_data.py`).
+
+| 탭 | 보여 주는 것 | 출처 |
+|---|---|---|
+| 에이전트 | 3D 오피스(허브 자리에 JARVIS, 책상에 Coordinator·Worker)와 흐름도 | `~/.paseo/agents/*/*.json`(제목, 부모, 상태, Claude 세션 ID) |
+| 흐름 | `[배정]`·`[보고]`·`[질문]` 같은 머리말 메시지 | 각 세션 대화 기록의 사용자 차례 |
+| 결정 | 지금 결정 / 미뤄 둠 / 결정됨(누가, 기준 몇 번), 승인을 기다리는 에이전트 | `state/decisions/*.md`, Paseo 주의 필요 표시 |
+| 할 일 | 세션별 할 일 목록 | `~/.claude/tasks` |
+| 현황 | 프로젝트별 작업판, 운영 반영 대기, 공유 자원 점유 | `state/tasks`, `releases.json`, `occupancy.json` |
+
+세션 대화와 권한 승인은 Paseo 앱에서 합니다. 이 화면은 읽기만 합니다. 팀 밖 Claude·Codex 세션까지 보려면 `JARVIS_SHOW_OTHER=1`.
 
 ## 설치
 
@@ -62,4 +82,9 @@ Worker (작업당 하나, 끝나면 닫음)
 
 ## 라이선스
 
-MIT. `skills/git-message` 와 `hooks/git-message-style.py` 는 [holiday0726/claude-hub-plugin](https://github.com/holiday0726/claude-hub-plugin)(MIT)에서 가져왔습니다.
+MIT. 가져온 것:
+
+- `dashboard/`(server.py, index.html, test_server.py), `skills/git-message`, `hooks/git-message-style.py`, `hooks/pathutil.py`, `hooks/jarvis_only_write.py` 의 바탕: [holiday0726/lanekeeper](https://github.com/holiday0726/lanekeeper)(옛 claude-hub-plugin), MIT
+- `dashboard/vendor/three.min.js`, `OrbitControls.js`: three.js r128, MIT
+- `dashboard/vendor/xterm.js`, `xterm.css`: xterm.js 5.5.0, MIT
+- `dashboard/vendor/WantedSansVariable.woff2`: Wanted Sans 1.0.3, SIL OFL 1.1

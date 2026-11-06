@@ -1,0 +1,2186 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS 보드</title>
+<meta name="description" content="이 호스트에 떠 있는 Claude Code 와 Codex 세션의 상태, 결정, 메시지를 읽기만 하는 로컬 화면">
+<link rel="stylesheet" href="/vendor/xterm.css">
+<script>try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark' } catch (e) {}</script>
+<style>
+:root {
+  color-scheme: dark;
+  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px;
+  --text-xs: 0.75rem; --text-meta: 0.8125rem; --text-sm: 0.875rem; --text-md: 1rem; --text-lg: 1.2rem; --text-xl: 1.44rem; --text-2xl: 1.728rem;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 120ms; --dur-short: 220ms;
+  --container: 880px;
+  --z-sticky: 200;
+  --font-body: 'Wanted Sans Variable', 'Wanted Sans', system-ui, 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-outlier: 'JetBrains Mono', 'SF Mono', 'D2Coding', ui-monospace, Monaco, 'Courier New', monospace;
+  --radius-card: 10px; --radius-ctl: 8px; --radius-pill: 999px; --rule-hair: 1px;
+
+  /* black: a neutral near-black (chroma 0.002, never #000) that steps up in lightness for side, page, canvas, card and raised */
+  --color-side: oklch(11% 0.002 260); --color-paper: oklch(13.5% 0.002 260); --color-canvas: oklch(15.5% 0.002 260);
+  --color-paper-2: oklch(18.5% 0.003 260); --color-node: oklch(20% 0.003 260); --color-paper-3: oklch(23.5% 0.004 260);
+  --color-ink: oklch(96% 0.002 260); --color-ink-2: oklch(86% 0.003 260); --color-muted: oklch(72% 0.004 260); --color-faint: oklch(64% 0.004 260);
+  --color-rule: oklch(27% 0.004 260); --color-rule-2: oklch(38% 0.005 260); --color-dot: oklch(96% 0.002 260 / 0.07);
+  --color-hover: oklch(96% 0.002 260 / 0.05);
+  /* the one point colour, #E2560B fixed by the user: what waits on you and the selected place, never plain data.
+     As text it sits only on page, side and card (4.9 to 5.4:1), never on the raised step (4.4:1) */
+  --color-accent: #E2560B; --color-accent-text: #E2560B; --color-accent-ink: oklch(13% 0.01 48);
+  --color-select: oklch(96% 0.002 260 / 0.2);
+  /* at work is white on black: a filled chip and bright blocks, so state reads without a second hue */
+  --color-live: oklch(94% 0.003 260); --color-live-tint: oklch(94% 0.003 260 / 0.12);
+  --color-error: oklch(72% 0.15 25); --color-error-tint: oklch(72% 0.15 25 / 0.14); --color-focus: #E2560B;
+  /* the session window is a dark terminal in both modes */
+  --term-bg: oklch(10.5% 0.002 260); --term-ink: oklch(90% 0.003 260); --term-bold: oklch(97% 0.002 260);
+  --term-res: oklch(72% 0.004 260); --term-prm: #E2560B; --term-rule: oklch(96% 0.002 260 / 0.14);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  /* paper: the same neutral as an off-white page under white cards, the orange deepened so it holds as text */
+  --color-side: oklch(94.5% 0.002 260); --color-paper: oklch(97% 0.002 260); --color-canvas: oklch(95% 0.002 260);
+  --color-paper-2: oklch(99.7% 0.001 260); --color-node: oklch(99.7% 0.001 260); --color-paper-3: oklch(93.5% 0.003 260);
+  --color-ink: oklch(16% 0.003 260); --color-ink-2: oklch(28% 0.004 260); --color-muted: oklch(44% 0.005 260); --color-faint: oklch(50% 0.005 260);
+  --color-rule: oklch(89% 0.003 260); --color-rule-2: oklch(78% 0.004 260); --color-dot: oklch(16% 0.003 260 / 0.1);
+  --color-hover: oklch(16% 0.003 260 / 0.045);
+  /* the same #E2560B for fills, rings, rules and the focus ring (3.1 to 3.7:1, over 3:1); small text takes a deeper cut of it */
+  --color-accent: #E2560B; --color-accent-text: oklch(53% 0.16 42); --color-accent-ink: oklch(15% 0.01 45);
+  --color-select: oklch(16% 0.003 260 / 0.14);
+  --color-live: oklch(16% 0.003 260); --color-live-tint: oklch(16% 0.003 260 / 0.08);
+  --color-error: oklch(50% 0.18 25); --color-error-tint: oklch(60% 0.17 25 / 0.12); --color-focus: #E2560B;
+}
+@font-face {
+  font-family: 'Wanted Sans Variable'; font-style: normal; font-weight: 400 1000; font-display: swap;
+  src: url('/vendor/WantedSansVariable.woff2') format('woff2');
+}
+
+/* base */
+*, *::before, *::after { box-sizing: border-box }
+html, body { height: 100%; overflow-x: clip }
+html { scrollbar-color: var(--color-rule-2) var(--color-paper) }
+body {
+  margin: 0; display: flex; flex-direction: column; background: var(--color-paper); color: var(--color-ink);
+  font: 400 0.9375rem/1.6 var(--font-body); -webkit-font-smoothing: antialiased; caret-color: var(--color-accent);
+}
+::selection { background: var(--color-select); color: var(--color-ink) }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer }
+button:disabled { cursor: not-allowed }
+a { color: inherit; text-decoration: none }
+h1, h2, h3 { overflow-wrap: break-word; min-width: 0; text-wrap: balance }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: var(--radius-ctl) }
+[hidden] { display: none !important }
+time, .num, .meta, .chip, .count, .win { font-variant-numeric: tabular-nums }
+.mono { font-family: var(--font-outlier); font-size: var(--text-xs) }
+.ico { display: inline-block; flex: none; vertical-align: -2px }
+noscript p { margin: var(--space-xl) auto; max-width: 48ch; color: var(--color-muted); text-align: center }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important }
+}
+
+/* top bar: the wordmark and the live counts; it stays put above the scroll box */
+/* the chrome spans the window, its content lines up with the page column */
+#top, #usage, #dev, #nav { padding-inline: max(var(--space-md), calc((100% - var(--container)) / 2 + var(--space-md))) }
+#top {
+  flex: none; display: flex; align-items: center; gap: var(--space-xs); min-height: 56px; background: var(--color-paper)
+}
+#top h1 { margin: 0; font: 700 var(--text-lg)/1.1 var(--font-body); letter-spacing: -0.02em; white-space: nowrap }
+.back, .theme, .notif {
+  display: inline-flex; align-items: center; justify-content: center; height: 32px; border-radius: var(--radius-pill);
+  color: var(--color-muted); background: var(--color-paper-2);
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out)
+}
+.back:hover, .theme:hover, .notif:hover:not(:disabled) { background: var(--color-hover); color: var(--color-ink) }
+.back:active, .theme:active, .notif:active:not(:disabled) { background: var(--color-paper-3) }
+.back:hover, .theme:hover, .notif:hover:not(:disabled) { background: var(--color-paper-3) }
+.notif { flex: none; gap: var(--space-xs); padding: 0 var(--space-sm); font-size: var(--text-meta); font-weight: 400; white-space: nowrap }
+.notif[aria-pressed="true"] { background: var(--color-live); color: var(--color-paper) }
+.notif:disabled { opacity: 0.55 }
+.back { gap: var(--space-2xs); padding: 0 var(--space-sm) 0 var(--space-xs); font-weight: 600; color: var(--color-ink) }
+.theme { width: 32px; flex: none }
+@media (max-width: 620px) { .notif { width: 32px; padding: 0 } .notif .lbl { display: none } }
+.counts { display: flex; align-items: baseline; gap: var(--space-2xs) var(--space-md); margin-left: auto; margin-right: var(--space-xs); flex-wrap: wrap; justify-content: flex-end }
+.count { display: inline-flex; align-items: baseline; gap: var(--space-2xs); color: var(--color-muted); font-size: var(--text-meta); white-space: nowrap }
+.count b { font-size: var(--text-md); font-weight: 700; color: var(--color-ink) }
+.count.ok b { color: var(--color-live) }
+.count.blocked { color: var(--color-accent-text) }
+.count.blocked b { color: var(--color-accent-text) }
+
+/* instrument band: a ring and one figure per usage window, the token sum, then dev as a single chip */
+#usage, #dev { flex: none; background: var(--color-paper-2); font-size: var(--text-meta); color: var(--color-muted) }
+#usage { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-xs) var(--space-lg); padding-block: var(--space-sm) var(--space-xs) }
+#usage:empty { display: none }
+.use { display: grid; align-content: start; gap: var(--space-2xs); min-width: 0 }
+.ul { display: flex; align-items: baseline; gap: var(--space-xs); min-width: 0; font-size: var(--text-xs); font-weight: 700; color: var(--color-ink-2) }
+.ul .ago { font-weight: 400; color: var(--color-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.wins { display: flex; flex-wrap: wrap; gap: var(--space-2xs) var(--space-md) }
+.win { display: inline-flex; align-items: center; gap: var(--space-xs); min-width: 0 }
+.wt { display: grid; line-height: 1.2; min-width: 0 }
+.wt b { font-size: var(--text-lg); font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink) }
+.wt .wn { font-size: var(--text-xs); color: var(--color-faint); overflow-wrap: anywhere }
+.ring { flex: none; display: block }
+.ring .rt { fill: none; stroke: var(--color-paper-3); stroke-width: 4 }
+.ring .rv { fill: none; stroke: var(--color-accent); stroke-width: 4; stroke-linecap: round }
+.use.stale, .use.missing, .use.broken { opacity: 0.7 }
+.use.missing .wn, .use.broken .wn { font-size: var(--text-sm) }
+#dev { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); padding-block: var(--space-2xs) var(--space-sm) }
+#dev.stale { opacity: 0.7 }
+.devl { display: grid; gap: var(--space-2xs); min-width: 0; max-width: 100% }
+.devi { display: inline-flex; align-items: center; gap: var(--space-xs); min-width: 0; max-width: 100%; min-height: 28px; padding: 0 var(--space-sm) 0 var(--space-2xs); border-radius: var(--radius-pill); background: var(--color-paper-3); color: var(--color-muted) }
+.devi .dk { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 var(--space-xs); border-radius: var(--radius-pill); background: var(--color-paper-2); font-weight: 700; color: var(--color-ink) }
+.devi b { flex: none; font-weight: 600; color: var(--color-ink) }
+.devi .dw { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.devi .num { flex: none; color: var(--color-faint) }
+.devi.restart { background: var(--color-accent); color: var(--color-accent-ink) }
+.devi.restart b, .devi.restart .num, .devi.restart .kd { color: var(--color-accent-ink); font-weight: 700 }
+.devi .kd { flex: none; font-weight: 600 }
+#dev .more { flex: none; margin: 0 }
+#dev .ago { flex: none; color: var(--color-faint) }
+
+/* page tabs: a rail of segments when narrow, the sidebar list when wide */
+#nav { flex: none; background: var(--color-paper); padding-block: var(--space-xs) }
+#nav .tabs { display: flex; width: max-content; max-width: 100%; margin: 0; padding: var(--space-3xs); gap: var(--space-3xs); border-radius: var(--radius-pill); background: var(--color-paper-2); overflow-x: auto; scrollbar-width: none }
+#nav .tab { height: 34px; border-radius: var(--radius-pill); padding: 0 var(--space-sm) }
+#nav .tab::after { left: calc(50% - 7px); right: auto; width: 14px; bottom: var(--space-2xs) }
+#nav .tab[aria-selected="true"] { background: var(--color-paper-3) }
+.tabs { display: flex; gap: var(--space-2xs); margin-top: var(--space-md) }
+.tab {
+  position: relative; display: inline-flex; flex: none; align-items: center; height: 44px; padding: 0 var(--space-sm);
+  font-size: var(--text-sm); color: var(--color-muted); font-weight: 400; white-space: nowrap;
+  transition: color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out)
+}
+.tab::after { content: ''; position: absolute; left: var(--space-xs); right: var(--space-xs); bottom: var(--space-2xs); height: 2px; border-radius: 2px; background: var(--color-accent); transform: scaleX(0); transition: transform var(--dur-short) var(--ease-out) }
+/* the one rule left in the chrome: the session tabs sit on a baseline so the feed below reads as their panel */
+.dhead .tabs { box-shadow: inset 0 -1px 0 var(--color-rule) }
+.dhead .tab::after { bottom: 0 }
+.tab:hover:not(:disabled) { color: var(--color-ink) }
+.tab:active:not(:disabled) { color: var(--color-ink-2) }
+.tab[aria-selected="true"] { color: var(--color-ink); font-weight: 700 }
+.tab[aria-selected="true"]::after { transform: scaleX(1) }
+.tab:disabled { color: var(--color-faint); opacity: 0.7 }
+.tab .num { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; margin-left: var(--space-xs); padding: 0 var(--space-2xs); border-radius: var(--radius-ctl); background: none; color: var(--color-accent-text); font-size: var(--text-xs); font-weight: 800 }
+.tab .num.ok { background: none; color: var(--color-ink) }
+.tab .num.plain { margin-left: var(--space-2xs); background: none; color: var(--color-muted) }
+
+/* page */
+#view { flex: 1; min-height: 0; display: flex; flex-direction: column; width: 100%; max-width: var(--container); margin: 0 auto }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: clip; padding: 0 var(--space-md) var(--space-xl) }
+.banner { margin: var(--space-md) 0; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-card); background: var(--color-error-tint); color: var(--color-ink) }
+.empty { padding: var(--space-xl) var(--space-xs); color: var(--color-faint); text-align: center }
+.hint { font-size: var(--text-xs); color: var(--color-faint) }
+
+/* section heads: the name, then its count as a figure */
+.sec { margin-top: var(--space-lg) }
+.sec-h { display: flex; align-items: baseline; gap: var(--space-xs); width: 100%; padding: 0 0 var(--space-sm); text-align: left }
+.sec-h h2 { margin: 0; font: 700 var(--text-md)/1.4 var(--font-body); color: var(--color-ink); letter-spacing: -0.01em }
+.sec-h .num { font-size: var(--text-md); font-weight: 700; color: var(--color-faint) }
+[data-sec="busy"] .sec-h .num { color: var(--color-live) }
+[data-sec="now"] .sec-h .num { color: var(--color-accent-text) }
+.sec-h .chev { margin-left: auto; color: var(--color-muted); font-size: var(--text-xs) }
+button.sec-h { border-radius: var(--radius-ctl) }
+button.sec-h:hover .chev { color: var(--color-ink) }
+button.sec-h:active h2 { color: var(--color-ink-2) }
+.sec-empty { padding: var(--space-2xs) 0 var(--space-sm); font-size: var(--text-sm); color: var(--color-faint) }
+
+/* status chip: the colour and the word carry the state */
+.chip {
+  flex: none; display: inline-flex; align-items: center; height: 24px; padding: 0 var(--space-xs);
+  border-radius: var(--radius-ctl); background: var(--color-paper-3); color: var(--color-muted); font-size: var(--text-xs); font-weight: 700; white-space: nowrap
+}
+.chip .dot { display: none }
+.chip.busy { background: var(--color-live); color: var(--color-paper) }
+.chip.blocked { padding: 0; background: none; color: var(--color-accent-text); font-weight: 800 }
+.chip.done { background: none; padding: 0; color: var(--color-faint); font-weight: 400 }
+
+/* lane and task badges */
+.badge { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 var(--space-xs); border-radius: var(--radius-ctl); font-size: var(--text-xs); white-space: nowrap }
+.badge.lane { background: var(--color-paper-3); color: var(--color-ink-2); font-weight: 600 }
+.badge.task { background: var(--color-paper-3); color: var(--color-ink-2); font: 400 var(--text-xs)/20px var(--font-outlier) }
+.badge.codex { background: var(--color-paper-3); color: var(--color-muted); font: 600 var(--text-xs)/20px var(--font-outlier) }
+
+/* cards: one hairline well per session; a one-off task is dashed and unfilled, waiting on you is ringed in brass */
+.agent {
+  position: relative; margin-bottom: var(--space-xs); overflow: hidden;
+  border-radius: var(--radius-card); background: var(--color-paper-2)
+}
+/* state is a surface and a word: waiting on you warms the card, a finished one drops to the page */
+/* waiting is the orange chip alone, so a card never carries the orange twice */
+.agent.blocked .name { font-weight: 800 }
+.agent.done { background: none; opacity: 0.8 }
+.agent.done .name { font-weight: 600; color: var(--color-muted) }
+.amain { display: block; padding: var(--space-md) var(--space-md) var(--space-sm) }
+.amain:hover .name { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; text-decoration-color: var(--color-accent) }
+.amain:hover, .amain:active { background: var(--color-hover) }
+.amain:focus-visible { outline-offset: -2px; border-radius: var(--radius-card) }
+.dec, .todo { padding: var(--space-md) }
+.r1 { display: flex; align-items: center; gap: var(--space-xs); min-width: 0 }
+.name { flex: 0 1 auto; min-width: 0; font-size: var(--text-md); font-weight: 700; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.r1 .chip { margin-left: auto }
+.why { margin-top: var(--space-xs); font-size: var(--text-sm); line-height: 1.6; color: var(--color-muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden }
+.agent.blocked .why, .agent.busy .why { color: var(--color-ink) }
+.needs { margin-top: var(--space-xs); padding: var(--space-xs) var(--space-sm); border-radius: 0; box-shadow: inset 2px 0 0 var(--color-rule-2); font-size: var(--text-sm); color: var(--color-ink); overflow-wrap: anywhere }
+.meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2xs) var(--space-md); margin-top: var(--space-sm); font-size: var(--text-meta); color: var(--color-muted) }
+.meta span { white-space: nowrap }
+.meta b { font-weight: 600; color: var(--color-ink) }
+
+/* sub-agents: a fold under the card, outside the link */
+.subs { background: var(--color-hover) }
+.subs-t { display: flex; align-items: center; gap: var(--space-xs); width: 100%; min-height: 40px; padding: var(--space-xs) var(--space-md); text-align: left; font-size: var(--text-meta); color: var(--color-muted) }
+button.subs-t:hover { background: var(--color-hover); color: var(--color-ink) }
+button.subs-t:active { background: var(--color-paper-3) }
+.subs-t b { font-weight: 700; color: var(--color-ink) }
+.subs-t .run { color: var(--color-live); font-weight: 600 }
+.subs-t .chev { margin-left: auto; color: var(--color-faint); font-size: var(--text-xs) }
+.sublist { margin: 0; padding: 0 var(--space-md) var(--space-sm); list-style: none; display: grid; gap: var(--space-2xs) }
+.sub { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-2xs) var(--space-sm); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-ctl); background: var(--color-paper) }
+.sub .dot { width: 3px; align-self: stretch; border-radius: 2px; background: var(--color-rule-2) }
+.sub.busy .dot { background: var(--color-live) }
+.sub.idle .dot { background: var(--color-accent) }
+.sub .sd { min-width: 0; overflow-wrap: anywhere; font-size: var(--text-sm); color: var(--color-ink) }
+.sub .st { font: 400 var(--text-xs)/1.5 var(--font-outlier); color: var(--color-muted); margin-right: var(--space-xs) }
+.sub time { font-size: var(--text-xs); color: var(--color-faint); white-space: nowrap }
+.sub .sl { grid-column: 2 / 4; font-size: var(--text-xs); color: var(--color-faint) }
+
+/* hero: the sessions at work as one row of cards on top, the office below across the full width */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-md); margin-top: var(--space-md); padding-bottom: var(--space-lg); position: relative }
+.hero::after { content: ''; position: absolute; left: var(--space-xl); right: var(--space-xl); bottom: 0; height: 1px; background: var(--color-ink) }   /* the divider, inset from both sides */
+.hinfo:empty { display: none }
+.hstage { position: relative; aspect-ratio: 1.75 / 1; min-height: 300px; max-height: 700px; overflow: hidden; border-radius: 14px; background: var(--color-side); cursor: grab }
+.hstage:active { cursor: grabbing }
+.hstage canvas { display: block; width: 100%; height: 100% }
+.hlabels { position: absolute; inset: 0; pointer-events: none }
+.tag { position: absolute; left: 0; top: 0; max-width: 10em; overflow: hidden; text-overflow: ellipsis; padding: 0 var(--space-xs); border-radius: var(--radius-ctl); background: var(--color-paper-2); color: var(--color-ink); font-size: var(--text-xs); font-weight: 700; line-height: 20px; white-space: nowrap; pointer-events: auto; will-change: transform }
+.tag:hover { background: var(--color-paper-3) }
+.tag[data-state="rest"] { color: var(--color-muted); font-weight: 600 }
+.tag.hub { background: var(--color-ink); color: var(--color-paper) }
+.hinfo { display: grid; gap: var(--space-xs); min-width: 0 }
+.hdemo .hsub { margin: 0; font-size: var(--text-meta); color: var(--color-muted) }
+.hdemo { display: grid; gap: var(--space-2xs); margin-top: var(--space-sm); padding-top: var(--space-sm); box-shadow: inset 0 1px 0 var(--color-rule) }
+.drow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3xs) var(--space-2xs) }
+.drow b { min-width: 8em; font-size: var(--text-meta) }
+.drow .segb { height: 32px; background: var(--color-paper-2) }
+.hero.flat .hstage { display: none }
+.hero.flat:has(.hinfo:empty) { display: none }   /* no WebGL: the canvas below carries the sessions */
+.slot-hero { container-type: inline-size }
+@container (max-width: 640px) {
+  .hstage { aspect-ratio: 1.35 / 1; min-height: 260px }
+}
+
+/* the session canvas: a dotted field, the hub in the middle, a card per session */
+.vhead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); margin-top: var(--space-lg) }
+.vhead h2 { margin: 0; font: 700 var(--text-md)/1.4 var(--font-body) }
+.vhead .seg { margin: 0 0 0 auto }
+.canvas-wrap { container-type: inline-size }
+.canvas {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: "mid mid" "left right"; gap: var(--space-xl) var(--space-2xl); align-items: start;
+  margin-top: var(--space-sm); padding: var(--space-lg) var(--space-md); border-radius: var(--radius-card);
+  background-color: var(--color-canvas); background-image: radial-gradient(var(--color-dot) 1px, transparent 1.2px); background-size: 16px 16px
+}
+.canvas.nohub { grid-template-areas: "left right" }
+.canvas .links { position: absolute; inset: 0; pointer-events: none; overflow: visible }
+.ccol { position: relative; display: grid; gap: var(--space-lg); align-content: start; min-width: 0 }
+.ccol.left { grid-area: left } .ccol.right { grid-area: right }
+.ccol.mid { grid-area: mid; justify-self: center; width: min(100%, 300px) }
+@container (min-width: 760px) {
+  .canvas { grid-template-columns: minmax(0, 1fr) minmax(0, 260px) minmax(0, 1fr); grid-template-areas: "left mid right"; column-gap: var(--space-2xl); align-items: center; padding: var(--space-xl) var(--space-lg) }
+  .canvas.nohub { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "left right" }
+  .ccol.mid { width: 100% }
+}
+.link { fill: none; stroke: var(--color-rule-2); stroke-width: 1.25; stroke-dasharray: 3 4 }
+.link.on { stroke: var(--color-muted); stroke-dasharray: none; stroke-width: 1.5 }
+.link.ask { stroke: var(--color-accent); stroke-dasharray: none; stroke-width: 2 }
+.lnum { fill: var(--color-muted); font: 700 11px var(--font-body); paint-order: stroke; stroke: var(--color-canvas); stroke-width: 4px; stroke-linejoin: round }
+.node {
+  position: relative; z-index: 1; display: grid; gap: var(--space-2xs); min-width: 0; padding: var(--space-sm) var(--space-sm) var(--space-md);
+  border-radius: var(--radius-card); background: var(--color-node); transition: background-color var(--dur-micro) var(--ease-out)
+}
+.node:hover { background: var(--color-paper-3) }
+.node:active { background: var(--color-hover) }
+.node:hover .name { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; text-decoration-color: var(--color-accent) }
+.node.blocked .name { font-weight: 800 }
+.node.done { background: none; opacity: 0.62 }
+.node.hub { padding: var(--space-md) }
+.node.hub .name { font-size: var(--text-lg) }
+.ntag { position: absolute; left: var(--space-sm); top: calc(-1 * var(--space-md)); max-width: calc(100% - var(--space-lg)); font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.nhead { display: flex; align-items: center; gap: var(--space-xs); min-width: 0 }
+.nhead .chip { margin-left: auto }
+.ndesc { font-size: var(--text-meta); color: var(--color-muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden }
+.node.busy .ndesc, .node.blocked .ndesc, .node.hub .ndesc { color: var(--color-ink) }
+.nmeta { display: flex; flex-wrap: wrap; gap: var(--space-3xs) var(--space-sm); font-size: var(--text-xs); color: var(--color-muted) }
+.nmeta b { font-weight: 600; color: var(--color-ink) }
+.nflag { margin-top: var(--space-2xs); padding: var(--space-2xs) var(--space-xs); border-radius: var(--radius-ctl); background: var(--color-paper-3); font-size: var(--text-xs); font-weight: 600; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden }
+.nflag.ask { padding: 0; background: none; color: var(--color-ink-2); font-weight: 400 }
+
+/* sidebar: wordmark, grouped pages, the usage card at its foot; below 1000px it folds back into the top rows */
+.brand, .navg, .page-t { display: none }
+@media (max-width: 999px) { #nav.in-detail { display: none } }
+@media (min-width: 1000px) {
+  body { display: grid; grid-template-columns: 236px minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; grid-template-areas: "nav top" "nav dev" "nav view" "use view" }
+  #nav { grid-area: nav; padding: var(--space-md) var(--space-sm) var(--space-sm); background: var(--color-side); overflow-y: auto }
+  #usage { grid-area: use; grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); padding: 0 var(--space-sm) var(--space-md); background: var(--color-side) }
+  #top { grid-area: top } #dev { grid-area: dev; background: var(--color-paper) } #view { grid-area: view; --container: 1100px }
+  #top, #dev { padding-inline: max(var(--space-lg), calc((100% - 1100px) / 2 + var(--space-md))) }
+  #nav .tabs { flex-direction: column; width: auto; gap: var(--space-3xs); margin: 0; padding: 0; background: none; border-radius: 0 }
+  .brand { display: block; padding: var(--space-xs) var(--space-sm) var(--space-md); font: 700 var(--text-md)/1.3 var(--font-body); letter-spacing: -0.02em; border-radius: var(--radius-ctl) }
+  .navg { display: block; padding: var(--space-md) var(--space-sm) var(--space-2xs); font-size: var(--text-xs); color: var(--color-faint) }
+  #nav .tab { height: 36px; width: 100%; padding: 0 var(--space-sm); border-radius: var(--radius-ctl); font-size: var(--text-sm) }
+  #nav .tab::after { left: 0; top: 10px; bottom: 10px; width: 3px; height: auto; margin: 0; border-radius: 2px; transform: scaleY(0) }
+  #nav .tab[aria-selected="true"]::after { transform: scaleY(1) }
+  #nav .tab:hover:not(:disabled) { background: var(--color-hover) }
+  #nav .tab[aria-selected="true"] { background: var(--color-paper-2) }
+  #nav .tab .num { margin-left: auto } #nav .tab .num + .num { margin-left: var(--space-2xs) }
+  #top h1 .brand-t { display: none } #top h1 .page-t { display: inline }
+  .use { padding: var(--space-sm); border-radius: var(--radius-card); background: var(--color-paper-2) }
+}
+
+/* detail */
+.dhead { flex: none; padding: var(--space-md) var(--space-md) 0 }
+.dtitle { display: flex; align-items: center; gap: var(--space-xs); min-width: 0 }
+.dtitle h2 { margin: 0; min-width: 0; font: 700 var(--text-xl)/1.25 var(--font-body); letter-spacing: -0.02em }
+.dtitle .chip { margin-left: auto }
+.dcwd { margin-top: var(--space-2xs); font: var(--text-xs)/1.4 var(--font-outlier); color: var(--color-faint); overflow-wrap: anywhere }
+.dhead .why { display: block; -webkit-line-clamp: unset; margin-top: var(--space-xs) }
+.cmds { display: flex; flex-direction: column; gap: var(--space-2xs); margin-top: var(--space-sm) }
+.cmd { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; padding: var(--space-2xs) var(--space-2xs) var(--space-2xs) var(--space-sm); border-radius: var(--radius-ctl); background: var(--color-paper-2) }
+.cmd code { flex: 1; min-width: 0; font: var(--text-xs)/1.4 var(--font-outlier); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.cmd button { flex: none; height: 32px; padding: 0 var(--space-sm); border-radius: var(--radius-pill); background: var(--color-accent); color: var(--color-accent-ink); font-size: var(--text-meta); font-weight: 700 }
+.cmd button:hover { opacity: 0.9 }
+.cmd button:active { opacity: 0.85 }
+.dhead .subs { margin-top: var(--space-sm); background: var(--color-paper-2); border-radius: var(--radius-card) }
+
+/* feed */
+.note-top { margin: var(--space-md) 0 0; font-size: var(--text-xs); color: var(--color-faint); text-align: center }
+.ev { margin-top: var(--space-md) }
+.who { display: flex; align-items: baseline; gap: var(--space-xs); font-size: var(--text-xs); color: var(--color-faint); margin-bottom: var(--space-2xs) }
+.who b { font-weight: 700; color: var(--color-muted) }
+.who time { margin-left: auto }
+.txt { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-sm) }
+.txt.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8; overflow: hidden }
+.more { display: inline-flex; align-items: center; min-height: 32px; margin-top: var(--space-2xs); font-size: var(--text-xs); color: var(--color-muted); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--color-rule-2) }
+.more:hover { color: var(--color-ink); text-decoration-color: var(--color-accent) }
+.more:active { color: var(--color-ink-2) }
+.user .txt { padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-card); background: var(--color-paper-3) }
+.user .who b { color: var(--color-ink) }
+.peer .txt, .send .txt { padding: var(--space-xs) var(--space-sm); background: var(--color-paper-2); border-radius: var(--radius-ctl); font-size: var(--text-meta) }
+.peer .who b { color: var(--color-accent-text) }
+.send .sum { margin-bottom: var(--space-2xs); font-size: var(--text-meta); font-weight: 600 }
+.note { margin-top: var(--space-sm); font-size: var(--text-xs); color: var(--color-faint); text-align: center }
+.tool { margin-top: var(--space-2xs) }
+.reply + .tool, .user + .tool, .peer + .tool, .send + .tool, .note + .tool { margin-top: var(--space-sm) }
+.thead { display: flex; align-items: center; gap: var(--space-xs); width: 100%; min-width: 0; min-height: 32px; padding: var(--space-2xs) var(--space-xs); border-radius: var(--radius-ctl); text-align: left; color: var(--color-muted); font-size: var(--text-meta) }
+.thead:hover { background: var(--color-hover) }
+.thead:active { background: var(--color-paper-3) }
+.mark { width: 12px; flex: none; text-align: center; color: var(--color-faint) }
+.mark.ok { color: var(--color-live) }
+.mark.err { color: var(--color-error) }
+.tname { flex: none; font: 400 var(--text-xs)/1.4 var(--font-outlier); color: var(--color-ink) }
+.thead .tsum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.thead time { flex: none; color: var(--color-faint); font-size: var(--text-xs) }
+.tbody { margin: var(--space-2xs) 0 var(--space-xs) var(--space-lg); display: grid; gap: var(--space-2xs) }
+.tbody pre { margin: 0; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-ctl); background: var(--color-paper-2); font: var(--text-xs)/1.5 var(--font-outlier); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow-y: auto; color: var(--color-muted) }
+.tbody pre.err { background: var(--color-error-tint); color: var(--color-ink) }
+
+/* session window: a 200-column TUI cannot fit 600px legibly; below 7px the box scrolls sideways, the page never does */
+.termwrap { margin-top: var(--space-md); border-radius: var(--radius-card); background: var(--term-bg); padding: var(--space-xs); overflow-x: auto }
+.term { overflow: hidden }
+.term .xterm-viewport { overflow: hidden !important; background: var(--term-bg) !important }
+.termwrap.off { height: 0; margin: 0; padding: 0; border: 0; overflow: hidden; visibility: hidden }
+.pane-note { margin: var(--space-xs) 0 0; font-size: var(--text-xs); color: var(--color-faint) }
+.seg { display: inline-flex; gap: var(--space-3xs); margin-top: var(--space-md); padding: var(--space-3xs); border-radius: var(--radius-pill); background: var(--color-paper-3) }
+.segb { height: 32px; padding: 0 var(--space-sm); border-radius: var(--radius-pill); font-size: var(--text-meta); font-weight: 400; color: var(--color-muted); white-space: nowrap; transition: color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out) }
+.segb:hover { color: var(--color-ink) }
+.segb:active { background: var(--color-hover) }
+.segb[aria-pressed="true"] { background: var(--color-paper); color: var(--color-ink); font-weight: 700 }
+.logflow { margin-top: var(--space-sm); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-card); background: var(--term-bg); color: var(--term-ink); font: var(--text-meta)/1.6 var(--font-outlier) }
+.ll { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1.6em }
+.ll.gap { min-height: 0.6em }
+.ll.sep { min-height: 0; margin: var(--space-xs) 0; border-top: var(--rule-hair) solid var(--term-rule) }
+.ll.bul { margin-top: var(--space-xs); font-weight: 600; color: var(--term-bold) }
+.ll.res { color: var(--term-res) }
+.ll.prm { color: var(--term-prm) }
+
+/* decisions and todo: a card per item, chips on top, the question or the session name large, prose at a reading measure */
+.dcard, .tcard { margin-bottom: var(--space-sm); padding: var(--space-md) var(--space-lg) var(--space-lg); border-radius: var(--radius-card); background: var(--color-paper-2) }
+.dcard.waiting { background: none; padding-inline: var(--space-md) }
+.dcard.decided { background: none; padding: var(--space-sm) var(--space-md) }
+.dchips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs) }
+.dstate, .dchip { display: inline-flex; align-items: center; gap: var(--space-2xs); height: 24px; padding: 0 var(--space-xs); border-radius: var(--radius-ctl); font-size: var(--text-xs); white-space: nowrap }
+.dstate { font-weight: 700 }
+.dstate.now { background: var(--color-live); color: var(--color-paper) }
+.dstate.live { padding: 0; background: none; color: var(--color-accent-text); font-weight: 800 }
+.dstate.waiting { background: var(--color-paper-3); color: var(--color-ink) }
+.dstate.decided { padding: 0; color: var(--color-faint); font-weight: 600 }
+.dchip { background: var(--color-paper-3); color: var(--color-muted) }
+.dchip b { font-weight: 700; color: var(--color-ink) }
+.dcard.decided .dchip { background: none; padding: 0 }
+.did { margin-left: auto; color: var(--color-faint) }
+.dq { margin: var(--space-sm) 0 0; max-width: 40em; font: 700 var(--text-lg)/1.4 var(--font-body); letter-spacing: -0.015em; color: var(--color-ink) }
+.dcard.decided .dq { margin-top: var(--space-2xs); font-size: var(--text-md); font-weight: 600; color: var(--color-ink-2) }
+.dsrc { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); margin-top: var(--space-xs); font-size: var(--text-meta); color: var(--color-muted) }
+.dsrc b { font-weight: 700; color: var(--color-ink-2) }
+.dmore { margin-top: var(--space-sm) }
+.dmore summary { display: inline-flex; align-items: center; min-height: 32px; font-size: var(--text-meta); font-weight: 600; color: var(--color-muted); cursor: pointer; border-radius: var(--radius-ctl) }
+.dmore summary:hover { color: var(--color-ink) }
+.dmore summary::-webkit-details-marker { display: none }
+.dmore[open] summary::after { content: '접기'; margin-left: var(--space-xs); font-weight: 400; color: var(--color-faint) }
+.dmore:not([open]) summary::after { content: '펼치기'; margin-left: var(--space-xs); font-weight: 400; color: var(--color-faint) }
+.dtext { margin: var(--space-2xs) 0 0; max-width: 65ch; font-size: 0.9375rem; line-height: 1.75; color: var(--color-ink-2); white-space: pre-wrap; overflow-wrap: anywhere }
+.opts { display: grid; gap: var(--space-xs); max-width: 65ch; margin: var(--space-md) 0 0; padding: 0; list-style: none; counter-reset: opt }
+.opts li { counter-increment: opt; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--space-sm); align-items: baseline; font-size: 0.9375rem; line-height: 1.6 }
+.opts li::before { content: counter(opt); display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-ctl); background: var(--color-paper-3); font-size: var(--text-xs); font-weight: 700; line-height: 1; color: var(--color-ink); transform: translateY(-1px) }
+.decision { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-sm); max-width: 65ch; margin-top: var(--space-sm); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-ctl); background: var(--color-paper-2); font-size: var(--text-sm); line-height: 1.6; overflow-wrap: anywhere }
+.decision b { font-weight: 700; color: var(--color-ink) }
+.refs { display: flex; flex-wrap: wrap; gap: var(--space-2xs); margin-top: var(--space-sm) }
+.ref { display: inline-flex; align-items: center; gap: var(--space-xs); max-width: 100%; min-height: 32px; padding: var(--space-3xs) var(--space-xs); border-radius: var(--radius-ctl); background: var(--color-paper-3); font: var(--text-xs)/1.5 var(--font-outlier); color: var(--color-muted); text-align: left; overflow-wrap: anywhere }
+.ref:hover { color: var(--color-ink) }
+.ref:active { background: var(--color-hover) }
+.ref .ic { flex: none; color: var(--color-faint); font-family: var(--font-body) }
+.golink { display: inline-flex; align-items: center; min-height: 32px; margin-top: var(--space-sm); color: var(--color-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--color-rule-2) }
+.golink:hover { text-decoration-color: var(--color-ink) }
+
+.todo-page .mdhead { padding-bottom: var(--space-sm) }
+.tcard.closed { opacity: 0.62 }
+.tcard .r1 .name { font-size: var(--text-lg) }
+.tcard a.name:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; text-decoration-color: var(--color-accent) }
+.tcard .dchips { margin-top: var(--space-xs) }
+.tlist { margin-top: var(--space-md); display: grid; gap: var(--space-3xs) }
+.ti summary, .ti .tsum { display: flex; align-items: flex-start; gap: var(--space-sm); padding: var(--space-xs); border-radius: var(--radius-ctl); list-style: none }
+.ti summary { cursor: pointer }
+.ti summary::-webkit-details-marker { display: none }
+.ti summary:hover { background: var(--color-hover) }
+.ti summary:active { background: var(--color-paper-3) }
+.tmark { flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; margin-top: var(--space-2xs); border-radius: 99px; box-shadow: inset 0 0 0 1.5px var(--color-muted); color: var(--color-paper) }
+.ti.in_progress .tmark { background: var(--color-live); box-shadow: inset 0 0 0 1.5px var(--color-live), inset 0 0 0 4px var(--color-paper-2) }
+.ti.completed .tmark { background: var(--color-rule-2); box-shadow: none }
+.tmark .ico { width: 11px; height: 11px }
+.tsub { flex: 1; display: grid; gap: var(--space-3xs); min-width: 0; max-width: 65ch; font-size: 0.9375rem; line-height: 1.55; overflow-wrap: anywhere }
+.ti.in_progress .tsj { font-weight: 700 }
+.ti.completed .tsj { color: var(--color-faint); text-decoration: line-through; text-decoration-color: var(--color-rule-2) }
+.tact { font-size: var(--text-meta); color: var(--color-ink-2) }
+.tid { flex: none; margin-top: var(--space-2xs); color: var(--color-faint) }
+.tnote { display: grid; gap: var(--space-2xs); padding: 0 var(--space-xs) var(--space-sm) var(--space-2xl); font-size: var(--text-meta); color: var(--color-muted) }
+.tnote .dtext { margin: 0 }
+.tnote b { font-weight: 600; color: var(--color-ink) }
+.tfold { justify-self: start; margin: var(--space-2xs) 0 0 var(--space-xs) }
+
+/* status.md */
+.mdhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2xs) var(--space-sm); padding: var(--space-md) 0 0; font-size: var(--text-xs); color: var(--color-faint) }
+.mdhead b { font-weight: 400; color: var(--color-muted) }
+.mdhead .devwhy { flex-basis: 100% }
+.md { font-size: var(--text-sm); overflow-wrap: break-word }
+.md h1, .md h2, .md h3, .md h4 { margin: var(--space-lg) 0 var(--space-xs); line-height: 1.35; letter-spacing: -0.01em; max-width: none; text-wrap: balance }
+.md h1 { font-size: var(--text-xl); font-weight: 700 } .md h2 { font-size: var(--text-lg); font-weight: 700 } .md h3 { font-size: var(--text-md); font-weight: 700 } .md h4 { font-size: var(--text-sm); font-weight: 700 }
+.md h2 { margin-top: var(--space-xl) }
+.md p { margin: var(--space-xs) 0 }
+.md ul, .md ol { margin: var(--space-xs) 0; padding-left: var(--space-lg) }
+.md li + li { margin-top: var(--space-3xs) }
+.md li > ul, .md li > ol { margin: var(--space-3xs) 0 }
+.md code { padding: 1px var(--space-2xs); border-radius: 4px; background: var(--color-paper-3); font: var(--text-xs)/1.5 var(--font-outlier) }
+.md pre { margin: var(--space-xs) 0; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-ctl); background: var(--color-paper-2); overflow-x: auto }
+.md pre code { padding: 0; background: none }
+.md blockquote { margin: var(--space-xs) 0; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-ctl); background: var(--color-paper-2); color: var(--color-muted) }
+.md hr { border: 0; border-top: var(--rule-hair) solid var(--color-rule); margin: var(--space-md) 0 }
+.md a { color: var(--color-accent-text); text-decoration: underline; text-underline-offset: 3px }
+.md strong { font-weight: 700 }
+/* wide tables size to their content (cells wrap past 24em) and scroll inside their box, never the page */
+.tablewrap { margin: var(--space-xs) 0; overflow-x: auto; border-block: var(--rule-hair) solid var(--color-rule-2) }
+.md table { border-collapse: collapse; font-size: var(--text-meta); width: max-content; min-width: 100% }
+.md th, .md td { min-width: 4em; max-width: 24em; padding: var(--space-xs) var(--space-sm); text-align: left; vertical-align: top; border-bottom: var(--rule-hair) solid var(--color-rule) }
+.md th { font-weight: 600; color: var(--color-muted); white-space: nowrap }
+.md tr:last-child td { border-bottom: 0 }
+
+/* flow: the session orbit and the message timeline */
+.fhead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-md); padding: var(--space-md) 0 0 }
+.seg.flat { margin: 0 }
+.fhead .hint { font-size: var(--text-meta) }
+.fhead .vseg { margin-left: auto }
+.graph {
+  position: relative; margin-top: var(--space-sm); border-radius: var(--radius-card); overflow: hidden; background: var(--color-paper-2)
+}
+.graph svg { display: block; width: 100%; height: auto; user-select: none; touch-action: pan-y }
+.graph.orbit svg { cursor: grab }
+.graph.orbit.drag svg { cursor: grabbing }
+.oring { fill: none; stroke: var(--color-rule); stroke-width: 1 }
+.odisc { fill: var(--color-paper); stroke: none }
+.fedge { fill: none; stroke: var(--color-rule-2); stroke-linecap: round }
+.farrow { fill: var(--color-rule-2) }
+.fe { cursor: pointer }
+.fhit { fill: none; stroke: transparent; stroke-width: 14 }
+.fe:hover .fedge { stroke: var(--color-muted) } .fe:hover .farrow { fill: var(--color-muted) }
+.fe.on .fedge { stroke: var(--color-accent) } .fe.on .farrow { fill: var(--color-accent) }
+.fnode { cursor: pointer }
+.fnode circle { fill: var(--color-paper-3); stroke: var(--color-muted); stroke-width: 1.5 }
+.fnode.busy circle { fill: var(--color-live-tint); stroke: var(--color-live); stroke-width: 2 }
+.fnode.blocked circle { fill: var(--color-accent); stroke: var(--color-accent); stroke-width: 2 }
+.fnode.done circle, .fnode.closed circle { fill: var(--color-paper); stroke: var(--color-rule-2) }
+.fnode.g-task circle { stroke-dasharray: 3 2 }
+.fnode.hub circle { stroke: var(--color-ink); stroke-width: 2.5 }
+.fnode text { fill: var(--color-ink); font: 700 12.5px var(--font-body); paint-order: stroke; stroke: var(--color-paper-2); stroke-width: 4px; stroke-linejoin: round }
+.fnode.done text, .fnode.closed text { fill: var(--color-muted); font-weight: 400 }
+.fnode.on circle { stroke: var(--color-accent); stroke-width: 3 }
+.fnode:focus-visible circle { stroke: var(--color-focus); stroke-width: 3 }
+.fnode text.hover { display: none }
+.fnode:hover text.hover, .fnode:focus text.hover { display: inline }
+.gnote { padding: 0 var(--space-md) var(--space-sm); font-size: var(--text-xs); color: var(--color-faint) }
+.ghelp { position: absolute; right: var(--space-sm); top: var(--space-xs); font-size: var(--text-xs); color: var(--color-faint); pointer-events: none }
+.graph .dim { opacity: 0.2 }
+.fsel { display: flex; align-items: center; gap: var(--space-xs); margin-top: var(--space-sm); padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-md); border-radius: var(--radius-card); background: var(--color-paper-2); font-size: var(--text-sm) }
+.fsel b { font-weight: 700 }
+.fsel button { margin-left: auto; height: 32px; padding: 0 var(--space-sm); border-radius: var(--radius-pill); background: var(--color-paper-2); font-size: var(--text-meta); color: var(--color-ink); white-space: nowrap }
+.fsel button:hover { background: var(--color-hover) }
+.fsel button:active { background: var(--color-paper-3) }
+.fmsg { padding: var(--space-sm) var(--space-md); margin-bottom: var(--space-xs); border-radius: var(--radius-card); background: var(--color-paper-2) }
+.fmsg .r1 { gap: var(--space-xs); font-size: var(--text-meta); color: var(--color-muted) }
+.fmsg .r1 b { font-weight: 700; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0 }
+.fmsg .r1 time { margin-left: auto; flex: none; font-size: var(--text-xs); color: var(--color-faint) }
+.fmsg .arrow { flex: none; color: var(--color-faint) }
+.fsum { margin-top: var(--space-2xs); font-size: var(--text-sm); overflow-wrap: anywhere }
+.fmsg .txt { margin-top: var(--space-xs); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-ctl); background: var(--color-paper); font-size: var(--text-meta) }
+.fmsg .more { margin-top: var(--space-2xs) }
+/* tokens: 처리 토큰 bars by size, coloured by engine */
+.toks { display: grid; gap: var(--space-2xs) }
+.tok { display: grid; grid-template-columns: minmax(0, 11em) minmax(0, 1fr) auto; align-items: center; gap: var(--space-sm); font-size: var(--text-meta) }
+.tok .tn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600 }
+.tok .tn small { margin-left: var(--space-2xs); font: 400 var(--text-xs) var(--font-outlier); color: var(--color-faint) }
+.tok .tb { height: 8px; border-radius: 2px; background: var(--color-paper-3); overflow: hidden }
+.tok .tb i { display: block; height: 100%; min-width: 3px; border-radius: 2px; background: var(--color-ink-2); opacity: 0.55 }
+.tok.codex .tb i, .tleg .codex::before { background: var(--color-muted); opacity: 0.55 }
+.tok b { font-weight: 700; text-align: right }
+.tleg { display: flex; flex-wrap: wrap; gap: var(--space-2xs) var(--space-md); margin: 0 0 var(--space-sm); font-size: var(--text-xs); color: var(--color-faint) }
+.tleg span::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: var(--space-2xs); border-radius: 2px; background: var(--color-ink-2); opacity: 0.55; vertical-align: -1px }
+.tleg .def { flex-basis: 100% }
+.tleg .def::before { display: none }
+.toks + .more { margin-top: var(--space-xs) }
+.kb { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 var(--space-xs); border-radius: var(--radius-ctl); font-size: var(--text-xs); font-weight: 700; background: var(--color-paper-3); color: var(--color-ink) }
+.kb.report { background: var(--color-live-tint); color: var(--color-live) }
+.kb.notice { padding: 0; background: none; color: var(--color-accent-text); font-weight: 800 }
+.kb.other { background: none; padding: 0; color: var(--color-muted); font-weight: 600 }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div id="usage" aria-label="남은 사용량"></div>
+<div id="dev" aria-label="dev 점유" hidden></div>
+<nav id="nav"></nav>
+<main id="view"><noscript><p>이 화면은 스크립트로 서버 API 를 읽어 그립니다. 브라우저에서 스크립트를 켜 주세요.</p></noscript></main>
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/three.min.js"></script>
+<script src="/vendor/OrbitControls.js"></script>
+<script>
+'use strict'
+const topBar = document.getElementById('top'), nav = document.getElementById('nav'), view = document.getElementById('view')
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue
+    if (k === 'class') el.className = v
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v)
+    else el.setAttribute(k, v === true ? '' : v)
+  }
+  for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c)
+  return el
+}
+const put = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter(c => c != null && c !== false))
+const NS = 'http://www.w3.org/2000/svg'   // sv(): h() for SVG elements
+function sv(tag, attrs, ...kids) {
+  const el = document.createElementNS(NS, tag)
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue
+    if (k.startsWith('on')) el.addEventListener(k.slice(2), v)
+    else el.setAttribute(k, v)
+  }
+  for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c)
+  return el
+}
+
+// line icons, drawn instead of arrow and symbol glyphs in the screen text
+const ICONS = {
+  back: ['M10 3 5 8l5 5'],
+  check: ['M3.5 8.5 6.5 11.5 12.5 4.5'],
+  ext: ['M7 3H3.5v9.5H13V9', 'M9.5 3H13v3.5', 'M13 3 7.5 8.5'],
+  to: ['M2.5 8h10', 'M9 4.5 12.5 8 9 11.5'],
+  theme: ['M8 2.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11z', 'M8 2.5v11a5.5 5.5 0 0 0 0-11z']
+}
+const icon = (name, label) => sv('svg', Object.assign({ class: 'ico', width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+  label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': 'true' }), ICONS[name].map((d, i) => sv('path', { d, fill: name === 'theme' && i ? 'currentColor' : null })))
+
+const span = ms => {
+  const m = Math.max(0, Math.floor((Date.now() - ms) / 60000))
+  if (m < 1) return '방금'
+  if (m < 60) return m + '분'
+  const hr = Math.floor(m / 60)
+  return hr < 24 ? `${hr}시간 ${m % 60}분` : `${Math.floor(hr / 24)}일 ${hr % 24}시간`
+}
+const ago = ms => ms ? (span(ms) === '방금' ? '방금' : span(ms) + ' 전') : '기록 없음'
+const hm = ms => ms ? ' ' + new Date(ms).toTimeString().slice(0, 5) : ''
+const home = p => (p || '').replace(/^\/home\/[^/]+/, '~')
+const clock = iso => {
+  if (!iso) return ''
+  const d = new Date(iso), p = n => String(n).padStart(2, '0')
+  const t = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  return d.toDateString() === new Date().toDateString() ? t : `${d.getMonth() + 1}월 ${d.getDate()}일 ${t}`
+}
+
+function status(a) {
+  if (a.state === 'working' || a.status === 'busy') return { key: 'busy', label: '작업 중' }
+  if (a.state === 'blocked') return { key: 'blocked', label: '대기 중' }
+  if (a.state === 'done') return { key: 'done', label: '끝남' }
+  return { key: 'idle', label: a.kind === 'interactive' || a.engine === 'codex' ? '지시 대기' : '쉬는 중' }
+}
+const stateEl = s => h('span', { class: 'chip ' + s.key }, h('span', { class: 'dot', 'aria-hidden': 'true' }), s.label)
+const kindLabel = a => a.engine === 'codex' ? 'codex ' + (a.source || '') : a.kind === 'background' ? '백그라운드' : '대화형'
+// resident sessions carry their lane, one-off task sessions their job id; sessions not in agents.json get neither
+const badge = a => a.engine === 'codex' ? h('span', { class: 'badge codex', title: 'Codex 세션' }, 'codex')
+  : a.group === 'resident' ? h('span', { class: 'badge lane', title: '상시 세션 레인' }, a.lane || '상시')
+  : a.group === 'task' ? h('span', { class: 'badge task', title: '일회성 작업' + (a.lane ? ', ' + a.lane : '') }, a.task || '일회성')
+  : null
+const SECTIONS = [['busy', '진행 중'], ['wait', '입력 대기'], ['done', '종료']]
+let doneOpen = false
+try { doneOpen = localStorage.getItem('doneOpen') === '1' } catch (e) {}
+
+let agents = [], error = '', cur = null, page = 'agents'
+
+async function getJSON(url) {
+  const r = await fetch(url)
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status)
+  return r.json()
+}
+
+/* ---------- header ---------- */
+function renderTop() {
+  const n = k => agents.filter(a => status(a).key === k).length
+  const blocked = n('blocked')
+  const themeBtn = h('button', {
+    class: 'theme', title: '밝은 화면과 어두운 화면 바꾸기', 'aria-label': '테마 바꾸기',
+    onclick() {
+      const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'
+      document.documentElement.dataset.theme = t
+      try { localStorage.setItem('theme', t) } catch (e) {}
+    }
+  }, icon('theme'))
+  put(topBar, 
+    cur ? h('a', { class: 'back', href: '#/' }, icon('back'), '목록')
+      : h('h1', {}, h('span', { class: 'brand-t' }, 'JARVIS 보드'), h('span', { class: 'page-t' }, (PAGES.find(p => p[0] === page) || PAGES[0])[1])),
+    h('div', { class: 'counts' },
+      blocked ? h('span', { class: 'count blocked' }, '대기 중 ', h('b', { class: 'num' }, blocked)) : null,
+      h('span', { class: 'count' + (n('busy') ? ' ok' : '') }, '작업 중 ', h('b', { class: 'num' }, n('busy'))),
+      subRun() ? h('span', { class: 'count ok', title: '지금 도는 서브에이전트' }, '서브에이전트 ', h('b', { class: 'num' }, subRun())) : null,
+      h('span', { class: 'count' }, '전체 ', h('b', { class: 'num' }, agents.length))),
+    notifyBtn(), themeBtn)
+  renderTitle()
+  nav.classList.toggle('in-detail', !!cur)   // narrow: the tab row hides on a session page; wide: the sidebar stays
+  const nNow = dec?.now?.length || 0, tc = todo?.counts || {}
+  put(nav, h('a', { class: 'brand', href: '#/' }, 'JARVIS 보드'),
+    h('div', { class: 'tabs', role: 'tablist', 'aria-label': '화면' }, PAGES.map(([key, label, href, group], i) => [
+      group !== PAGES[i - 1]?.[3] ? h('div', { class: 'navg', 'aria-hidden': 'true' }, group) : null,
+      h('button', { class: 'tab', role: 'tab', 'aria-selected': String(!cur && page === key), onclick: () => { location.hash = href } },
+        label, key === 'decisions' && nNow ? h('span', { class: 'num', title: '지금 결정 필요' }, nNow) : null,
+        key === 'todo' ? [tc.in_progress ? h('span', { class: 'num ok', title: '진행 중인 할 일' }, tc.in_progress) : null,
+          tc.pending ? h('span', { class: 'num plain', title: '대기 중인 할 일' }, tc.pending) : null] : null)])))
+}
+const subRun = () => agents.reduce((n, a) => n + (a.subagents || []).filter(s => s.state === 'busy').length, 0)
+// [key, label, hash, sidebar group]; the narrow tab row keeps the same order without the group names
+const PAGES = [['agents', '에이전트', '#/', '세션'], ['flow', '흐름', '#/flow', '세션'], ['decisions', '결정', '#/decisions', '할 것'], ['todo', '할 일', '#/todo', '할 것'], ['status', '현황', '#/status', 'JARVIS']]
+
+/* ---------- alerts: tab title count and browser notifications ---------- */
+// reports to the hub newer than reportMark are new; unread ones count in the title until the page is seen
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v) } catch (e) { return d } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch (e) {} }
+}
+let reportMark = store.get('reportMark', null), notifyOn = store.get('notify', false)
+const unread = new Set()
+const canNotify = () => 'Notification' in window && Notification.permission === 'granted' && notifyOn
+function renderTitle() {
+  const n = agents.filter(a => status(a).key === 'blocked').length + unread.size
+  document.title = (n ? `(${n}) ` : '') + 'JARVIS 보드'
+}
+function seen() {
+  if (document.visibilityState === 'visible' && unread.size) { unread.clear(); renderTitle() }
+}
+// remembered across reloads and tabs, so one event is announced once
+function firstTime(key) {
+  const done = store.get('notified', [])
+  if (done.includes(key)) return false
+  store.set('notified', [...done, key].slice(-300))
+  return true
+}
+function forget(keys) {
+  const done = store.get('notified', [])
+  if (done.some(k => keys.includes(k))) store.set('notified', done.filter(k => !keys.includes(k)))
+}
+function notify(title, body, tag, hash) {
+  try {
+    const n = new Notification(title, { body: (body || '').slice(0, 300), tag })
+    n.onclick = () => { window.focus(); location.hash = hash; n.close() }
+  } catch (e) {}
+}
+// a session that turns blocked is announced once; once it moves on, the next block is new again
+function checkBlocked() {
+  const blocked = agents.filter(a => status(a).key === 'blocked')
+  const keys = blocked.map(a => 'b:' + a.sessionId)
+  forget(store.get('notified', []).filter(k => k.startsWith('b:') && !keys.includes(k)))
+  if (!canNotify()) return
+  for (const a of blocked) if (firstTime('b:' + a.sessionId)) notify(`${a.name || a.sessionId.slice(0, 8)} 대기 중`, a.needs || a.detail, 'b:' + a.sessionId, '#/s/' + a.sessionId)
+}
+function checkReports(d) {
+  const reports = (d.messages || []).filter(m => m.kind === 'report' && m.to === d.hub && m.t)
+  const top = Math.max(0, ...reports.map(m => m.t))
+  if (reportMark == null) { reportMark = top || Date.now(); store.set('reportMark', reportMark); return }   // history is not news
+  const fresh = reports.filter(m => m.t > reportMark).reverse()
+  if (!fresh.length) return
+  fresh.forEach(m => unread.add(m.id))
+  reportMark = top; store.set('reportMark', reportMark)
+  const news = canNotify() ? fresh.filter(m => firstTime('r:' + m.id)) : []
+  if (news.length > 3) notify(`${d.hub} 에게 보고 ${news.length}건`, news.map(m => `${m.from}: ${m.sum}`).join('\n'), 'reports', '#/flow')
+  else news.forEach(m => notify(`${m.from} 보고`, m.sum, 'r:' + m.id, '#/flow'))
+  renderTitle(); seen()
+}
+// the label hides below 620 px and the bell stays (title and aria-label carry the words)
+const bell = () => sv('svg', { width: 15, height: 15, viewBox: '0 0 16 16', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linejoin': 'round' },
+  sv('path', { d: 'M4 11.5V7a4 4 0 0 1 8 0v4.5l1.2 1.3H2.8z' }), sv('path', { d: 'M6.5 14.2a1.6 1.6 0 0 0 3 0' }))
+function notifyBtn() {
+  const btn = (attrs, label) => h('button', Object.assign({ class: 'notif', 'aria-label': label }, attrs), bell(), h('span', { class: 'lbl' }, label))
+  if (!('Notification' in window)) return btn({ disabled: true, title: '이 브라우저는 알림을 지원하지 않습니다' }, '알림 없음')
+  if (Notification.permission === 'denied') return btn({ disabled: true, title: '브라우저 설정에서 이 주소의 알림을 허용해야 켤 수 있습니다' }, '알림 막힘')
+  const on = canNotify()
+  return btn({
+    'aria-pressed': String(on),
+    title: on ? '켜져 있음: 세션이 대기 중이 되거나 허브에게 보고가 오면 알립니다. 누르면 끕니다.'
+      : '세션이 대기 중이 되거나 허브에게 보고가 오면 브라우저 알림으로 알립니다',
+    async onclick() {
+      if (on) notifyOn = false
+      else {
+        if (Notification.permission === 'default') await Notification.requestPermission()
+        notifyOn = Notification.permission === 'granted'
+        // what is blocked right now is the starting point; only changes from here are announced
+        if (notifyOn) agents.filter(a => status(a).key === 'blocked').forEach(a => firstTime('b:' + a.sessionId))
+      }
+      store.set('notify', notifyOn); renderTop()
+    }
+  }, on ? '알림 켬' : '알림 켜기')
+}
+
+/* ---------- tokens ---------- */
+// 792000 -> 79.2만, 115753467 -> 1.2억 (one decimal below 100 of the unit)
+const tok = n => {
+  if (n >= 1e8) return +(n / 1e8).toFixed(n < 1e10 ? 1 : 0) + '억'
+  if (n >= 1e4) return +(n / 1e4).toFixed(n < 1e6 ? 1 : 0) + '만'
+  return n.toLocaleString()
+}
+// 처리 토큰 = input (cache writes in, cache reads out) + output; cache reads only show in the tooltip
+const ENGINE = { claude: 'Claude', codex: 'codex' }
+const TOK_DEF = '처리 토큰 = 입력(캐시 쓰기 포함, 캐시 읽기 제외) + 출력'
+function tokTip(t) {
+  const n = x => (x || 0).toLocaleString()
+  const read = `. 합에 넣지 않은 캐시 읽기 ${n(t.cacheRead)}`
+  if (t.engine === 'codex') return `처리 토큰 ${n(t.total)}: 입력 ${n(t.input)}(캐시 제외), 출력 ${n(t.output)}(그중 추론 ${n(t.reasoning)})` + read
+  return `처리 토큰 ${n(t.total)}: 입력 ${n(t.input)}, 캐시 쓰기 ${n(t.cacheWrite)}, 출력 ${n(t.output)}` + read
+    + (t.subagents ? `. 서브에이전트 기록 ${t.subagents}개 포함` : '')
+}
+const withTokens = () => agents.filter(a => a.tokens).sort((a, b) => b.tokens.total - a.tokens.total)
+
+/* ---------- list ---------- */
+const SUB_STATE = { busy: '작업 중', done: '끝남', idle: '응답 없음' }
+const openSubs = new Set()
+try { JSON.parse(localStorage.getItem('openSubs') || '[]').forEach(x => openSubs.add(x)) } catch (e) {}
+const saveSubs = () => { try { localStorage.setItem('openSubs', JSON.stringify([...openSubs])) } catch (e) {} }
+
+function subItem(s) {
+  return h('li', { class: 'sub ' + s.state },
+    h('span', { class: 'dot', 'aria-hidden': 'true' }),
+    h('div', { class: 'sd' }, h('span', { class: 'st' }, s.type || '서브에이전트'), s.desc || '설명 없음'),
+    h('time', {}, ago(s.at)),
+    h('div', { class: 'sl' }, SUB_STATE[s.state] || s.state))
+}
+function subList(a) {
+  return h('ul', { class: 'sublist' }, (a.subagents || []).map(subItem))
+}
+function subFold(a) {
+  const subs = a.subagents || []
+  if (!subs.length) return null
+  const run = subs.filter(s => s.state === 'busy').length, open = openSubs.has(a.sessionId)
+  return h('div', { class: 'subs' },
+    h('button', {
+      class: 'subs-t', 'aria-expanded': String(open),
+      onclick() { open ? openSubs.delete(a.sessionId) : openSubs.add(a.sessionId); saveSubs(); renderList() }
+    }, '서브에이전트 ', h('b', {}, subs.length + '개'), run ? h('span', { class: 'run' }, `${run}개 작업 중`) : null,
+      h('span', { class: 'chev', 'aria-hidden': 'true' }, open ? '접기' : '펼치기')),
+    open ? subList(a) : null)
+}
+
+function agentCard(a) {
+  const s = status(a)
+  return h('article', { class: `agent ${s.key} g-${a.group || 'other'}` },
+    h('a', { class: 'amain', href: '#/s/' + a.sessionId },
+      h('div', { class: 'r1' }, h('span', { class: 'name' }, a.name || a.sessionId.slice(0, 8)), badge(a), stateEl(s)),
+      a.detail ? h('div', { class: 'why' }, a.detail) : null,
+      s.key === 'blocked' && a.needs ? h('div', { class: 'needs' }, a.needs) : null,
+      h('div', { class: 'meta' },
+        h('span', {}, '활동 ', h('b', {}, ago(a.lastActivity)), hm(a.lastActivity)),
+        h('span', {}, '시작 ', h('b', {}, ago(a.startedAt))),
+        h('span', {}, kindLabel(a)),
+        h('span', { class: 'mono', title: home(a.cwd) }, home(a.cwd).split('/').pop()),
+        a.tokens ? h('span', { title: tokTip(a.tokens) }, '토큰 ', h('b', {}, tok(a.tokens.total))) : null)),
+    subFold(a))
+}
+
+/* office: the sessions as low-poly figures in an isometric room (three.js r128, vendored).
+   The hub sits at its own desk; a session at work sits at its desk with a typing bubble and a lit screen, a waiting
+   one shows an orange "!" and a blinking screen, one at rest or finished sits in the lounge. A new [배정] from the hub
+   flies a sheet from the hub to that desk, a [보고] flies one back. Drag turns the room. It pauses on hover or focus;
+   under reduced motion nothing walks or flies; without WebGL the list beside it stays. #/demo adds buttons that
+   override a session's scene locally, for trying the scenes; nothing is sent anywhere. */
+const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches
+const demoOn = () => location.hash === '#/demo'
+const sceneOverride = new Map()   // #/demo only: sessionId -> 'working' | 'waiting' | 'rest'
+const sceneOf = a => sceneOverride.get(a.sessionId) || { busy: 'working', blocked: 'waiting' }[status(a).key] || 'rest'
+const SCENE_LABEL = { working: '작업 중', waiting: '대기 중', rest: '쉬는 중' }
+let hero = null
+
+function heroBox() {
+  if (hero) return hero.box
+  const labels = h('div', { class: 'hlabels' })
+  const stage = h('div', { class: 'hstage' }, labels)
+  const info = h('div', { class: 'hinfo' })
+  const box = h('section', { class: 'hero', 'aria-label': '세션 오피스' }, stage, info)
+  hero = { box, stage, labels, info, ok: false, figs: new Map(), raf: 0, paused: false, last: 0, mark: null, o: null }
+  const hold = v => () => { hero.paused = v; heroLoop() }
+  box.addEventListener('mouseenter', hold(true)); box.addEventListener('mouseleave', hold(false))
+  box.addEventListener('focusin', hold(true)); box.addEventListener('focusout', hold(false))
+  try { officeInit(); hero.ok = true } catch (e) { box.classList.add('flat') }   // no THREE or no WebGL: the list alone
+  return box
+}
+
+function officeInit() {
+  if (typeof THREE === 'undefined' || !THREE.OrbitControls) throw new Error('three.js not loaded')
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2))
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  hero.stage.prepend(renderer.domElement)
+  const scene = new THREE.Scene()
+  const camera = new THREE.OrthographicCamera(-10, 10, 10, -10, 0.1, 200)
+  camera.position.set(16, 15, 16); camera.lookAt(0, 0, 0)
+  const controls = new THREE.OrbitControls(camera, renderer.domElement)
+  Object.assign(controls, { enableDamping: !calm(), enablePan: false, enableZoom: false, minPolarAngle: Math.PI * 0.12, maxPolarAngle: Math.PI * 0.42 })
+  controls.addEventListener('change', () => { if (!hero.raf) officeRender() })
+  controls.addEventListener('end', () => officeResize())
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x808080, 0.7); scene.add(hemi)
+  const sun = new THREE.DirectionalLight(0xffffff, 0.7)
+  sun.position.set(-6, 16, 10); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0006
+  scene.add(sun, sun.target)
+  const std = () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 })
+  const M = { floor: std(), wall: std(), rug: std(), desk: std(), leg: std(), sofa: std(), seat: std(), hubSeat: std(), plant: std(), pot: std(), bean: std(), body: std(), skull: std(), hubTile: std(),
+    dark: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.55 }) }
+  hero.o = { renderer, scene, camera, controls, hemi, sun, M, room: null, rows: -1, desks: [], hub: null, lounge: [], packets: [], tex: {}, v: new THREE.Vector3(), down: null }
+  officeColors()
+  new MutationObserver(() => { officeColors(); officeRender() }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  new ResizeObserver(officeResize).observe(hero.stage)
+  // a click (not a drag) on a figure or its desk opens that session
+  const el = renderer.domElement, ray = new THREE.Raycaster(), ptr = new THREE.Vector2()
+  el.addEventListener('pointerdown', e => { hero.o.down = [e.clientX, e.clientY] })
+  el.addEventListener('pointerup', e => {
+    const d = hero.o.down; hero.o.down = null
+    if (!d || Math.hypot(e.clientX - d[0], e.clientY - d[1]) > 5) return
+    const r = el.getBoundingClientRect()
+    ptr.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1)
+    ray.setFromCamera(ptr, camera)
+    const hit = ray.intersectObjects([...hero.figs.values()].map(f => f.g), true)[0]
+    if (hit) { let o = hit.object; while (o && !o.userData.sid) o = o.parent; if (o) location.hash = '#/s/' + o.userData.sid }
+  })
+}
+
+function officeColors() {
+  const o = hero.o, c = k => new THREE.Color(tokenRGB(k)), light = document.documentElement.dataset.theme === 'light'
+  const set = { floor: light ? '--color-paper-3' : '--color-paper-3', wall: light ? '--color-side' : '--color-paper-2', rug: '--color-paper-3', desk: light ? '--color-paper' : '--color-rule-2', leg: '--color-rule',
+    sofa: light ? '--color-rule-2' : '--color-paper-3', seat: '--color-rule-2', hubSeat: '--color-accent', plant: '--color-muted', pot: '--color-rule-2', bean: '--color-accent',
+    body: light ? '--color-rule-2' : '--color-muted', skull: light ? '--color-paper-2' : '--color-ink', hubTile: '--color-paper-3', dark: light ? '--color-ink-2' : '--color-side' }
+  for (const [k, v] of Object.entries(set)) o.M[k].color.copy(c(v))
+  o.hemi.intensity = light ? 0.55 : 0.95; o.sun.intensity = light ? 0.6 : 0.85
+  o.col = { working: tokenRGB('--color-live'), waiting: tokenRGB('--color-accent'), rest: tokenRGB('--color-faint'), ink: tokenRGB('--color-ink'), paper: tokenRGB('--color-paper-2'), side: tokenRGB('--color-side') }
+  officeTextures()
+  for (const f of hero.figs.values()) f.ringMat.color.set(o.col[f.state] || o.col.rest)
+}
+
+function officeTextures() {
+  const o = hero.o, col = o.col, font = getComputedStyle(document.body).fontFamily
+  for (const t of Object.values(o.tex).flat()) t?.dispose?.()
+  const tex = draw => { const c = document.createElement('canvas'); c.width = c.height = 128; draw(c.getContext('2d')); return new THREE.CanvasTexture(c) }
+  const pill = (x, X, Y, W, H, R) => { x.beginPath(); x.moveTo(X + R, Y); x.arcTo(X + W, Y, X + W, Y + H, R); x.arcTo(X + W, Y + H, X, Y + H, R); x.arcTo(X, Y + H, X, Y, R); x.arcTo(X, Y, X + W, Y, R); x.closePath() }
+  o.tex.zzz = tex(x => { x.fillStyle = col.rest; [['z', 34, 98, 30], ['z', 62, 70, 38], ['Z', 88, 40, 46]].forEach(([s, X, Y, size]) => { x.font = `800 ${size}px ${font}`; x.fillText(s, X, Y) }) })
+  o.tex.bang = tex(x => {
+    x.fillStyle = col.waiting; x.beginPath(); x.arc(64, 60, 40, 0, Math.PI * 2); x.fill()
+    x.beginPath(); x.moveTo(54, 96); x.lineTo(64, 118); x.lineTo(74, 96); x.fill()
+    x.fillStyle = col.side; x.font = `900 60px ${font}`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('!', 64, 62)
+  })
+  o.tex.dots = [0, 1, 2].map(i => tex(x => {
+    x.fillStyle = col.ink; pill(x, 14, 30, 100, 56, 22); x.fill()
+    x.beginPath(); x.moveTo(52, 86); x.lineTo(60, 104); x.lineTo(70, 86); x.fill()
+    ;[0, 1, 2].forEach(k => { x.fillStyle = k === i ? col.side : col.rest; x.beginPath(); x.arc(42 + k * 22, 58, 8, 0, Math.PI * 2); x.fill() })
+  }))
+  for (const f of hero.figs.values()) f.sprite.material.map = null
+}
+
+// the room grows by a row of three desks for every three sessions past six; the lounge and the camera follow it
+function officeLayout(n) {
+  const o = hero.o, rows = Math.max(2, Math.ceil(n / 3))
+  if (rows === o.rows) return false
+  if (o.room) { o.scene.remove(o.room); o.room.traverse(m => m.geometry?.dispose?.()) }
+  const g = new THREE.Group(); o.scene.add(g); o.room = g; o.rows = rows
+  const box = (w, hh, d, mat, x, y, z, parent = g, shadow = true) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), mat); m.position.set(x, y, z); m.castShadow = shadow; m.receiveShadow = true; parent.add(m); return m
+  }
+  const deskBottom = -5 + (rows - 1) * 3.2, loungeZ = deskBottom + 4.8, front = loungeZ + 4.5, depth = front + 7.6, cz = (front - 7.6) / 2
+  o.geo = { deskBottom, loungeZ, corridor: deskBottom + 2.8, entry: loungeZ + 0.9, cz, depth }
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(22, depth), o.M.floor)
+  floor.rotation.x = -Math.PI / 2; floor.position.z = cz; floor.receiveShadow = true; g.add(floor)
+  box(22, 2.4, 0.2, o.M.wall, 0, 1.2, -7.6, g, false)
+  box(0.2, 2.4, depth + 0.2, o.M.wall, -11.1, 1.2, cz, g, false)
+  box(3.2, 1.2, 0.05, o.M.desk, -2.5, 1.45, -7.47, g, false)
+  const plant = (x, z) => {
+    box(0.5, 0.5, 0.5, o.M.pot, x, 0.25, z)
+    const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(0.48, 0), o.M.plant); leaves.position.set(x, 0.9, z); leaves.castShadow = true; g.add(leaves)
+  }
+  plant(-10.3, -6.8); plant(10.2, -6.8); plant(10.2, front - 0.9); plant(-10.3, front - 0.9)
+  const desk = (x, z, wide) => {
+    const d = new THREE.Group(); d.position.set(x, 0, z); g.add(d)
+    const w = wide ? 2.6 : 1.7
+    box(w, 0.08, 0.9, o.M.desk, 0, 0.76, 0, d)
+    ;[[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => box(0.06, 0.72, 0.06, o.M.leg, sx * (w / 2 - 0.08), 0.36, sz * 0.36, d))
+    const screens = (wide ? [-0.58, 0.58] : [0]).map(mx => {
+      box(0.08, 0.28, 0.08, o.M.dark, mx, 0.94, -0.24, d); box(0.88, 0.54, 0.06, o.M.dark, mx, 1.32, -0.26, d)
+      const sm = new THREE.MeshStandardMaterial({ color: 0x141414, emissive: 0x000000, roughness: 0.35 })
+      const s = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.44), sm); s.position.set(mx, 1.32, -0.225); d.add(s); return sm
+    })
+    box(0.52, 0.03, 0.18, o.M.dark, 0, 0.815, 0.12, d)
+    const seatMat = wide ? o.M.hubSeat : o.M.seat
+    box(0.56, 0.08, 0.52, seatMat, 0, 0.46, 0.86, d); box(0.56, 0.52, 0.08, seatMat, 0, 0.76, 1.12, d); box(0.07, 0.42, 0.07, o.M.dark, 0, 0.21, 0.86, d)
+    return { screens, seat: new THREE.Vector3(x, 0, z + 0.82), anchor: new THREE.Vector3(x, 1.4, z - 0.2) }
+  }
+  const hubZ = deskBottom + 3.0
+  o.hubDesk = desk(-7.5, hubZ, true)
+  const tile = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 3.4), o.M.hubTile); tile.rotation.x = -Math.PI / 2; tile.position.set(-7.5, 0.008, hubZ + 0.4); g.add(tile)
+  o.hubAnchor = new THREE.Vector3(o.hubDesk.seat.x, 1.5, o.hubDesk.seat.z)
+  o.desks = []
+  for (let r = 0; r < rows; r++) for (const x of [-2.5, 1.5, 5.5]) o.desks.push(desk(x, -5 + r * 3.2, false))
+  const rug = new THREE.Mesh(new THREE.PlaneGeometry(7, 4.4), o.M.rug); rug.rotation.x = -Math.PI / 2; rug.position.set(6, 0.01, loungeZ + 1.4); rug.receiveShadow = true; g.add(rug)
+  box(3.0, 0.4, 0.9, o.M.sofa, 5.6, 0.2, loungeZ); box(3.0, 0.62, 0.22, o.M.sofa, 5.6, 0.6, loungeZ - 0.42)
+  box(0.22, 0.58, 0.9, o.M.sofa, 4.0, 0.29, loungeZ); box(0.22, 0.58, 0.9, o.M.sofa, 7.2, 0.29, loungeZ)
+  box(1.6, 0.06, 0.7, o.M.desk, 5.6, 0.42, loungeZ + 1.6)
+  const beans = [[3.6, loungeZ + 2.5], [7.7, loungeZ + 2.5], [8.7, loungeZ + 1.1]]
+  beans.forEach(([x, z]) => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), o.M.bean); b.scale.set(1, 0.5, 1); b.position.set(x, 0.2, z); b.castShadow = b.receiveShadow = true; g.add(b) })
+  const seats = [{ x: 4.8, z: loungeZ + 0.1, y: 0.2, rot: 0 }, { x: 5.6, z: loungeZ + 0.1, y: 0.2, rot: 0 }, { x: 6.4, z: loungeZ + 0.1, y: 0.2, rot: 0 },
+    ...beans.map(([x, z]) => ({ x, z, y: 0.22, rot: Math.atan2(5.6 - x, loungeZ + 1.6 - z) }))]
+  for (let i = 0; seats.length < 40; i++) seats.push({ x: 2.6 + (i % 7) * 1.0, z: loungeZ + 3.4 + Math.floor(i / 7) * 0.9, y: 0, rot: Math.PI * 0.75 })   // standing room past six
+  o.lounge = seats.map(s => ({ ...s, taken: null }))
+  Object.assign(o.sun.shadow.camera, { left: -15, right: 15, top: depth / 2 + 2, bottom: -depth / 2 - 2, near: 1, far: 60 }); o.sun.shadow.camera.updateProjectionMatrix()
+  o.sun.position.set(-6, 16, cz + 10); o.sun.target.position.set(0, 0, cz)
+  o.controls.target.set(0, 1.2, cz); o.camera.position.set(16, 16.2, cz + 16); o.controls.update()
+  officeResize()
+  return true
+}
+
+function officeResize() {
+  const o = hero.o, w = hero.stage.clientWidth, hh = hero.stage.clientHeight
+  if (!o || !w || !hh || !o.geo) return
+  o.renderer.setSize(w, hh, false)
+  // every corner of the room box (walls, plants, the top of a flying sheet) as the camera sees it now, plus a margin;
+  // it runs again when a drag ends, so a turned room is framed again
+  const front = o.geo.cz + o.geo.depth / 2, pts = []
+  for (const x of [-11.3, 11.1]) for (const y of [0, 3.6]) for (const z of [-7.8, front + 0.2]) pts.push(new THREE.Vector3(x, y, z))
+  o.camera.updateMatrixWorld()
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+  for (const p of pts) { const q = p.clone().applyMatrix4(o.camera.matrixWorldInverse); x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y) }
+  // frame the box itself (an off-centre frustum), widened on one axis to the canvas shape, with about 4% to spare
+  const asp = w / hh, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
+  let hw = (x1 - x0) / 2, hy = (y1 - y0) / 2
+  if (hw / hy > asp) hy = hw / asp; else hw = hy * asp
+  hw *= 1.04; hy *= 1.04
+  Object.assign(o.camera, { left: cx - hw, right: cx + hw, top: cy + hy, bottom: cy - hy }); o.camera.updateProjectionMatrix()
+  officeRender()
+}
+
+// a round body, a head nearly as big, stubby arms and feet, two dot eyes: about two heads tall, low poly
+function makeFigure(sid, isHub) {
+  const o = hero.o, g = new THREE.Group(); g.userData.sid = sid; o.scene.add(g)
+  const ball = (r, mat, x, y, z, sx = 1, sy = 1, sz = 1, parent = g) => {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = true; parent.add(m); return m
+  }
+  const body = new THREE.Group(); g.add(body)
+  ball(0.36, o.M.body, 0, 0.42, 0, 1.08, 0.92, 1.0, body)
+  ball(0.11, o.M.body, -0.36, 0.42, 0.04, 0.9, 1.15, 0.9, body); ball(0.11, o.M.body, 0.36, 0.42, 0.04, 0.9, 1.15, 0.9, body)   // arms
+  ball(0.12, o.M.dark, -0.15, 0.08, 0.06, 1.1, 0.55, 1.3); ball(0.12, o.M.dark, 0.15, 0.08, 0.06, 1.1, 0.55, 1.3)   // feet
+  const head = new THREE.Group(); head.position.y = 0.98; body.add(head)
+  ball(0.34, o.M.skull, 0, 0, 0, 1.05, 0.95, 1.0, head)
+  ball(0.045, o.M.dark, -0.11, 0.02, 0.31, 1, 1.3, 0.6, head); ball(0.045, o.M.dark, 0.11, 0.02, 0.31, 1, 1.3, 0.6, head)   // eyes
+  if (isHub) { const hat = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.32, 6), o.M.hubSeat); hat.position.y = 0.42; hat.castShadow = true; head.add(hat) }
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.44, 0.56, 32), ringMat); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.02; o.scene.add(ring)
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: null, transparent: true, depthTest: false })); sprite.scale.set(1.05, 1.05, 1.05); sprite.renderOrder = 10; o.scene.add(sprite)   // bubbles, the ! and zzz a size up
+  const tag = h('a', { class: 'tag' + (isHub ? ' hub' : ''), href: '#/s/' + sid, tabindex: -1, 'aria-hidden': 'true' })
+  hero.labels.append(tag)
+  return { sid, g, body, head, ring, ringMat, sprite, tag, state: null, desk: -1, spot: null, path: [], rest: null, loc: 'desk', hub: isHub }
+}
+function dropFigure(f) {
+  const o = hero.o
+  o.scene.remove(f.g, f.ring, f.sprite); f.g.traverse(m => m.geometry?.dispose?.()); f.ring.geometry.dispose(); f.ringMat.dispose(); f.sprite.material.dispose(); f.tag.remove()
+  if (f.spot) f.spot.taken = null
+}
+
+function setPath(f, wp, rest) {
+  f.rest = rest
+  if (calm() || !wp.length) { const [x, z] = wp.length ? wp[wp.length - 1] : [f.g.position.x, f.g.position.z]; f.g.position.set(x, rest.y, z); f.g.rotation.y = rest.rot; f.path = []; return }
+  f.path = wp.map(([x, z]) => new THREE.Vector3(x, 0, z))
+}
+function toLoungeWaypoints(f, s) {
+  const o = hero.o, seat = o.desks[f.desk].seat, aisle = seat.x + 2
+  return [[aisle, seat.z], [aisle, o.geo.corridor], [2.8, o.geo.corridor], [2.8, o.geo.entry], [s.x, o.geo.entry]]
+}
+function goLounge(f, walk) {
+  const o = hero.o, s = o.lounge.find(x => !x.taken) || o.lounge[0]
+  s.taken = f; f.spot = s; f.loc = 'lounge'
+  if (!walk) { f.g.position.set(s.x, s.y, s.z); f.g.rotation.y = s.rot; f.path = []; f.rest = { y: s.y, rot: s.rot }; return }
+  setPath(f, toLoungeWaypoints(f, s).concat([[s.x, s.z]]), { y: s.y, rot: s.rot })
+}
+function goDesk(f, walk) {
+  const o = hero.o, seat = o.desks[f.desk].seat, s = f.spot
+  if (s) { s.taken = null; f.spot = null }
+  f.loc = 'desk'
+  if (!walk) { f.g.position.set(seat.x, 0.18, seat.z); f.g.rotation.y = Math.PI; f.path = []; f.rest = { y: 0.18, rot: Math.PI }; return }
+  setPath(f, (s ? toLoungeWaypoints(f, s).reverse() : []).concat([[seat.x, seat.z]]), { y: 0.18, rot: Math.PI })
+}
+function flySheet(from, to, kind) {
+  if (calm()) return
+  const o = hero.o, c = new THREE.Color(kind === 'assign' ? o.col.waiting : o.col.ink)   // the assignment sheet carries the orange
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.06, 0.8), new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 }))
+  m.castShadow = true; o.scene.add(m)
+  o.packets.push({ m, from: from.clone(), to: to.clone(), t: 0, dur: 1.6 })
+  if (kind === 'assign') o.hubPulse = 1
+  heroLoop()
+}
+
+function updateHero() {
+  put(hero.info, demoOn() ? demoPanel() : null)   // the sessions themselves are listed in the canvas below
+  if (!hero.ok) return
+  try { officeSync() } catch (e) { hero.ok = false; hero.box.classList.add('flat'); return }
+  heroLoop()
+}
+
+function officeSync() {
+  const o = hero.o, hubA = agents.find(a => a.lane === 'HUB') || agents.find(a => msgs24?.hub && a.name === msgs24.hub)
+  const rest = agents.filter(a => a !== hubA)
+  const grew = officeLayout(rest.length)
+  for (const [sid, f] of hero.figs) if (!agents.some(a => a.sessionId === sid)) { dropFigure(f); hero.figs.delete(sid) }
+  if (grew) for (const f of hero.figs.values()) { f.desk = -1; if (f.spot) { f.spot.taken = null; f.spot = null } f.state = null }
+  if (hubA) {
+    let f = hero.figs.get(hubA.sessionId)
+    if (!f || !f.hub) { if (f) dropFigure(f); f = makeFigure(hubA.sessionId, true); hero.figs.set(hubA.sessionId, f) }
+    f.g.position.set(o.hubDesk.seat.x, 0.18, o.hubDesk.seat.z); f.g.rotation.y = Math.PI; f.rest = { y: 0.18, rot: Math.PI }; f.loc = 'hub'
+    f.state = sceneOf(hubA); if (f.tag.textContent !== (hubA.name || 'hub')) { f.tag.textContent = hubA.name || 'hub'; f.tag.title = f.tag.textContent; f.tw = 0 }
+  }
+  const used = new Set([...hero.figs.values()].filter(f => !f.hub && f.desk >= 0).map(f => f.desk))
+  for (const a of rest) {
+    let f = hero.figs.get(a.sessionId), fresh = false
+    if (!f || f.hub) { if (f) dropFigure(f); f = makeFigure(a.sessionId, false); hero.figs.set(a.sessionId, f); fresh = true }
+    if (f.desk < 0) { let k = 0; while (used.has(k)) k++; f.desk = k; used.add(k); fresh = true }
+    const nm = a.name || a.sessionId.slice(0, 8)
+    if (f.tag.textContent !== nm) { f.tag.textContent = nm; f.tag.title = nm; f.tw = 0 }   // the full name on hover; width measured again
+    const s = sceneOf(a), was = f.state
+    f.state = s
+    if (s === 'rest' && (fresh || was !== 'rest')) goLounge(f, !fresh)
+    else if (s !== 'rest' && (fresh || was === 'rest')) goDesk(f, !fresh)
+  }
+  for (const f of hero.figs.values()) f.ringMat.color.set(o.col[f.state] || o.col.rest)
+  officeMessages()
+}
+
+// new [배정] from the hub and [보고] to it, seen in the 24-hour message read; the history before the page opened is not replayed
+function officeMessages() {
+  const o = hero.o, d = msgs24
+  if (!d?.messages) return
+  const top = Math.max(0, ...d.messages.map(m => m.t || 0))
+  if (hero.mark == null) { hero.mark = top; return }
+  const fresh = d.messages.filter(m => m.t > hero.mark && (m.kind === 'assign' && m.from === d.hub || m.kind === 'report' && m.to === d.hub))
+  hero.mark = Math.max(hero.mark, top)
+  for (const m of fresh.reverse()) {
+    const a = agents.find(x => x.name === (m.kind === 'assign' ? m.to : m.from)), f = a && hero.figs.get(a.sessionId)
+    if (!f || f.hub || f.desk < 0) continue
+    const desk = o.desks[f.desk].anchor
+    m.kind === 'assign' ? flySheet(o.hubAnchor, desk, 'assign') : flySheet(desk, o.hubAnchor, 'report')
+  }
+}
+
+function demoPanel() {
+  const set = (a, s) => () => { s ? sceneOverride.set(a.sessionId, s) : sceneOverride.delete(a.sessionId); updateHero() }
+  return h('div', { class: 'hdemo' }, h('p', { class: 'hsub' }, '#/demo: 이 브라우저에서만 장면을 바꿔 봅니다. 세션에는 아무것도 보내지 않습니다.'),
+    agents.filter(a => a.lane !== 'HUB').map(a => h('div', { class: 'drow' }, h('b', {}, a.name || a.sessionId.slice(0, 8)),
+      ['working', 'waiting', 'rest'].map(s => h('button', { type: 'button', class: 'segb', 'aria-pressed': String(sceneOf(a) === s), onclick: set(a, s) }, SCENE_LABEL[s])),
+      h('button', { type: 'button', class: 'segb', onclick: () => { const f = hero.figs.get(a.sessionId); if (f && f.desk >= 0) flySheet(hero.o.hubAnchor, hero.o.desks[f.desk].anchor, 'assign') } }, '배정 흉내'),
+      sceneOverride.has(a.sessionId) ? h('button', { type: 'button', class: 'segb', onclick: set(a, null) }, '실제로') : null)))
+}
+
+const lerpAngle = (a, b, k) => { const d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * k }
+function officeStep(dt, t) {
+  const o = hero.o, still = calm()
+  let i = 0
+  for (const f of hero.figs.values()) {
+    i++
+    const p = f.g.position
+    if (f.path.length) {
+      const target = f.path[0], dx = target.x - p.x, dz = target.z - p.z, dist = Math.hypot(dx, dz), step = 2.8 * dt
+      if (dist <= step) { p.x = target.x; p.z = target.z; f.path.shift() }
+      else { p.x += dx / dist * step; p.z += dz / dist * step; f.g.rotation.y = lerpAngle(f.g.rotation.y, Math.atan2(dx, dz), 0.25) }
+      p.y = Math.abs(Math.sin(t * 11 + i)) * 0.07
+    } else if (f.rest) { p.y += (f.rest.y - p.y) * 0.2; f.g.rotation.y = lerpAngle(f.g.rotation.y, f.rest.rot, 0.15) }
+    const settled = !f.path.length, atDesk = settled && (f.loc === 'desk' || f.loc === 'hub')
+    const working = atDesk && f.state === 'working' && !still
+    f.body.rotation.z = working ? Math.sin(t * 3 + i) * 0.06 : 0
+    f.head.position.y = 0.98 + (working ? Math.abs(Math.sin(t * 6 + i)) * 0.03 : 0)
+    f.body.scale.y = settled && f.loc === 'lounge' && !still ? 1 + Math.sin(t * 1.7 + i) * 0.03 : 1
+    f.ring.position.set(p.x, 0.02, p.z)
+    const sp = f.sprite
+    let map = null, y = 2.08
+    if (settled) {
+      if (f.state === 'waiting') { map = o.tex.bang; y += still ? 0 : Math.abs(Math.sin(t * 4)) * 0.18 }
+      else if (f.state === 'working' && atDesk) map = o.tex.dots[still ? 0 : Math.floor(t * 3 + i) % 3]
+      else if (f.state === 'rest' && f.loc === 'lounge') { map = o.tex.zzz; y += still ? 0 : (t * 0.6 + i * 0.3) % 1 * 0.25 }
+    }
+    sp.visible = !!map
+    if (map && sp.material.map !== map) { sp.material.map = map; sp.material.needsUpdate = true }
+    sp.position.set(p.x, p.y + y, p.z)
+    const desk = f.hub ? o.hubDesk : o.desks[f.desk]
+    if (desk) for (const scr of f.hub ? desk.screens : desk.screens.slice(0, 1)) {
+      if (f.state === 'working' && atDesk) { scr.emissive.set(o.col.working); scr.emissiveIntensity = 0.35 + (still ? 0 : Math.sin(t * 6 + i) * 0.08) }
+      else if (f.state === 'waiting') { scr.emissive.set(o.col.waiting); scr.emissiveIntensity = still || Math.sin(t * 5) > 0 ? 0.85 : 0.25 }
+      else { scr.emissive.setRGB(0, 0, 0); scr.emissiveIntensity = 0 }
+    }
+  }
+  const hub = [...hero.figs.values()].find(f => f.hub)
+  o.hubPulse = Math.max(0, (o.hubPulse || 0) - dt * 2)
+  if (hub) hub.g.scale.setScalar(1 + o.hubPulse * 0.08)
+  for (let k = o.packets.length - 1; k >= 0; k--) {
+    const pk = o.packets[k]; pk.t += dt / pk.dur
+    const e = Math.min(1, pk.t)
+    pk.m.position.lerpVectors(pk.from, pk.to, e); pk.m.position.y += 2.6 * e * (1 - e) * 2
+    pk.m.rotation.y += dt * 7; pk.m.rotation.z = Math.sin(e * Math.PI) * 0.4
+    if (e >= 1) { o.scene.remove(pk.m); pk.m.geometry.dispose(); pk.m.material.dispose(); o.packets.splice(k, 1); hero.o.hubPulse = Math.max(hero.o.hubPulse, 0.6) }
+  }
+}
+
+function officeRender() {
+  const o = hero?.o
+  if (!o || !hero.box.isConnected) return
+  o.renderer.render(o.scene, o.camera)
+  const w = hero.stage.clientWidth, hh = hero.stage.clientHeight
+  const placed = [], figs = [...hero.figs.values()].map(f => {
+    o.v.set(f.g.position.x, 0, f.g.position.z).project(o.camera)
+    if (!f.tw) { f.tw = f.tag.offsetWidth || 80; f.th = f.tag.offsetHeight || 20 }
+    return { f, x: (o.v.x + 1) / 2 * w, y: (1 - o.v.y) / 2 * hh + 10 }
+  }).sort((a, b) => a.y - b.y)
+  for (const p of figs) {
+    const { f } = p, half = f.tw / 2
+    for (let k = 0; k < 2; k++) {
+      const hit = placed.find(q => Math.abs(q.x - p.x) < (q.half + half + 4) && Math.abs(q.y - p.y) < f.th + 2)
+      if (!hit) break
+      p.y = hit.y + f.th + 3
+    }
+    placed.push({ x: p.x, y: p.y, half })
+    f.tag.style.transform = `translate(${(p.x - half).toFixed(1)}px, ${p.y.toFixed(1)}px)`
+    f.tag.dataset.state = f.state || 'rest'
+  }
+}
+
+function heroLoop() {
+  if (!hero || !hero.ok || hero.raf) return
+  const step = now => {
+    hero.raf = 0
+    if (!hero.box.isConnected || cur || page !== 'agents' || document.hidden) { hero.last = 0; return }
+    const moving = !calm(), dt = hero.last ? Math.min(0.05, (now - hero.last) / 1000) : 0
+    hero.last = moving ? now : 0
+    try {
+      officeStep(hero.paused ? 0 : dt, now / 1000)
+      hero.o.controls.update(); officeRender()
+    } catch (e) { hero.ok = false; hero.box.classList.add('flat'); return }
+    if (moving) hero.raf = requestAnimationFrame(step)
+  }
+  hero.raf = requestAnimationFrame(step)
+}
+
+/* session canvas: the hub in the middle, sessions at work on one side, the rest on the other, a line to each;
+   a solid line means they messaged in the last 24 hours, the number on it how many */
+let agentView = store.get('agentView', 'canvas') === 'list' ? 'list' : 'canvas'
+let msgs24 = null
+const WIDE_CANVAS = 760   // px; matches the container query that sets the three columns
+function nodeCard(a, hub) {
+  const s = status(a), tag = a.engine === 'codex' ? 'codex' : a.group === 'task' ? a.task : a.lane
+  const decs = (dec?.now || []).filter(d => !d.live && d.source && d.source === a.name).length
+  const run = (a.subagents || []).filter(x => x.state === 'busy').length
+  return h('a', { class: `node ${s.key} g-${a.group || 'other'}${hub ? ' hub' : ''}`, href: '#/s/' + a.sessionId, 'data-sid': a.sessionId },
+    tag ? h('span', { class: 'ntag' + (a.group === 'task' || a.engine === 'codex' ? ' mono' : '') }, tag) : null,
+    h('span', { class: 'nhead' }, h('span', { class: 'name' }, a.name || a.sessionId.slice(0, 8)), stateEl(s)),
+    h('span', { class: 'ndesc' }, a.detail || (hub ? '허브' : '하는 일 기록 없음')),
+    h('span', { class: 'nmeta' }, h('span', {}, '활동 ', h('b', {}, ago(a.lastActivity))),
+      a.tokens ? h('span', { title: tokTip(a.tokens) }, '토큰 ', h('b', {}, tok(a.tokens.total))) : null,
+      run ? h('span', {}, '서브에이전트 ', h('b', {}, run)) : null),
+    s.key === 'blocked' ? h('span', { class: 'nflag ask' }, a.needs || '대기 중')
+      : decs ? h('span', { class: 'nflag' }, `결정 대기 ${decs}`) : null)
+}
+function canvasEl() {
+  const hubName = msgs24?.hub
+  const hubA = agents.find(a => a.lane === 'HUB') || agents.find(a => hubName && a.name === hubName)
+  const rest = agents.filter(a => a !== hubA)
+  const svg = sv('svg', { class: 'links', 'aria-hidden': 'true' })
+  const box = h('div', { class: 'canvas' + (hubA ? '' : ' nohub') }, svg,
+    h('div', { class: 'ccol left' }, rest.filter(a => a.section === 'busy').map(a => nodeCard(a))),
+    hubA ? h('div', { class: 'ccol mid' }, nodeCard(hubA, true)) : null,
+    h('div', { class: 'ccol right' }, rest.filter(a => a.section !== 'busy').map(a => nodeCard(a))))
+  const hubKey = hubA?.name
+  const count = name => {
+    const e = msgs24?.edges || [], c = (f, t) => e.find(x => x.from === f && x.to === t)?.count || 0
+    return { out: c(hubKey, name), back: c(name, hubKey) }
+  }
+  box.drawLinks = () => {
+    if (!hubA || !box.isConnected) return
+    const B = box.getBoundingClientRect(), wide = B.width >= WIDE_CANVAS
+    const hubEl = box.querySelector('.node.hub'), H = hubEl.getBoundingClientRect()
+    const r = e => { const q = e.getBoundingClientRect(); return { l: q.left - B.left, r: q.right - B.left, t: q.top - B.top, b: q.bottom - B.top, w: q.width, h: q.height } }
+    const hb = r(hubEl), f1 = v => v.toFixed(1)
+    svg.setAttribute('viewBox', `0 0 ${f1(B.width)} ${f1(B.height)}`)
+    svg.setAttribute('width', f1(B.width)); svg.setAttribute('height', f1(B.height))
+    const parts = []
+    for (const el of box.querySelectorAll('.ccol:not(.mid) .node')) {
+      const a = agents.find(x => x.sessionId === el.dataset.sid), q = r(el), left = el.closest('.left')
+      const { out, back } = count(a.name), n = out + back, y = q.t + q.h / 2
+      let d, lx, ly
+      if (wide) {   // side to side: hub edge to the card's inner edge
+        const x0 = left ? hb.l : hb.r, y0 = hb.t + hb.h / 2, x1 = left ? q.r : q.l, mx = (x0 + x1) / 2
+        d = `M${f1(x0)},${f1(y0)} C${f1(mx)},${f1(y0)} ${f1(mx)},${f1(y)} ${f1(x1)},${f1(y)}`; lx = x1 + (left ? 8 : -8); ly = y - 6
+      } else {      // a spine down the middle gutter from the hub, a branch to each card
+        const cx = hb.l + hb.w / 2, x1 = left ? q.r : q.l, k = Math.min(10, Math.abs(cx - x1))
+        d = `M${f1(cx)},${f1(hb.b)} V${f1(y - k)} Q${f1(cx)},${f1(y)} ${f1(cx + (left ? -k : k))},${f1(y)} H${f1(x1)}`; lx = x1 + (left ? 4 : -4); ly = y - 6
+      }
+      parts.push(sv('path', { class: 'link' + (n ? ' on' : '') + (status(a).key === 'blocked' ? ' ask' : ''), d }))
+      if (n) parts.push(sv('text', { class: 'lnum', x: f1(lx), y: f1(ly), 'text-anchor': left ? 'start' : 'end' },
+        sv('title', {}, `허브에서 ${out}건, 허브로 ${back}건(24시간)`), n + '건'))
+    }
+    put(svg, parts)
+  }
+  return box
+}
+let canvasObs = null
+function canvasBlock() {
+  let box
+  try { box = canvasEl() } catch (e) { return null }   // the list view stays one click away
+  canvasObs?.disconnect()
+  canvasObs = new ResizeObserver(() => box.drawLinks())
+  canvasObs.observe(box)
+  requestAnimationFrame(() => box.drawLinks())
+  return h('div', { class: 'canvas-wrap' }, box)   // the container the column query measures
+}
+
+// the server already sorts: section, then task / resident / other, then latest activity
+function renderList() {
+  const scroll = view.querySelector('.scroll.list') || h('div', { class: 'scroll list' }, h('div', { class: 'slot-top' }), h('div', { class: 'slot-hero' }), h('div', { class: 'slot-rest' }))
+  const [top, heroSlot, rest] = scroll.children
+  const viewSeg = h('div', { class: 'seg flat', role: 'group', 'aria-label': '세션 보기' }, [['canvas', '흐름도'], ['list', '목록']].map(([v, label]) => h('button', {
+    class: 'segb', 'aria-pressed': String(agentView === v),
+    onclick() { if (agentView !== v) { agentView = v; store.set('agentView', v); renderList() } }
+  }, label)))
+  const canvas = agents.length && agentView === 'canvas' ? canvasBlock() : null
+  put(top,
+    error ? h('div', { class: 'banner' }, `서버에 연결하지 못했습니다(${error}). 폴더에서 ./run.sh 로 다시 띄우세요.`) : null,
+    !error && !agents.length ? h('div', { class: 'empty' }, '떠 있는 세션이 없습니다.') : null)
+  if (!agents.length) put(heroSlot)
+  else {
+    try { if (heroSlot.firstChild !== heroBox()) put(heroSlot, heroBox()); updateHero() } catch (e) { put(heroSlot) }   // the list below still draws
+  }
+  put(rest,
+    agents.length ? h('div', { class: 'vhead' }, h('h2', {}, '세션'),
+      h('span', { class: 'hint' }, agentView === 'canvas' ? '허브와 지난 24시간 메시지가 오간 세션은 실선, 숫자는 건수' : '구역별 목록'), viewSeg) : null,
+    canvas,
+    agents.length && !canvas ? SECTIONS.map(([key, title]) => {
+      const list = agents.filter(a => (a.section || 'wait') === key)
+      const fold = key === 'done', open = !fold || doneOpen
+      const head = [h('h2', {}, title), h('span', { class: 'num' }, list.length),
+        fold ? h('span', { class: 'chev', 'aria-hidden': 'true' }, open ? '접기' : '펼치기') : null]
+      return h('section', { class: 'sec', 'data-sec': key },
+        fold ? h('button', {
+          class: 'sec-h', 'aria-expanded': String(open),
+          onclick() { doneOpen = !doneOpen; try { localStorage.setItem('doneOpen', doneOpen ? '1' : '0') } catch (e) {} renderList() }
+        }, head) : h('div', { class: 'sec-h' }, head),
+        open ? (list.length ? list.map(agentCard) : h('div', { class: 'sec-empty' }, '없음')) : null)
+    }) : null)
+  if (!scroll.isConnected) put(view, scroll)
+}
+
+/* ---------- decisions ---------- */
+let dec = null, decKey = ''
+const openDetails = new Set()
+let decidedOpen = false
+try { decidedOpen = localStorage.getItem('decidedOpen') === '1' } catch (e) {}
+const today = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` }
+const when = s => {   // 'YYYY-MM-DD HH:MM' or 'YYYY-MM-DD'
+  if (s && s.startsWith(today()) && s.length > 10) return s.slice(11)
+  const m = (s || '').match(/^\d{4}-(\d\d)-(\d\d)(?: (\d\d:\d\d))?/)
+  return m ? `${+m[1]}월 ${+m[2]}일${m[3] ? ' ' + m[3] : ''}` : (s || '')
+}
+
+async function copyText(btn, text) {
+  try { await navigator.clipboard.writeText(text); btn.dataset.done = '1' }
+  catch (e) { const r = document.createRange(); r.selectNodeContents(btn); getSelection().removeAllRanges(); getSelection().addRange(r) }
+}
+// URLs open in a new tab; anything else is a path or note, and clicking copies it
+const refEl = r => /^https?:\/\//.test(r)
+  ? h('a', { class: 'ref', href: r, target: '_blank', rel: 'noopener noreferrer', title: '새 탭에서 열기' }, r, h('span', { class: 'ic' }, icon('ext')))
+  : h('button', {
+    class: 'ref', title: '눌러서 복사',
+    onclick(ev) {
+      const b = ev.currentTarget, ic = b.querySelector('.ic')
+      copyText(b, r).then(() => { ic.textContent = b.dataset.done ? '복사됨' : 'Ctrl+C'; setTimeout(() => { ic.textContent = '복사' }, 1500) })
+    }
+  }, r, h('span', { class: 'ic' }, '복사'))
+
+// a decision reads top down: its state and dates as chips, the question as one large line, who raised it,
+// then the detail at a reading measure and the options as a numbered list; open ones show their detail unfolded
+const DEC_STATE = { now: '열림', waiting: '미룸', decided: '정해짐' }
+const closedDetails = new Set()
+function decCard(d, sec) {
+  const w = d.who || {}
+  const key = d.id || 'live:' + d.sid
+  const open = sec === 'now' ? !closedDetails.has(key) : openDetails.has(key)
+  return h('article', { class: `dcard ${sec}${d.live ? ' live' : ''}` },
+    h('div', { class: 'dchips' },
+      h('span', { class: 'dstate ' + (d.live ? 'live' : sec), title: d.live ? '이 세션이 지금 입력을 기다리며 묻고 있습니다' : null }, d.live ? '세션이 지금 묻는 중' : DEC_STATE[sec] || d.status || ''),
+      d.live ? h('span', { class: 'dchip' }, '활동 ', h('b', {}, ago(d.at)), hm(d.at)) : d.raised ? h('span', { class: 'dchip' }, '올라옴 ', h('b', {}, when(d.raised))) : null,
+      d.until ? h('span', { class: 'dchip' }, '미룸 ', h('b', {}, d.until)) : null,
+      d.decided_at ? h('span', { class: 'dchip' }, '결정 ', h('b', {}, when(d.decided_at))) : null,
+      d.id ? h('span', { class: 'did mono' }, d.id) : null),
+    h('h3', { class: 'dq' }, d.title || d.id || '(제목 없음)'),
+    d.source || d.task ? h('div', { class: 'dsrc' },
+      d.source ? [h('b', {}, d.source), badge(w), w.closed ? h('span', { title: '목록에도 agents.json 에도 없어 닫힌 일회성 세션으로 봅니다' }, '닫힘') : null] : null,
+      d.task ? h('span', { class: 'mono' }, d.task) : null) : null,
+    d.detail ? h('details', {
+      class: 'dmore', open,
+      ontoggle(ev) {
+        const o = ev.currentTarget.open
+        if (sec === 'now') o ? closedDetails.delete(key) : closedDetails.add(key)
+        else o ? openDetails.add(key) : openDetails.delete(key)
+      }
+    }, h('summary', {}, '자세히'), h('p', { class: 'dtext' }, d.detail)) : null,
+    d.options?.length ? h('ol', { class: 'opts' }, d.options.map(o => h('li', {}, h('span', {}, o)))) : null,
+    d.decision ? h('div', { class: 'decision' }, h('b', {}, '결정'), h('span', {}, d.decision)) : null,
+    d.refs?.length ? h('div', { class: 'refs' }, d.refs.map(refEl)) : null,
+    d.live ? h('a', { class: 'golink', href: '#/s/' + d.sid }, '세션 대화 보기') : null)
+}
+
+function renderDecisions() {
+  const scroll = view.querySelector('.scroll.decisions') || h('div', { class: 'scroll decisions' })
+  const d = dec || {}
+  const asking = (d.now || []).filter(x => x.live).length
+  put(scroll,
+    !dec ? h('div', { class: 'empty' }, '불러오는 중…') : null,
+    d.error ? h('div', { class: 'banner' }, `decisions.json 을 읽지 못했습니다(${d.error}). 떠 있는 세션의 질문만 보입니다.`) : null,
+    dec ? [['now', '지금 결정 필요'], ['waiting', '미뤄 둔 것'], ['decided', '결정됨']].map(([key, title]) => {
+      const list = d[key] || []
+      const fold = key === 'decided', open = !fold || decidedOpen
+      const head = [h('h2', {}, title), h('span', { class: 'num' }, list.length),
+        key === 'now' && asking ? h('span', { class: 'hint' }, `세션이 묻는 중 ${asking}`) : null,
+        fold ? h('span', { class: 'chev', 'aria-hidden': 'true' }, open ? '접기' : '펼치기') : null]
+      return h('section', { class: 'sec', 'data-sec': key },
+        fold ? h('button', {
+          class: 'sec-h', 'aria-expanded': String(open),
+          onclick() { decidedOpen = !decidedOpen; try { localStorage.setItem('decidedOpen', decidedOpen ? '1' : '0') } catch (e) {} renderDecisions() }
+        }, head) : h('div', { class: 'sec-h' }, head),
+        open ? (list.length ? list.map(x => decCard(x, key)) : h('div', { class: 'sec-empty' }, '없음')) : null)
+    }) : null)
+  if (!scroll.isConnected) put(view, scroll)
+}
+
+async function pollDecisions() {
+  try {
+    const r = await fetch('/api/decisions')
+    const text = await r.text()
+    if (!r.ok) throw new Error(r.status)
+    if (text === decKey) return   // unchanged: keep open details and scroll as they are
+    decKey = text; dec = JSON.parse(text)
+  } catch (err) { if (!dec) dec = { now: [], waiting: [], decided: [], error: '서버 응답 없음: ' + err.message } }
+  if (!cur) { renderTop(); if (page === 'decisions') renderDecisions() }
+}
+
+/* ---------- todo: sessions' task lists (~/.claude/tasks) ---------- */
+let todo = null, todoKey = '', todoStale = store.get('todoStale', false)
+const todoOpen = new Set(), todoDone = new Set(store.get('todoDone', []))   // open items (this page), sessions showing 끝남
+const TODO_LABEL = { in_progress: '진행 중', pending: '대기', completed: '끝남' }
+
+// one row per item: a mark whose shape is the state (filled, hollow, ticked), the subject, its #id, and what it is doing now
+function todoItem(g, t) {
+  const key = g.sid + '/' + t.id
+  const head = [h('span', { class: 'tmark', role: 'img', 'aria-label': TODO_LABEL[t.status] || t.status || '상태 없음' }, t.status === 'completed' ? icon('check') : null),
+    h('span', { class: 'tsub' }, h('span', { class: 'tsj' }, t.subject || '(제목 없음)'), t.status === 'in_progress' && t.activeForm ? h('span', { class: 'tact' }, t.activeForm) : null),
+    t.id ? h('span', { class: 'tid mono' }, '#' + t.id) : null]
+  const body = [t.description ? h('p', { class: 'dtext' }, t.description) : null,
+    t.owner ? h('div', {}, '맡은 세션 ', h('b', {}, t.owner)) : null,
+    t.blockedBy.length ? h('div', {}, '막는 일 ', h('b', {}, t.blockedBy.map(x => '#' + x).join(', '))) : null].filter(Boolean)
+  if (!body.length) return h('div', { class: 'ti ' + t.status }, h('div', { class: 'tsum' }, head))
+  return h('details', {
+    class: 'ti ' + t.status, open: todoOpen.has(key),
+    ontoggle(ev) { ev.currentTarget.open ? todoOpen.add(key) : todoOpen.delete(key) }
+  }, h('summary', {}, head), h('div', { class: 'tnote' }, body))
+}
+
+function todoGroup(g) {
+  const s = g.closed ? { key: 'done', label: '닫힘' } : status(g)
+  const n = k => g.items.filter(t => t.status === k).length
+  const done = g.items.filter(t => t.status === 'completed'), open = todoDone.has(g.sid)
+  return h('article', { class: `tcard ${s.key} g-${g.group || 'other'}${g.closed ? ' closed' : ''}` },
+    h('div', { class: 'r1' },
+      g.closed ? h('span', { class: 'name', title: '목록에 없는 세션 ' + g.sid }, g.name) : h('a', { class: 'name', href: '#/s/' + g.sid }, g.name),
+      badge(g), stateEl(s)),
+    h('div', { class: 'dchips' },
+      h('span', { class: 'dchip' }, '수정 ', h('b', {}, ago(g.at)), hm(g.at)),
+      ['in_progress', 'pending', 'completed'].map(k => n(k) ? h('span', { class: 'dchip' }, TODO_LABEL[k] + ' ', h('b', {}, n(k))) : null)),
+    h('div', { class: 'tlist' }, g.items.filter(t => t.status !== 'completed').map(t => todoItem(g, t)),
+      done.length ? h('button', {
+        class: 'more tfold', 'aria-expanded': String(open),
+        onclick() { open ? todoDone.delete(g.sid) : todoDone.add(g.sid); store.set('todoDone', [...todoDone]); renderTodo() }
+      }, `끝남 ${done.length} ${open ? '접기' : '펼치기'}`) : null,
+      open ? done.map(t => todoItem(g, t)) : null))
+}
+
+// the server already sorts: newest changed session first; in progress, pending, completed inside each
+function renderTodo() {
+  const scroll = view.querySelector('.scroll.todo-page') || h('div', { class: 'scroll todo-page' })
+  const gs = todo?.groups || [], old = gs.filter(g => g.stale), shown = gs.filter(g => todoStale || !g.stale)
+  put(scroll,
+    h('div', { class: 'mdhead' }, h('span', { class: 'mono' }, '~/.claude/tasks'), h('span', {}, '3초마다 다시 읽음, 읽기만 함')),
+    !todo ? h('div', { class: 'empty' }, '불러오는 중…') : null,
+    todo?.error ? h('div', { class: 'banner' }, `할 일을 읽지 못했습니다(${todo.error}).`) : null,
+    todo && !todo.error && !shown.length ? h('div', { class: 'empty' }, gs.length ? '최근 7일 안에 바뀐 할 일이 없습니다.' : '할 일 목록이 있는 세션이 없습니다.') : null,
+    shown.map(todoGroup),
+    old.length ? h('button', {
+      class: 'more', 'aria-expanded': String(todoStale),
+      onclick() { todoStale = !todoStale; store.set('todoStale', todoStale); renderTodo() }
+    }, `7일 넘게 안 바뀐 세션 ${old.length}개 ${todoStale ? '숨기기' : '보기'}`) : null)
+  if (!scroll.isConnected) put(view, scroll)
+}
+
+async function pollTodo() {
+  try {
+    const r = await fetch('/api/todos')
+    const text = await r.text()
+    if (!r.ok) throw new Error(r.status)
+    if (text === todoKey) return   // unchanged: keep open items and scroll as they are
+    todoKey = text; todo = JSON.parse(text)
+  } catch (err) { if (!todo) todo = { groups: [], counts: {}, error: '서버 응답 없음: ' + err.message } }
+  if (!cur) { renderTop(); if (page === 'todo') renderTodo() }
+}
+
+/* ---------- STATUS.md ---------- */
+let stat = null, statShown = null
+
+// tiny Markdown subset: headings, lists (nested by indent), tables, fenced code, quotes, rules, paragraphs;
+// inline code, **bold**, [text](url). Builds DOM nodes only, never HTML strings.
+function inline(s) {
+  const out = [], re = /`([^`]+)`|\*\*(.+?)\*\*|\[([^\]]+)\]\(([^)\s]+)\)/g
+  let last = 0, m
+  while ((m = re.exec(s))) {
+    out.push(s.slice(last, m.index)); last = re.lastIndex
+    if (m[1] != null) out.push(h('code', {}, m[1]))
+    else if (m[2] != null) out.push(h('strong', {}, inline(m[2])))
+    else out.push(/^https?:\/\//.test(m[4]) ? h('a', { href: m[4], target: '_blank', rel: 'noopener noreferrer' }, m[3]) : h('span', { title: m[4] }, m[3]))
+  }
+  out.push(s.slice(last))
+  return out
+}
+function cells(line) {   // split a table row on |, but not inside `code` or after a backslash
+  const out = []; let cell = '', code = false
+  line = line.trim().replace(/^\|/, '').replace(/\|$/, '')
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]
+    if (c === '\\' && line[i + 1] === '|') { cell += '|'; i++ }
+    else if (c === '`') { code = !code; cell += c }
+    else if (c === '|' && !code) { out.push(cell.trim()); cell = '' }
+    else cell += c
+  }
+  return [...out, cell.trim()]
+}
+function md(src) {
+  const lines = src.replace(/\r/g, '').split('\n'), out = []
+  const LI = /^(\s*)([-*+]|\d+\.)\s+(.*)/
+  let i = 0
+  while (i < lines.length) {
+    const l = lines[i]; let m
+    if (!l.trim()) { i++; continue }
+    if (/^\s*```/.test(l)) {
+      const buf = []
+      for (i++; i < lines.length && !/^\s*```/.test(lines[i]); i++) buf.push(lines[i])
+      i++; out.push(h('pre', {}, h('code', {}, buf.join('\n')))); continue
+    }
+    if ((m = l.match(/^(#{1,6})\s+(.*)/))) { out.push(h('h' + m[1].length, {}, inline(m[2]))); i++; continue }
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)) { out.push(h('hr')); i++; continue }
+    if (l.trim().startsWith('|') && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1] || '')) {
+      const head = cells(l), rows = []
+      for (i += 2; i < lines.length && lines[i].trim().startsWith('|'); i++) rows.push(cells(lines[i]))
+      out.push(h('div', { class: 'tablewrap' }, h('table', {},
+        h('thead', {}, h('tr', {}, head.map(c => h('th', {}, inline(c))))),
+        h('tbody', {}, rows.map(r => h('tr', {}, head.map((_, k) => h('td', {}, inline(r[k] || '')))))))))
+      continue
+    }
+    if (LI.test(l)) {
+      const stack = []   // [{indent, list, li}]
+      for (; i < lines.length && lines[i].trim(); i++) {
+        const it = lines[i].match(LI)
+        if (!it) { if (stack.length) stack.at(-1).li.append(' ', ...inline(lines[i].trim())); continue }
+        const ind = it[1].replace(/\t/g, '    ').length
+        while (stack.length > 1 && ind < stack.at(-1).indent) stack.pop()
+        if (!stack.length || ind > stack.at(-1).indent) {
+          const list = h(/\d/.test(it[2]) ? 'ol' : 'ul')
+          if (stack.length) stack.at(-1).li.append(list); else out.push(list)
+          stack.push({ indent: ind, list })
+        }
+        const li = h('li', {}, inline(it[3]))
+        stack.at(-1).list.append(li); stack.at(-1).li = li
+      }
+      continue
+    }
+    if (l.startsWith('>')) {
+      const buf = []
+      for (; i < lines.length && lines[i].startsWith('>'); i++) buf.push(lines[i].replace(/^>\s?/, ''))
+      out.push(h('blockquote', {}, inline(buf.join(' ')))); continue
+    }
+    const buf = [l.trim()]   // always take the first line, so an odd line like a lone '|x' cannot stall the loop
+    for (i++; i < lines.length && lines[i].trim() && !/^(#{1,6}\s|\s*```|\s*\|)/.test(lines[i]) && !LI.test(lines[i]); i++) buf.push(lines[i].trim())
+    out.push(h('p', {}, inline(buf.join(' '))))
+  }
+  return out
+}
+
+const statHead = h('div', { class: 'mdhead' }), statBody = h('div', { class: 'md' })
+function renderStatus() {
+  const scroll = view.querySelector('.scroll.status') || h('div', { class: 'scroll status' }, statHead, statBody)
+  if (!scroll.isConnected) put(view, scroll)
+  put(statHead, h('span', { class: 'mono' }, stat?.path || 'STATUS.md'),
+    stat?.mtime ? h('span', {}, '수정 ', h('b', {}, ago(stat.mtime)), hm(stat.mtime)) : null, h('span', {}, '5초마다 다시 읽음'),
+    dev?.error ? h('span', { class: 'devwhy' }, 'dev 점유 줄 숨김: dev-occupancy.json ' + (dev.state === 'missing' ? '파일 없음' : '읽지 못함(' + dev.error + ')')) : null)
+  if (stat === statShown) return   // rebuild the body only when the file changed, so scroll stays put
+  statShown = stat
+  put(statBody,
+    !stat ? h('div', { class: 'empty' }, '불러오는 중…')
+      : stat.missing ? h('div', { class: 'banner' }, 'STATUS.md 를 찾지 못했습니다.')
+      : stat.error ? h('div', { class: 'banner' }, 'STATUS.md 를 읽지 못했습니다: ' + stat.error)
+      : md(stat.text || ''))
+}
+
+async function pollStatus() {
+  if (cur || page !== 'status' || document.hidden) return
+  try {
+    const r = await getJSON('/api/status')
+    if (!stat || r.missing !== stat.missing || r.mtime !== stat.mtime || r.text !== stat.text) stat = r
+  } catch (err) { if (!stat) stat = { error: err.message } }
+  if (!cur && page === 'status') renderStatus()
+}
+
+/* ---------- flow: messages between sessions ---------- */
+const WINDOWS = [[1, '1시간'], [6, '6시간'], [24, '24시간'], [0, '전체']]
+const KIND_LABEL = { assign: '배정', report: '보고', notice: '알림', other: '기타' }
+const GROUP_RANK = { resident: 0, task: 1, codex: 2, other: 3 }
+let flowHours = 24, flow = null, flowKey = '', flowSel = null
+try { const v = localStorage.getItem('flowHours'); if (WINDOWS.some(([x]) => String(x) === v)) flowHours = +v } catch (e) {}
+const openMsgs = new Set()
+const short = ms => clock(ms).replace(/:\d\d$/, '')
+const nodeKey = n => n.listed ? status(n).key : 'closed'
+const nodeTip = n => [n.name,
+  n.group === 'resident' ? '상시 ' + (n.lane || '') : n.group === 'task' ? '일회성 ' + (n.task || '') : n.group === 'codex' ? 'codex' : '',
+  n.listed ? status(n).label : '목록에 없음(닫힘)', `보냄 ${n.sent}, 받음 ${n.got}`].filter(x => x && x.trim()).join(', ')
+const related = (m, sel) => !sel || (sel.node ? m.from === sel.node || m.to === sel.node : m.from === sel.edge[0] && m.to === sel.edge[1])
+function select(sel) {
+  const same = sel && flowSel && JSON.stringify(sel) === JSON.stringify(flowSel)
+  flowSel = same ? null : sel
+  renderFlowTab()
+}
+
+// the orbit: hub in the middle, the busiest RING sessions named on a ring around it, any others as small unnamed dots
+// on an inner ring (name on hover or when picked). 입체 lays the rings on a tilted plane that a drag or the arrow keys
+// turn, and each route arcs above it; 평면 looks straight down. Edges bend left of travel so the two directions part.
+const RING = 16
+let flowView = store.get('flowView', 'orbit') === 'flat' ? 'flat' : 'orbit'
+const cam = { yaw: -0.5, pitch: 0.62 }
+try { const c = store.get('flowCam', null); if (c && isFinite(c.yaw) && isFinite(c.pitch)) Object.assign(cam, { yaw: c.yaw, pitch: c.pitch }) } catch (e) {}
+const PITCH = [0.45, 1.45]   // radians above the plane: flat on the edge to nearly straight down
+let dragged = false   // a drag that turned the orbit is not a click
+const unit = (p, q) => { const l = Math.hypot(q.x - p.x, q.y - p.y) || 1; return { x: (q.x - p.x) / l, y: (q.y - p.y) / l } }
+
+function graphBox(f, W) {
+  const H = Math.round(Math.min(500, Math.max(360, W * 0.7)))
+  const load = n => n.sent + n.got
+  const hub = f.nodes.find(n => n.name === f.hub) || [...f.nodes].sort((a, b) => load(b) - load(a))[0]
+  const rest = f.nodes.filter(n => n !== hub)
+    .sort((a, b) => (GROUP_RANK[a.group] ?? 9) - (GROUP_RANK[b.group] ?? 9) || load(b) - load(a) || a.name.localeCompare(b.name))
+  const named = new Set([...rest].sort((a, b) => load(b) - load(a)).slice(0, RING).map(n => n.name))
+  const outer = rest.filter(n => named.has(n.name)), inner = rest.filter(n => !named.has(n.name))
+  const world = new Map([[hub.name, { x: 0, y: 0, r: 18 }]])   // the plane: outer ring radius 1
+  outer.forEach((n, i) => {
+    const a = -Math.PI / 2 + 2 * Math.PI * i / outer.length
+    world.set(n.name, { x: Math.cos(a), y: Math.sin(a), r: 7 + Math.min(9, Math.sqrt(load(n)) * 1.3) })
+  })
+  inner.forEach((n, i) => {
+    const a = -Math.PI / 2 + 2 * Math.PI * (i + 0.5) / inner.length
+    world.set(n.name, { x: 0.58 * Math.cos(a), y: 0.58 * Math.sin(a), r: 4.5, dot: true })
+  })
+  const orbit = flowView === 'orbit', sel = flowSel
+  const svg = sv('svg', {
+    viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'group', tabindex: 0,
+    'aria-label': '세션 사이 메시지 그래프' + (orbit ? '. 끌거나 화살표 키로 돌립니다' : ''),
+    onclick: () => { if (!dragged && flowSel) select(null) }
+  })
+
+  function draw() {
+    const yaw = orbit ? cam.yaw : 0, pitch = orbit ? cam.pitch : Math.PI / 2
+    const cs = Math.cos(yaw), sn = Math.sin(yaw), sp = Math.sin(pitch), cp = Math.cos(pitch)
+    // fit the tilted disc, its rising arcs and the front labels inside the box at any angle and width
+    const R0 = Math.min(W / 2 - 84, H), V0 = Math.min(R0 * sp, H / 2 - 52), k1 = 0.19 * cp
+    const up = 1.16 * V0 * (1 - k1) + 0.4 * R0 * cp, down = 1.16 * V0 * (1 + k1)
+    const fit = Math.min(1, (H - 72) / (up + down)), Rx = R0 * fit, V = V0 * fit, lift = R0 * cp * fit
+    const cx = W / 2, cy = 36 + up * fit + Math.max(0, (H - 72 - (up + down) * fit) / 2)
+    const proj = (x, y, z = 0) => {
+      const xr = x * cs - y * sn, yr = x * sn + y * cs, k = 1 + 0.16 * yr * cp   // nearer the viewer, a little larger
+      return { x: cx + xr * Rx * k, y: cy + yr * V * k - z * lift * k, k, d: yr }
+    }
+    const pos = new Map([...world].map(([name, p]) => { const q = proj(p.x, p.y); return [name, Object.assign(q, { r: p.r * q.k, dot: p.dot })] }))
+    const f1 = v => v.toFixed(1)
+    const ring = r => 'M' + Array.from({ length: 73 }, (_, i) => { const a = i / 72 * 2 * Math.PI, q = proj(r * Math.cos(a), r * Math.sin(a)); return f1(q.x) + ',' + f1(q.y) }).join(' L')
+    const ground = sv('g', { 'aria-hidden': 'true' },
+      sv('path', { class: 'odisc', d: ring(1.16) + 'Z' }),
+      [1, 0.58].map(r => sv('path', { class: 'oring', d: ring(r) })))   // the two orbits the sessions sit on
+    const edges = f.edges.map(e => {
+      const A = world.get(e.from), B = world.get(e.to), a = pos.get(e.from), b = pos.get(e.to)
+      if (!A || !B || A === B) return null
+      const len = Math.hypot(B.x - A.x, B.y - A.y) || 1, off = Math.min(0.2, len * 0.14)
+      const Cp = { x: (A.x + B.x) / 2 + (B.y - A.y) / len * off, y: (A.y + B.y) / 2 - (B.x - A.x) / len * off, z: 0.1 + 0.3 * len }
+      const pts = []
+      for (let i = 0; i <= 32; i++) {
+        const t = i / 32, u = 1 - t
+        pts.push(proj(u * u * A.x + 2 * u * t * Cp.x + t * t * B.x, u * u * A.y + 2 * u * t * Cp.y + t * t * B.y, 2 * u * t * Cp.z))
+      }
+      const w = Math.min(7, 1.2 + 1.6 * Math.log2(e.count)) * (a.k + b.k) / 2, L = 6 + w, hw = 3.5 + w / 2
+      const far = (p, c, r) => Math.hypot(p.x - c.x, p.y - c.y) >= r
+      let i0 = 0; while (i0 < pts.length - 2 && !far(pts[i0], a, a.r + 2)) i0++
+      let i1 = pts.length - 1; while (i1 > i0 + 1 && !far(pts[i1], b, b.r + 2)) i1--
+      const tip = pts[i1]
+      let i2 = i1; while (i2 > i0 && !far(pts[i2], tip, L)) i2--
+      const base = pts[i2], u = unit(tip, base)
+      const d = 'M' + pts.slice(i0, i2 + 1).map(p => f1(p.x) + ',' + f1(p.y)).join(' L')
+      const head = [tip, { x: base.x - u.y * hw, y: base.y + u.x * hw }, { x: base.x + u.y * hw, y: base.y - u.x * hw }]
+      const on = sel && (sel.edge ? sel.edge[0] === e.from && sel.edge[1] === e.to : e.from === sel.node || e.to === sel.node)
+      return sv('g', {
+        class: 'fe' + (on ? ' on' : sel ? ' dim' : ''),
+        onclick(ev) { ev.stopPropagation(); if (!dragged) select({ edge: [e.from, e.to] }) }
+      }, sv('title', {}, `보낸 쪽 ${e.from}, 받는 쪽 ${e.to}, ${e.count}건, 마지막 ${short(e.last)}`),
+        sv('path', { class: 'fhit', d }), sv('path', { class: 'fedge', d, 'stroke-width': f1(w) }),
+        sv('polygon', { class: 'farrow', points: head.map(p => f1(p.x) + ',' + f1(p.y)).join(' ') }))
+    })
+    const nodes = [hub, ...inner, ...outer].sort((m, n) => pos.get(m.name).d - pos.get(n.name).d).map(n => {   // far first
+      // ~7.4 px per character: centred when it fits, else anchored to the nearer box edge, cut only past the box width
+      const p = pos.get(n.name), wide = n.name.length * 7.4, centred = p.x - wide / 2 > 6 && p.x + wide / 2 < W - 6
+      const anchor = centred ? 'middle' : p.x > W / 2 ? 'end' : 'start', tx = centred ? 0 : p.x > W / 2 ? Math.max(0, W - 6 - p.x) : Math.min(0, 6 - p.x)
+      const fit = Math.max(6, Math.floor((W - 12) / 7.4))
+      const on = sel && (sel.node ? sel.node === n.name : sel.edge.includes(n.name))
+      const pick = () => { if (!dragged) select({ node: n.name }) }
+      return sv('g', {
+        class: `fnode ${nodeKey(n)} g-${n.group}${n === hub ? ' hub' : ''}${on ? ' on' : sel && !on ? ' dim' : ''}`,
+        transform: `translate(${f1(p.x)},${f1(p.y)})`, tabindex: 0, role: 'button', 'aria-label': nodeTip(n), 'data-name': n.name,
+        onclick(ev) { ev.stopPropagation(); pick() },
+        onkeydown(ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.stopPropagation(); pick() } }
+      }, sv('title', {}, nodeTip(n)), sv('circle', { r: f1(p.r) }),
+        sv('text', { x: f1(tx), y: f1(p.r + 15), 'text-anchor': anchor, class: p.dot && !on ? 'hover' : null }, n.name.length > fit ? n.name.slice(0, fit - 1) + '…' : n.name))
+    })
+    const focused = svg.contains(document.activeElement) ? document.activeElement.getAttribute('data-name') : null
+    put(svg, ground, edges, nodes)
+    if (focused) [...svg.querySelectorAll('.fnode')].find(g => g.getAttribute('data-name') === focused)?.focus()
+  }
+  draw()
+
+  const box = h('div', { class: 'graph' + (orbit ? ' orbit' : '') }, svg,
+    orbit ? h('div', { class: 'ghelp', 'aria-hidden': 'true' }, '끌어서 돌리기') : null,
+    inner.length ? h('div', { class: 'gnote' }, `건수가 많은 ${RING}개만 이름을 붙였습니다. 안쪽 점 ${inner.length}개는 올리거나 누르면 이름이 보입니다.`) : null)
+  if (!orbit) return box
+  let start = null, raf = 0
+  const turn = (yaw, pitch) => {
+    cam.yaw = yaw; cam.pitch = Math.min(PITCH[1], Math.max(PITCH[0], pitch))
+    cancelAnimationFrame(raf); raf = requestAnimationFrame(draw)
+  }
+  svg.addEventListener('pointerdown', ev => { if (ev.button === 0) { start = { x: ev.clientX, y: ev.clientY, yaw: cam.yaw, pitch: cam.pitch }; dragged = false } })
+  svg.addEventListener('pointermove', ev => {
+    if (!start) return
+    const dx = ev.clientX - start.x, dy = ev.clientY - start.y
+    if (!dragged && Math.hypot(dx, dy) < 5) return
+    if (!dragged) { dragged = true; box.classList.add('drag'); try { svg.setPointerCapture(ev.pointerId) } catch (e) {} }
+    turn(start.yaw + dx * 0.008, start.pitch - dy * 0.006)
+  })
+  const end = () => {
+    if (!start) return
+    start = null; box.classList.remove('drag')
+    if (dragged) { store.set('flowCam', cam); setTimeout(() => { dragged = false }, 0) }   // the click after a drag is swallowed
+  }
+  svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end)
+  svg.addEventListener('keydown', ev => {
+    const step = { ArrowLeft: [-0.2, 0], ArrowRight: [0.2, 0], ArrowUp: [0, 0.12], ArrowDown: [0, -0.12] }[ev.key]
+    if (!step) return
+    ev.preventDefault(); turn(cam.yaw + step[0], cam.pitch + step[1]); store.set('flowCam', cam)
+  })
+  return box
+}
+
+function msgEl(m) {
+  const open = openMsgs.has(m.id)
+  return h('article', { class: 'fmsg' },
+    h('div', { class: 'r1' }, h('span', { class: 'kb ' + m.kind }, KIND_LABEL[m.kind] || '기타'),
+      h('b', {}, m.from), h('span', { class: 'arrow' }, icon('to', '에서 받는 쪽')), h('b', {}, m.to),
+      h('time', { title: clock(m.t) + (m.src === 'recv' ? ', 받은 쪽 기록' : '') }, short(m.t))),
+    h('div', { class: 'fsum' }, m.sum || '(내용 없음)'),
+    h('button', {
+      class: 'more', 'aria-expanded': String(open),
+      onclick() { open ? openMsgs.delete(m.id) : openMsgs.add(m.id); renderFlowTab() }
+    }, open ? '본문 접기' : '본문 펼치기'),
+    open ? h('div', { class: 'txt' }, m.text) : null)
+}
+
+function renderFlowTab() {
+  const scroll = view.querySelector('.scroll.flow') || h('div', { class: 'scroll flow' })
+  if (!scroll.isConnected) put(view, scroll)
+  const f = flow, sel = flowSel
+  const list = f?.messages ? f.messages.filter(m => related(m, sel)) : []
+  const seg = h('div', { class: 'seg flat', role: 'group', 'aria-label': '시간 범위' }, WINDOWS.map(([hrs, label]) => h('button', {
+    class: 'segb', 'aria-pressed': String(flowHours === hrs),
+    onclick() {
+      if (flowHours === hrs) return
+      flowHours = hrs; flow = null; flowKey = ''
+      try { localStorage.setItem('flowHours', String(hrs)) } catch (e) {}
+      renderFlowTab(); pollMessages()
+    }
+  }, label)))
+  const viewSeg = h('div', { class: 'seg flat vseg', role: 'group', 'aria-label': '그래프 보기' }, [['orbit', '입체'], ['flat', '평면']].map(([v, label]) => h('button', {
+    class: 'segb', 'aria-pressed': String(flowView === v),
+    onclick() { if (flowView !== v) { flowView = v; store.set('flowView', v); renderFlowTab() } }
+  }, label)))
+  // a graph that fails in 3D falls back to the flat drawing, and a flat failure leaves the list below it intact
+  const graph = () => {
+    const W = scroll.clientWidth - 34
+    try { return graphBox(f, W) } catch (e) {}
+    try { flowView = 'flat'; return graphBox(f, W) } catch (e) { return h('div', { class: 'banner' }, '그래프를 그리지 못했습니다: ' + e.message) }
+  }
+  put(scroll,
+    h('div', { class: 'fhead' }, seg, f?.nodes ? h('span', { class: 'hint' }, `메시지 ${f.total}건, 세션 ${f.nodes.length}개`) : null, f?.total ? viewSeg : null),
+    !f ? h('div', { class: 'empty' }, '불러오는 중…')
+      : f.error ? h('div', { class: 'banner' }, '메시지를 읽지 못했습니다: ' + f.error)
+      : !f.total ? h('div', { class: 'empty' }, '이 시간 안에 세션끼리 주고받은 메시지가 없습니다.')
+      : [graph(),
+        sel ? h('div', { class: 'fsel' },
+          sel.node ? [h('b', {}, sel.node), ' 이 보내거나 받은 메시지'] : ['보낸 쪽 ', h('b', {}, sel.edge[0]), ', 받는 쪽 ', h('b', {}, sel.edge[1]), ' 메시지'],
+          h('button', { onclick: () => select(null) }, '전체 보기')) : null,
+        put(tokBox, tokenBars()) || tokBox,
+        h('section', { class: 'sec' },
+          h('div', { class: 'sec-h' }, h('h2', {}, '메시지'), h('span', { class: 'num' }, list.length),
+            f.total > f.messages.length ? h('span', { class: 'hint' }, `최근 ${f.messages.length}건만 목록에 보입니다`) : null),
+          list.length ? list.map(msgEl) : h('div', { class: 'sec-empty' }, '없음'))])
+}
+
+let tokAll = false
+const TOK_TOP = 5   // bars shown before 더 보기, so the message list stays near the graph
+const tokBox = h('div')   // redrawn on its own when the agent list refreshes
+function tokenBars() {
+  const rows = withTokens()
+  if (!rows.length) return null
+  const max = rows[0].tokens.total || 1, dup = n => rows.filter(a => a.name === n).length > 1
+  const shown = tokAll ? rows : rows.slice(0, TOK_TOP)
+  return h('section', { class: 'sec' },
+    h('div', { class: 'sec-h' }, h('h2', {}, '세션별 처리 토큰'), h('span', { class: 'num' }, rows.length)),
+    h('div', { class: 'tleg' }, h('span', { class: 'def' }, TOK_DEF + '. Claude 는 서브에이전트 기록까지 더합니다.'),
+      h('span', { class: 'claude' }, 'Claude'), h('span', { class: 'codex' }, 'codex')),
+    h('div', { class: 'toks' }, shown.map(a => h('div', { class: 'tok ' + a.tokens.engine, title: tokTip(a.tokens) },
+      h('span', { class: 'tn' }, a.name || a.sessionId.slice(0, 8), dup(a.name) ? h('small', {}, a.sessionId.slice(0, 8)) : null),
+      h('span', { class: 'tb', 'aria-hidden': 'true' }, h('i', { style: `width:${(100 * a.tokens.total / max).toFixed(2)}%` })),
+      h('b', { class: 'num' }, tok(a.tokens.total))))),
+    rows.length > TOK_TOP ? h('button', { class: 'more', onclick() { tokAll = !tokAll; put(tokBox, tokenBars()) } }, tokAll ? '접기' : `${rows.length - TOK_TOP}개 더 보기`) : null)
+}
+
+// every 5 s on the flow tab; elsewhere every 15 s, only for the report count and alerts
+let msgAt = 0
+async function pollMessages() {
+  const onFlow = !cur && page === 'flow' && !document.hidden
+  if (!onFlow && Date.now() - msgAt < 15000) return
+  const hours = onFlow ? flowHours : 24
+  msgAt = Date.now()
+  try {
+    const r = await fetch('/api/messages?hours=' + hours)
+    const text = await r.text()
+    if (!r.ok) throw new Error(r.status)
+    if (text === flowKey) return   // nothing new
+    const d = JSON.parse(text)
+    checkReports(d)
+    if (hours === 24) {
+      msgs24 = d
+      if (!cur && page === 'agents' && agentView === 'canvas') view.querySelector('.canvas')?.drawLinks?.()
+      if (hero?.ok) try { officeMessages() } catch (e) {}   // a sheet per new [배정] or [보고]
+    }
+    if (hours !== flowHours) return   // a background read, or the window changed meanwhile
+    flowKey = text; flow = d
+  } catch (err) { if (!flow && onFlow) flow = { error: err.message } }
+  if (!cur && page === 'flow') renderFlowTab()
+}
+
+/* ---------- detail ---------- */
+function copyRow(cmd) {
+  const code = h('code', {}, cmd)
+  const btn = h('button', {
+    async onclick() {
+      try { await navigator.clipboard.writeText(cmd); btn.textContent = '복사됨' }
+      catch (e) {
+        const r = document.createRange(); r.selectNodeContents(code)
+        getSelection().removeAllRanges(); getSelection().addRange(r); btn.textContent = 'Ctrl+C'
+      }
+      setTimeout(() => { btn.textContent = '복사' }, 1500)
+    }
+  }, '복사')
+  return h('div', { class: 'cmd' }, code, btn)
+}
+
+function renderDetailHead() {
+  const a = cur.agent
+  const head = cur.head
+  if (!a) {
+    put(head, h('div', { class: 'dtitle' }, h('h2', {}, cur.sid.slice(0, 8))),
+      h('div', { class: 'hint' }, '지금 목록에 없는 세션입니다. 이미 끝났을 수 있습니다.'))
+    return
+  }
+  const s = status(a), bg = a.kind === 'background', codex = a.engine === 'codex'
+  head.className = 'dhead ' + s.key
+  put(head, 
+    h('div', { class: 'dtitle' }, h('h2', {}, a.name || a.sessionId.slice(0, 8)), badge(a), stateEl(s)),
+    h('div', { class: 'dcwd' }, home(a.cwd)),
+    a.detail ? h('div', { class: 'why' }, a.detail) : null,
+    s.key === 'blocked' && a.needs ? h('div', { class: 'needs' }, a.needs) : null,
+    h('div', { class: 'meta' },
+      h('span', {}, kindLabel(a)),
+      a.id ? h('span', {}, 'id ', h('b', {}, a.id)) : null,
+      h('span', {}, 'pid ', h('b', {}, a.pid)),
+      h('span', {}, '시작 ', h('b', {}, ago(a.startedAt))),
+      h('span', {}, '활동 ', h('b', {}, ago(a.lastActivity)), hm(a.lastActivity))),
+    codex ? h('div', { class: 'cmds' }, h('div', { class: 'hint' },
+      'Codex 세션은 대화 기록만 봅니다. 상태는 codex 프로세스가 기록 파일을 열고 있는지와 마지막 턴이 끝났는지로 정합니다.'))
+    : h('div', { class: 'cmds' },
+      bg ? copyRow('claude attach ' + a.id) : copyRow(`cd ${a.cwd} && claude --resume ${a.sessionId} --fork-session`),
+      bg ? null : h('div', { class: 'hint' }, '대화형 세션은 붙는 명령이 없습니다. 위 명령은 이 기록을 새 세션 id 로 복사해 새 창에서 엽니다. 원래 세션의 기록에는 쓰지 않습니다.')),
+    (a.subagents || []).length ? h('div', { class: 'subs dsubs' }, h('div', { class: 'subs-t' }, '서브에이전트 ', h('b', {}, a.subagents.length + '개')), subList(a)) : null,
+    h('div', { class: 'tabs', role: 'tablist' },
+      h('button', { class: 'tab', role: 'tab', 'aria-selected': String(cur.tab === 'chat'), onclick: () => { location.hash = '#/s/' + cur.sid } }, '대화'),
+      h('button', {
+        class: 'tab', role: 'tab', 'aria-selected': String(cur.tab === 'logs'), disabled: !bg,
+        title: bg ? null : codex ? 'Codex 세션은 터미널 출력을 볼 수 없습니다' : '대화형 세션은 터미널 출력을 볼 수 없습니다',
+        onclick: () => { location.hash = '#/s/' + cur.sid + '/logs' }
+      }, '세션 창')))
+}
+
+function showDetail(sid, tab) {
+  if (!cur || cur.sid !== sid) {
+    cur = { sid, offset: -1, tools: new Map(), head: h('div', { class: 'dhead' }), feed: h('div', { class: 'scroll' }), pane: h('div', { class: 'scroll' }) }
+  }
+  cur.tab = tab
+  cur.agent = agents.find(a => a.sessionId === sid)
+  renderTop(); renderDetailHead()
+  put(view, cur.head, tab === 'logs' ? cur.pane : cur.feed)
+  if (tab === 'logs') pollLogs(); else pollTranscript()
+}
+
+function textBlock(text) {
+  const t = h('div', { class: 'txt' }, text)
+  if (text.length < 700 && text.split('\n').length <= 10) return t
+  t.classList.add('clamp')
+  const more = h('button', {
+    class: 'more', onclick() { more.textContent = t.classList.toggle('clamp') ? '펼치기' : '접기' }
+  }, '펼치기')
+  return [t, more]
+}
+
+function eventEl(e) {
+  const who = (label, ...rest) => h('div', { class: 'who' }, h('b', {}, label), ...rest, h('time', {}, clock(e.t)))
+  switch (e.k) {
+    case 'user': return h('div', { class: 'ev msg user' }, who('사용자'), textBlock(e.text))
+    case 'reply': return h('div', { class: 'ev msg reply' }, who(cur.agent?.engine === 'codex' ? 'Codex' : 'Claude'), textBlock(e.text))
+    case 'peer': return h('div', { class: 'ev msg peer' }, who(e.from, '에게서 받음'), textBlock(e.text))
+    case 'send': return h('div', { class: 'ev msg send' }, who(e.to, '에게 보냄'),
+      e.sum ? h('div', { class: 'sum' }, e.sum) : null, textBlock(e.text))
+    case 'note': return h('div', { class: 'note' }, e.text, ' ', h('time', {}, clock(e.t)))
+    case 'tool': {
+      const mark = h('span', { class: 'mark', 'aria-label': '실행 중' }, '…')
+      const body = h('div', { class: 'tbody', hidden: true }, h('pre', {}, e.text))
+      const head = h('button', {
+        class: 'thead', 'aria-expanded': 'false',
+        onclick() { body.hidden = !body.hidden; head.setAttribute('aria-expanded', String(!body.hidden)) }
+      }, mark, h('span', { class: 'tname' }, e.name), h('span', { class: 'tsum' }, e.sum), h('time', {}, clock(e.t).slice(-8)))
+      cur.tools.set(e.id, { mark, body })
+      return h('div', { class: 'ev tool' }, head, body)
+    }
+  }
+}
+
+function addResult(e) {
+  const t = cur.tools.get(e.id)
+  if (!t) return
+  t.mark.textContent = e.err ? '✕' : '✓'
+  t.mark.className = 'mark ' + (e.err ? 'err' : 'ok')
+  t.mark.setAttribute('aria-label', e.err ? '실패' : '완료')
+  t.body.append(h('pre', { class: e.err ? 'err' : '' }, e.text || '(출력 없음)'))
+}
+
+async function pollTranscript() {
+  const c = cur
+  if (!c || c.tab !== 'chat' || c.loading) return
+  c.loading = true
+  try {
+    const r = await getJSON(`/api/transcript?sid=${encodeURIComponent(c.sid)}&from=${c.offset}`)
+    if (cur !== c) return
+    const feed = c.feed
+    const follow = c.offset < 0 || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 120
+    if (r.reset) {
+      c.tools.clear()
+      put(feed, r.missing ? h('div', { class: 'empty' }, '이 세션은 아직 기록 파일이 없습니다. 첫 대화가 오가면 여기에 나옵니다.') : null,
+        r.truncated ? h('div', { class: 'note-top' }, `최근 ${r.events.length}건만 보여 줍니다.`) : null)
+    }
+    for (const e of r.events) e.k === 'result' ? addResult(e) : feed.append(eventEl(e))
+    c.offset = r.offset
+    if (follow && r.events.length) feed.scrollTop = feed.scrollHeight
+  } catch (err) {
+    if (c.offset < 0) put(c.feed, h('div', { class: 'banner' }, '기록을 읽지 못했습니다: ' + err.message))
+  } finally { c.loading = false }
+}
+
+/* ---------- session window (claude logs) ---------- */
+// xterm takes hex or rgb; the tokens are oklch, so a 1px canvas resolves them
+function tokenRGB(name) {
+  const g = document.createElement('canvas').getContext('2d')
+  g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(name).trim() || 'black'
+  g.fillRect(0, 0, 1, 1)
+  const [r, gr, b] = g.getImageData(0, 0, 1, 1).data
+  return '#' + [r, gr, b].map(x => x.toString(16).padStart(2, '0')).join('')
+}
+const COLS = 300   // wider than any daemon pty seen (~200), so nothing wraps; fitTerm crops to used width
+function fitTerm(c) {
+  const term = c.term, buf = term.buffer.active
+  let used = 20
+  for (let y = 0; y < buf.length; y++) {
+    const line = buf.getLine(y)
+    for (let x = term.cols - 1; x >= used; x--) if (line.getCell(x)?.getChars().trim()) { used = x + 1; break }
+  }
+  const screen = c.box.querySelector('.xterm-screen')
+  const cellW = screen.offsetWidth / term.cols
+  if (!cellW) return
+  const avail = c.box.parentElement.clientWidth - 20
+  const fs = Math.max(7, Math.min(13, Math.floor(term.options.fontSize * avail / (used * cellW) * 2) / 2))
+  if (fs !== term.options.fontSize) term.options.fontSize = fs
+  requestAnimationFrame(() => { c.box.style.width = Math.ceil(used * screen.offsetWidth / term.cols) + 'px' })
+}
+
+// portrait friendly view: the terminal is parsed at full width, then its rows are re-flowed as wrapping text
+let logMode = 'flow'
+try { logMode = localStorage.getItem('logMode') === 'raw' ? 'raw' : 'flow' } catch (e) {}
+const RULE = /^[\s\u2500-\u257f]+$/   // box drawing rows
+function flowRows(term) {
+  const buf = term.buffer.active, rows = []
+  for (let y = 0; y < buf.length; y++) rows.push((buf.getLine(y)?.translateToString(true) || '').replace(/\s+$/, ''))
+  while (rows.length && !rows.at(-1)) rows.pop()
+  const out = []
+  for (const l of rows) {
+    if (!l) { if (out.length && out.at(-1) !== '') out.push(''); continue }
+    out.push(l)
+  }
+  return out
+}
+function renderFlow(c) {
+  const pane = c.pane, follow = !c.flowShown || pane.scrollHeight - pane.scrollTop - pane.clientHeight < 120
+  put(c.flowEl, flowRows(c.term).map(l => {
+    if (!l) return h('div', { class: 'll gap' })
+    if (RULE.test(l)) return h('div', { class: 'll sep' })
+    const k = l.trimStart()[0]
+    return h('div', { class: 'll' + (k === '\u25cf' ? ' bul' : k === '\u23bf' ? ' res' : k === '\u276f' ? ' prm' : '') }, l)
+  }))
+  c.flowShown = true
+  if (follow) pane.scrollTop = pane.scrollHeight
+}
+function applyLogMode(c) {
+  const flow = logMode === 'flow'
+  c.flowEl.hidden = !flow
+  c.rawWrap.classList.toggle('off', flow)
+  for (const [m, btn] of Object.entries(c.modeBtns)) btn.setAttribute('aria-pressed', String(m === logMode))
+  c.note.textContent = flow
+    ? 'claude logs 출력을 3초마다 다시 그립니다. 화면 폭에 맞춰 줄바꿈한 글만 보여 주며 색과 배치는 원본 화면에서 볼 수 있습니다.'
+    : 'claude logs 출력을 3초마다 다시 그립니다. 출력이 화면 중간부터 남아 있으면 위쪽이 비어 보일 수 있습니다.'
+  if (!flow) requestAnimationFrame(() => fitTerm(c))
+}
+
+async function pollLogs() {
+  const c = cur
+  if (!c || c.tab !== 'logs' || !c.agent?.id || c.loadingLogs || document.hidden) return
+  c.loadingLogs = true
+  try {
+    const r = await fetch('/api/logs?id=' + encodeURIComponent(c.agent.id))
+    const text = await r.text()
+    if (cur !== c || text === c.logText) return
+    c.logText = text
+    // The TUI paints with absolute rows (CSI row;col H); the largest row is the screen height.
+    let rows = 24
+    for (const m of text.matchAll(/\x1b\[(\d+);\d+H/g)) rows = Math.max(rows, +m[1])
+    if (!c.term) {
+      c.box = h('div', { class: 'term' })
+      c.rawWrap = h('div', { class: 'termwrap' }, c.box)
+      c.flowEl = h('div', { class: 'logflow' })
+      c.note = h('p', { class: 'pane-note' })
+      c.modeBtns = {}
+      const mk = (m, label) => (c.modeBtns[m] = h('button', {
+        class: 'segb', onclick() { logMode = m; try { localStorage.setItem('logMode', m) } catch (e) {} applyLogMode(c) }
+      }, label))
+      put(c.pane, h('div', { class: 'seg', role: 'group', 'aria-label': '세션 창 보기 방식' }, mk('flow', '세로 보기'), mk('raw', '원본 화면')),
+        c.flowEl, c.rawWrap, c.note)
+      c.term = new Terminal({
+        cols: COLS, rows, fontSize: 10, scrollback: 0, disableStdin: true, cursorBlink: false,
+        fontFamily: getComputedStyle(document.body).getPropertyValue('--font-outlier'),
+        theme: { background: tokenRGB('--term-bg'), foreground: tokenRGB('--term-ink'), cursor: tokenRGB('--term-bg'), cursorAccent: tokenRGB('--term-bg') }
+      })
+      c.term.open(c.box)
+      applyLogMode(c)
+    } else if (c.term.rows !== rows) c.term.resize(COLS, rows)
+    const first = !c.fitted
+    c.term.reset()
+    c.term.write(text + '\x1b[?25l', () => {
+      fitTerm(c); c.fitted = true
+      renderFlow(c)
+      if (first) c.pane.scrollTop = c.pane.scrollHeight
+    })
+  } catch (err) {
+    if (!c.term) put(c.pane, h('div', { class: 'banner' }, '세션 창을 읽지 못했습니다: ' + err.message))
+  } finally { c.loadingLogs = false }
+}
+
+/* ---------- usage bar ---------- */
+const usageBar = document.getElementById('usage')
+const winName = w => ({ 300: '5시간', 10080: '주간' })[w.minutes] || (w.minutes ? (w.minutes % 60 ? w.minutes + '분' : w.minutes / 60 + '시간') : w.key)
+const until = ms => { const t = span(2 * Date.now() - ms); return t === '방금' ? '곧' : t + ' 뒤' }   // span() counts back; mirror it
+let usage = null
+
+// a ring per window: the orange arc is what has been used; beside it the used share, then what is left and the reset a step fainter
+const RC = 2 * Math.PI * 15
+const ring = used => sv('svg', { class: 'ring', viewBox: '0 0 36 36', width: 30, height: 30, 'aria-hidden': 'true' },
+  sv('circle', { class: 'rt', cx: 18, cy: 18, r: 15 }),
+  used > 0 ? sv('circle', { class: 'rv', cx: 18, cy: 18, r: 15, 'stroke-dasharray': `${(used / 100 * RC).toFixed(1)} ${RC.toFixed(1)}`, transform: 'rotate(-90 18 18)' }) : null)
+function renderUsage() {
+  put(usageBar, [['claude', 'Claude'], ['codex', 'Codex']].map(([k, label]) => {
+    const e = usage?.[k]
+    if (!e) return null
+    if (e.state === 'missing') return h('div', { class: 'use missing' }, h('span', { class: 'ul' }, label), h('span', { class: 'wn' }, '기록 없음'))
+    if (e.state === 'broken') return h('div', { class: 'use broken', title: e.error }, h('span', { class: 'ul' }, label), h('span', { class: 'wn' }, '읽지 못함'))
+    return h('div', { class: 'use ' + e.state, title: `기록 ${clock(e.at)}` + (e.plan ? `, ${e.plan}` : '') },
+      h('span', { class: 'ul' }, label, h('span', { class: 'ago num' }, e.state === 'stale' ? '갱신 안 됨, ' + ago(e.at) : '갱신 ' + ago(e.at))),
+      h('div', { class: 'wins' }, e.windows.map(w => {
+        const used = Math.min(100, Math.max(0, Math.round(w.used))), left = 100 - used
+        if (w.reset) return h('span', { class: 'win', title: '리셋 시각이 지나 남은 양을 모름' }, ring(0), h('span', { class: 'wt' }, h('b', {}, '리셋됨'), h('span', { class: 'wn' }, winName(w))))
+        return h('span', { class: 'win', title: w.resets ? '리셋 ' + clock(w.resets) : null },
+          ring(used),
+          h('span', { class: 'wt' }, h('b', { class: 'num' }, used + '%'), h('span', { class: 'wn' }, `${winName(w)} 사용, 남은 ${left}%` + (w.resets ? ', ' + until(w.resets) : ''))))
+      })))
+  }), tokTotal())
+}
+// every listed session summed; the split by engine and the left out cache reads are in the tooltip
+function tokTotal() {
+  const rows = withTokens()
+  if (!rows.length) return null
+  const by = {}
+  let read = 0
+  for (const a of rows) { by[a.tokens.engine] = (by[a.tokens.engine] || 0) + a.tokens.total; read += a.tokens.cacheRead || 0 }
+  const sum = Object.values(by).reduce((x, y) => x + y, 0)
+  return h('div', { class: 'use', title: `${TOK_DEF}. 목록의 세션 ${rows.length}개 합. ` + Object.entries(by).map(([k, v]) => `${ENGINE[k] || k} ${tok(v)}`).join(', ') + `. 넣지 않은 캐시 읽기 ${tok(read)}` },
+    h('span', { class: 'ul' }, '처리 토큰'),
+    h('div', { class: 'wins' }, h('span', { class: 'win' }, h('span', { class: 'wt' }, h('b', { class: 'num' }, tok(sum)), h('span', { class: 'wn' }, `목록의 세션 ${rows.length}개 합계`)))))
+}
+
+async function pollUsage() {
+  try { usage = await getJSON('/api/usage') } catch (err) {}   // keep the last reading; its age keeps growing
+  renderUsage()
+}
+
+/* ---------- dev occupancy ---------- */
+const devBar = document.getElementById('dev')
+const DEV_KIND = { run: '', restart: '재기동 예정', deploy: '배포' }
+let dev = null, devOpen = store.get('devOpen', false)
+const elapsed = ms => !ms ? '' : ms > Date.now() ? until(ms) : span(ms) === '방금' ? '방금' : span(ms) + '째'
+function devItem(i) {
+  const kind = DEV_KIND[i.kind] ?? i.kind
+  return h('div', {
+    class: 'devi ' + (i.kind || ''),
+    title: [kind || '실행', i.sinceAt ? '시작 ' + clock(i.sinceAt) : i.since, i.until ? '끝 ' + (i.untilAt ? clock(i.untilAt) : i.until) : '', i.note].filter(Boolean).join(', ')
+  }, h('span', { class: 'dk' }, '공유 자원'), kind ? h('span', { class: 'kd' }, kind) : null, h('b', {}, i.who || '?'), h('span', { class: 'dw' }, i.what), h('span', { class: 'num' }, elapsed(i.sinceAt)))
+}
+// a missing or broken file hides the line; the reason stays in /api/dev and the hidden line's title
+function renderDev() {
+  const d = dev
+  devBar.hidden = !d || d.state === 'missing' || d.state === 'broken'
+  devBar.title = d?.error ? 'dev-occupancy.json: ' + d.error : ''
+  if (!cur && page === 'status') renderStatus()   // the reason for a hidden line shows in the status header
+  if (devBar.hidden) return put(devBar)
+  const items = d.items, many = items.length > 1
+  devBar.className = d.state
+  put(devBar,
+    h('div', { class: 'devl' }, items.length ? (devOpen ? items : items.slice(0, 1)).map(devItem) : h('div', { class: 'devi' }, h('span', { class: 'dk' }, '공유 자원'), '점유 없음')),
+    many ? h('button', {
+      class: 'more', 'aria-expanded': String(devOpen),
+      onclick() { devOpen = !devOpen; store.set('devOpen', devOpen); renderDev() }
+    }, devOpen ? '접기' : `${items.length}건 펼치기`) : null,
+    d.state === 'stale' ? h('span', { class: 'ago', title: d.updatedAt ? '갱신 ' + clock(d.updatedAt) : 'updated_at 없음' }, d.updatedAt ? '갱신 ' + ago(d.updatedAt) : '갱신 시각 없음') : null)
+}
+async function pollDev() {
+  try { dev = await getJSON('/api/dev') } catch (err) {}   // keep the last answer
+  renderDev()
+}
+
+/* ---------- routing & polling ---------- */
+function route() {
+  const m = location.hash.match(/^#\/s\/([\w-]+)(\/logs)?/)
+  if (m) return showDetail(m[1], m[2] ? 'logs' : 'chat')
+  cur = null
+  page = { '#/decisions': 'decisions', '#/status': 'status', '#/flow': 'flow', '#/todo': 'todo' }[location.hash] || 'agents'
+  renderTop(); renderPage()
+}
+function renderPage() {
+  if (page === 'decisions') renderDecisions()
+  else if (page === 'status') { renderStatus(); pollStatus() }
+  else if (page === 'flow') { renderFlowTab(); pollMessages() }
+  else if (page === 'todo') renderTodo()
+  else renderList()
+}
+
+async function pollAgents() {
+  try { agents = (await getJSON('/api/agents')).agents; error = ''; checkBlocked(); renderUsage() }   // usage bar carries the token total
+  catch (err) { error = err.message }
+  if (cur) { cur.agent = agents.find(a => a.sessionId === cur.sid); renderTop(); renderDetailHead() }
+  else { renderTop(); if (page === 'agents') renderList(); else if (page === 'flow') put(tokBox, tokenBars()) }
+}
+
+window.addEventListener('hashchange', route)
+document.addEventListener('visibilitychange', () => { seen(); pollMessages(); heroLoop() })
+window.addEventListener('resize', () => { if (cur?.term) fitTerm(cur); else if (!cur && page === 'flow' && flow) renderFlowTab() })
+Promise.all([pollAgents(), pollDecisions(), pollTodo()]).then(() => { route(); pollMessages() })
+pollUsage(); pollDev()
+setInterval(pollAgents, 3000)
+setInterval(pollDecisions, 3000)
+setInterval(pollTodo, 3000)
+setInterval(pollUsage, 3000)
+setInterval(pollDev, 3000)
+setInterval(pollStatus, 5000)
+setInterval(pollMessages, 5000)
+setInterval(pollTranscript, 2000)
+setInterval(pollLogs, 3000)
+</script>
+</body>
+</html>
