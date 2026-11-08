@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>세 계층</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="diagram.css" rel="stylesheet">
+</head>
+<body>
+<figure>
+<svg viewBox="0 0 1100 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
+<title id="t">Manager · Coordinator · Coding Agent 계층</title>
+<desc id="d">맨 위 Manager Agent 계층에 JARVIS 하나, 가운데 Coordinator Agent 계층에 프로젝트마다 Coordinator 하나, 맨 아래 Coding Agent 계층에 작업마다 Worker 가 있다. 일은 위에서 아래로 배정되고 보고는 아래에서 위로 올라온다. 위 두 계층은 일을 나누고 넘기고 확인하는 관리 계층이고, 코드는 Coding Agent 계층만 고친다.</desc>
+<defs>
+<pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" class="dot"/></pattern>
+<marker id="a" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="ah"/></marker>
+<marker id="aa" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="ah-acc"/></marker>
+</defs>
+<rect width="1100" height="560" class="bg"/>
+<rect width="1100" height="560" fill="url(#dots)"/>
+
+<!-- 관리 계층 묶음 -->
+<rect x="22" y="22" width="896" height="330" rx="12" class="frame-acc"/>
+<text x="900" y="44" class="lbl acc-t" text-anchor="end">관리 계층 · 일을 나누고 넘기고 확인 (코드는 고치지 않음)</text>
+
+<!-- Manager Agent -->
+<rect x="44" y="56" width="852" height="120" rx="8" class="layer l1"/>
+<text x="68" y="104" class="layer-t l1-t">Manager Agent</text>
+<text x="68" y="130" class="sub">비서실장 · 하나, 계속 떠 있음</text>
+<rect x="420" y="80" width="200" height="72" rx="8" class="box hub"/>
+<text x="520" y="111" class="name hubname" text-anchor="middle">JARVIS</text>
+<text x="520" y="133" class="sub hubsub" text-anchor="middle">JARVIS 폴더</text>
+<text x="650" y="108" class="lbl">어느 프로젝트 일인지 정해 넘김</text>
+<text x="650" y="128" class="lbl">기준으로 판단 · 보고 요약 · 기록</text>
+
+<!-- Coordinator Agent -->
+<rect x="44" y="210" width="852" height="120" rx="8" class="layer l2"/>
+<text x="68" y="258" class="layer-t l2-t">Coordinator Agent</text>
+<text x="68" y="284" class="sub">프로젝트 PM · 프로젝트마다 하나</text>
+<rect x="330" y="234" width="170" height="72" rx="8" class="box"/>
+<text x="415" y="265" class="name" text-anchor="middle">shop-coord</text>
+<text x="415" y="287" class="sub" text-anchor="middle">쇼핑몰 폴더</text>
+<rect x="520" y="234" width="170" height="72" rx="8" class="box"/>
+<text x="605" y="265" class="name" text-anchor="middle">docs-coord</text>
+<text x="605" y="287" class="sub" text-anchor="middle">사내 문서 폴더</text>
+<rect x="710" y="234" width="170" height="72" rx="8" class="box"/>
+<text x="795" y="265" class="name" text-anchor="middle">ask-coord</text>
+<text x="795" y="287" class="sub" text-anchor="middle">질문 방</text>
+
+<!-- Coding Agent -->
+<rect x="44" y="388" width="852" height="140" rx="8" class="layer l3"/>
+<text x="68" y="440" class="layer-t">Coding Agent</text>
+<text x="68" y="466" class="sub">실무 담당자(Worker) · 작업마다,</text>
+<text x="68" y="484" class="sub">PM 하나에 동시 3개까지, 끝나면 닫힘</text>
+<rect x="330" y="412" width="170" height="72" rx="8" class="box"/>
+<text x="415" y="443" class="name" text-anchor="middle" style="font-size:15px">결제-오류수정</text>
+<text x="415" y="465" class="sub" text-anchor="middle">Claude Code</text>
+<rect x="520" y="412" width="170" height="72" rx="8" class="box"/>
+<text x="605" y="443" class="name" text-anchor="middle" style="font-size:15px">장바구니-시험추가</text>
+<text x="605" y="465" class="sub" text-anchor="middle">Claude Code</text>
+<rect x="710" y="412" width="170" height="72" rx="8" class="box"/>
+<text x="795" y="443" class="name" text-anchor="middle" style="font-size:15px">조사-벡터DB비교</text>
+<text x="795" y="465" class="sub" text-anchor="middle">Codex</text>
+<text x="330" y="510" class="lbl">같은 저장소의 다른 파일을 동시에 고치면 Worker 마다 git worktree</text>
+
+<!-- 내려가는 일 -->
+<path d="M 470,152 V 232" class="ln acc" marker-end="url(#aa)"/>
+<text x="460" y="198" class="lbl acc-t" text-anchor="end">[배정] W-…</text>
+<path d="M 415,306 V 410" class="ln acc" marker-end="url(#aa)"/>
+<text x="405" y="362" class="lbl acc-t" text-anchor="end">띄우기 · 지시</text>
+
+<!-- 올라오는 보고 -->
+<path d="M 896,470 H 950 V 300 H 900" class="ln" marker-end="url(#a)"/>
+<text x="960" y="380" class="lbl">[완료]</text>
+<text x="960" y="398" class="lbl">[질문]</text>
+<path d="M 896,246 H 1010 V 100 H 900" class="ln" marker-end="url(#a)"/>
+<text x="1020" y="160" class="lbl">[보고]</text>
+<text x="1020" y="178" class="lbl">[질문]</text>
+<text x="1020" y="196" class="lbl">[승인요청]</text>
+</svg>
+</figure>
+</body>
+</html>
