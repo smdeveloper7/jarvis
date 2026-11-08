@@ -69,6 +69,16 @@ try:
     out, _, _ = jd.roles(recs, reg)
     assert out['A'] == ('coordinator', 'wf3-wf4') and out['B'] == ('coordinator', 'nl2sql') and out['C'] == ('coordinator', 'docs'), out
     assert out['D'] == ('worker', 'nl2sql') and out['E'] == ('worker', 'wf3-wf4'), out
+
+    # 새 Worker 제목 '<영역>-<한국어 작업 이름>' + 라벨 jarvis.task, 제목이 JARVIS 가 아닌 JARVIS(폴더로 찾기)
+    recs = [{'id': 'J', 'title': 'C:/x/경로', 'cwd': 'C:/J'},
+            {'id': 'A', 'title': 'nipa-coord', 'cwd': 'C:/p/nipa', 'labels': par('J')},
+            {'id': 'W', 'title': 'wf3-쿼리확인', 'cwd': 'C:/p/nipa', 'lastStatus': 'running',
+             'labels': {'paseo.parent-agent-id': 'A', 'jarvis.task': 'W-20261108-01'}}]
+    out, jid, _ = jd.roles(recs, {'nipa': {'root': 'C:/p/nipa'}}, home='C:/J')
+    assert jid == 'J' and out['A'] == ('coordinator', 'nipa') and out['W'] == ('worker', 'nipa'), out
+    row = jd.row_of(recs[2], 'worker', 'nipa', 0)
+    assert row['name'] == 'wf3-쿼리확인' and row['task'] == 'W-20261108-01', row
     print('ok')
 finally:
     shutil.rmtree(tmp, ignore_errors=True)

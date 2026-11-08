@@ -23,6 +23,7 @@ BOSS = os.environ.get('JARVIS_BOSS') or '사장'   # 사장실 명패: JARVIS �
 TAGS = ('배정', '보고', '질문', '진행', '승인요청', '점유', '해제', '완료')
 TAG_RE = re.compile(r'^\[(' + '|'.join(TAGS) + r')\]', re.M)
 TASK_RE = re.compile(r'W-\d{8}-\d+')
+TASK_LABEL = 'jarvis.task'   # Worker 의 작업 번호 라벨. 제목은 '<영역>-<한국어 작업 이름>'
 TASK_LABEL_RE = re.compile(r'W-\d{8}-\d+(?:-[A-Za-z0-9]+)?')   # 이름표: 한 작업을 나눈 Worker(-B, -C)까지
 WORKER_DONE_S = 30 * 60   # 끝난 Worker 를 '끝남' 구역에 두는 시간. 넘으면 목록에서 뺀다
 
@@ -96,11 +97,15 @@ def paseo_records(root=PASEO):
     return recs
 
 
-def roles(recs, reg):
-    """에이전트 ID -> (역할, 프로젝트 키). 역할: jarvis | coordinator | worker | other."""
+def roles(recs, reg, home=None):
+    """에이전트 ID -> (역할, 프로젝트 키). 역할: jarvis | coordinator | worker | other.
+    JARVIS 는 제목이 JARVIS 인 것. 없으면 JARVIS 폴더(home)에서 부모 없이 뜬 것 중 최근 것."""
     by_id = {r['id']: r for r in recs}
     parent = {r['id']: (r.get('labels') or {}).get('paseo.parent-agent-id') for r in recs}
-    jarvis = [r for r in recs if (r.get('title') or '') == JARVIS_NAME and r.get('lastStatus') != 'closed']
+    live = [r for r in recs if r.get('lastStatus') != 'closed']
+    jarvis = [r for r in live if (r.get('title') or '') == JARVIS_NAME]
+    if not jarvis and home:
+        jarvis = [r for r in live if not parent.get(r['id']) and norm(r.get('cwd')) == norm(home)]
     jarvis.sort(key=lambda r: r.get('lastActivityAt') or '', reverse=True)
     jid = jarvis[0]['id'] if jarvis else None
     coord_of = {v.get('coordinator'): k for k, v in reg.items() if v.get('coordinator')}
@@ -163,8 +168,9 @@ def row_of(r, role, proj, now_ms):
     elif role == 'coordinator':
         row.update(group='resident', lane=proj or '프로젝트', task='')
     elif role == 'worker':
-        m = TASK_LABEL_RE.search(title)
-        row.update(group='task', lane=proj, task=m.group(0) if m else title)
+        m = TASK_LABEL_RE.search(title)   # 옛 제목 '<프로젝트>-w-<W-ID>'
+        task = (r.get('labels') or {}).get(TASK_LABEL) or (m.group(0) if m else title)
+        row.update(group='task', lane=proj, task=task)
     else:
         row.update(group='other', lane='', task='')
     return row
@@ -175,7 +181,7 @@ def agent_rows(jarvis, root=PASEO, now_ms=None):
     now_ms = now_ms or int(time.time() * 1000)
     recs = paseo_records(root)
     reg = registry(jarvis)
-    rl, jid, by_id = roles(recs, reg)
+    rl, jid, by_id = roles(recs, reg, jarvis)
     rows, names = [], {}
     for r in recs:
         role, proj = rl[r['id']]
@@ -187,7 +193,7 @@ def agent_rows(jarvis, root=PASEO, now_ms=None):
             continue
         rows.append(row)
         names[row['name']] = {'group': row['group'], 'lane': row['lane'], 'task': row['task'], 'order': len(names)}
-    hub = by_id[jid].get('title') if jid else None
+    hub = (by_id[jid].get('title') or JARVIS_NAME) if jid else None
     return rows, names, hub
 
 

@@ -1166,7 +1166,8 @@ function officeSync() {
       if (f.desk >= 0) used.add(f.desk)
       fresh = true
     }
-    nameTag(f, shortTask(a.task) || a.name || a.sessionId.slice(0, 8), a.name)
+    const label = /W-\d{8}-/.test(a.name || '') ? shortTask(a.task) : a.name   // 새 제목은 'wf3-쿼리확인', 옛 제목은 작업 번호
+    nameTag(f, label || a.sessionId.slice(0, 8), a.task && a.task !== a.name ? a.name + ' · ' + a.task : a.name)
     const s = sceneOf(a), was = f.state
     f.state = s
     if (f.desk < 0 || (s === 'rest' && (fresh || was !== 'rest'))) goLounge(f, !fresh)

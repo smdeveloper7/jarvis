@@ -11,7 +11,8 @@
 
 - 읽기만 하는 짧은 확인(파일 몇 개, 조회 한두 번)은 Worker 없이 직접 해도 된다. 고치는 일, 여러 단계인 일, 동시에 할 수 있는 일은 Worker 에게 맡긴다.
 
-- `create_agent`: provider `claude`(사용자가 정하면 `codex`), model `claude-opus-5-5`, 같은 워크스페이스, 제목 `<프로젝트>-w-<W-ID>`.
+- `create_agent`: provider `claude`(사용자가 정하면 `codex`), model `claude-opus-5-5`, 같은 워크스페이스, labels `{"jarvis.task": "<W-ID>"}`.
+- 제목은 맡기는 일을 알아보게 `<영역>-<한국어 작업 이름>` 으로 짧게(한글 2~8자) 짓는다. 예: `wf3-쿼리확인`, `wf4-쿼리확인`, `평가-검토화면`. 영역은 wf3·wf4·평가·콘솔처럼 일이 걸친 곳, 작업 이름은 무엇을 하는지. 작업 번호는 제목에 넣지 않고 라벨에 둔다. 같은 제목이 이미 떠 있으면 `-2` 를 붙인다.
 - 첫 지시: `C:/Users/SMDEVELOPER/JARVIS/rules/worker.md` 를 먼저 읽으라는 한 줄 + 할 일 + 완료 조건.
 - 동시에 3개까지. 같은 Langflow 플로우·공통 컴포넌트·같은 파일을 건드리는 일은 차례로. 같은 저장소의 다른 파일을 동시에 고치면 Worker 마다 git worktree.
 
