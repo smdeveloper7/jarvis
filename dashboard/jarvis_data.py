@@ -326,15 +326,16 @@ def messages(rows, transcript_path, hours=24, now=None, max_messages=300, boss=N
     msgs = [m for m in msgs if BOSS not in (m['from'], m['to'])]
     edges, count = {}, {}
     for m in msgs:
-        e = edges.setdefault((m['from'], m['to']), {'from': m['from'], 'to': m['to'], 'count': 0, 'last': 0})
+        e = edges.setdefault((m['from'], m['to']), {'from': m['from'], 'to': m['to'], 'count': 0, 'last': 0, 'kinds': {}})
         e['count'] += 1
+        e['kinds'][m['kind']] = e['kinds'].get(m['kind'], 0) + 1   # 흐름 카드 선 이름표: 배정·보고·질문 건수
         e['last'] = max(e['last'], m['t'])
         for k, n in (('sent', m['from']), ('got', m['to'])):
             count.setdefault(n, {'sent': 0, 'got': 0})[k] += 1
     for r in rows:   # 메시지가 없어도 구조는 보이게: 부모-자식 선은 최소 1
         p = parent_of.get(r['name'])
         if p and (p, r['name']) not in edges:
-            edges[(p, r['name'])] = {'from': p, 'to': r['name'], 'count': 0, 'last': 0}
+            edges[(p, r['name'])] = {'from': p, 'to': r['name'], 'count': 0, 'last': 0, 'kinds': {}}
         for n in (p, r['name']):
             if n:
                 count.setdefault(n, {'sent': 0, 'got': 0})
@@ -343,7 +344,8 @@ def messages(rows, transcript_path, hours=24, now=None, max_messages=300, boss=N
     for n, c in count.items():
         a = first.get(n) or {}
         nodes.append(dict(c, name=n, group=a.get('group', 'task'), lane=a.get('lane', ''), task=a.get('task', ''),
-                          listed=bool(a), **{k: a.get(k) for k in ('state', 'status', 'kind', 'engine', 'sessionId')}))
+                          listed=bool(a), parent=parent_of.get(n) or '', role=a.get('role', ''),
+                          **{k: a.get(k) for k in ('state', 'status', 'kind', 'engine', 'sessionId')}))
     hub = next((r['name'] for r in rows if r['role'] == 'jarvis'), None)
     return {'hours': hours, 'hub': hub, 'boss': BOSS, 'nodes': nodes, 'edges': sorted(edges.values(), key=lambda e: -e['count']),
             'total': len(msgs), 'messages': msgs[:max_messages], 'bossMessages': boss[:50]}

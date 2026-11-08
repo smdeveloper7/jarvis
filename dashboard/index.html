@@ -559,6 +559,66 @@ button.ncheck:hover { box-shadow: inset 0 0 0 1.5px var(--color-ink) }
 .fsum { margin-top: var(--space-2xs); font-size: var(--text-sm); overflow-wrap: anywhere }
 .fmsg .txt { margin-top: var(--space-xs); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-ctl); background: var(--color-paper); font-size: var(--text-meta) }
 .fmsg .more { margin-top: var(--space-2xs) }
+/* 카드 흐름: sessions as cards on a layered tree, connectors with one label for both directions */
+.flowgrid { display: grid; gap: var(--space-sm); margin-top: var(--space-sm) }
+.flowgrid.wide { grid-template-columns: minmax(0, 1fr) 320px; align-items: start }
+.cflow { position: relative; overflow-x: auto; border-radius: var(--radius-card); background: var(--color-paper-2) }
+.cflow-in { position: relative }
+.cedges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none }
+.cedge { fill: none; stroke: var(--color-rule-2); stroke-linecap: round }
+.cedge.on { stroke: var(--color-accent) }
+.chit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer }
+.cspine { fill: none; stroke: var(--color-rule-2); stroke-width: 1.5; stroke-linecap: round }
+.cedges .dim { opacity: 0.25 }
+.ccard { position: absolute; box-sizing: border-box; display: grid; align-content: start; gap: var(--space-3xs); padding: var(--space-xs) var(--space-sm) var(--space-xs) calc(var(--space-sm) + 3px);
+  border-radius: 12px; background: var(--color-paper); box-shadow: inset 3px 0 0 var(--color-rule-2), 0 0 0 1px var(--color-rule); text-align: left; overflow: hidden; cursor: pointer;
+  transition: box-shadow var(--dur-short) var(--ease-out), opacity var(--dur-short) var(--ease-out) }
+.ccard:hover { box-shadow: inset 3px 0 0 var(--color-rule-2), 0 0 0 1px var(--color-muted) }
+.ccard.s-busy { box-shadow: inset 3px 0 0 var(--color-live), 0 0 0 1px var(--color-rule) }
+.ccard.s-blocked { box-shadow: inset 3px 0 0 var(--color-accent), 0 0 0 1px var(--color-rule) }
+.ccard.s-done { background: var(--color-paper-2); box-shadow: inset 3px 0 0 transparent, 0 0 0 1px var(--color-rule) }
+.ccard.hub { box-shadow: inset 3px 0 0 var(--color-ink), 0 0 0 1.5px var(--color-ink-2) }
+.ccard.on, .ccard.hub.on { box-shadow: inset 3px 0 0 var(--color-accent), 0 0 0 2px var(--color-accent) }
+.ccard:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px }
+.ccard.dim { opacity: 0.35 }
+.ccard.boss { align-content: center; justify-items: center; padding: 0 var(--space-sm); background: var(--color-ink); box-shadow: none; cursor: default }
+.ccard.boss .cname { align-items: center; font-size: var(--text-sm) }
+.ccard.boss .crole { color: var(--color-paper); opacity: 0.7 }
+.ccard.boss .cname { color: var(--color-paper) }
+.crow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); min-width: 0 }
+.crow .chip { flex: none }
+.crole { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); font-weight: 600; color: var(--color-muted) }
+.cname { display: flex; align-items: baseline; gap: var(--space-xs); min-width: 0; font-size: var(--text-md); font-weight: 700; letter-spacing: -0.01em; color: var(--color-ink); white-space: nowrap }
+.cnm { min-width: 0; overflow: hidden; text-overflow: ellipsis }
+.ccard.r-worker .cname { font-size: var(--text-sm) }
+.ctask { flex: none; font-size: var(--text-xs); font-weight: 600; color: var(--color-muted) }
+.clast { min-width: 0; font-size: var(--text-meta); line-height: 20px; color: var(--color-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.clast.none { color: var(--color-faint) }
+.cfoot { font-size: var(--text-xs); color: var(--color-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.ccard.s-done .cname, .ccard.s-done .clast { color: var(--color-muted) }
+.cpill { position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 2px; height: 26px; padding: 0 var(--space-xs); border-radius: var(--radius-pill);
+  background: var(--color-paper); box-shadow: 0 0 0 1px var(--color-rule-2); font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; cursor: pointer }
+.cpill b { font-weight: 700; color: var(--color-ink); margin-right: 4px }
+.cpill b:last-child { margin-right: 0 }
+.cpill:hover { box-shadow: 0 0 0 1px var(--color-muted) }
+.cpill.on { box-shadow: 0 0 0 2px var(--color-accent); color: var(--color-ink) }
+.cpill.dim { opacity: 0.35 }
+.cpill.static { cursor: default }
+.cfold { position: absolute; margin: 0; min-height: 28px }
+.fpanel { position: sticky; top: var(--space-sm); display: grid; gap: var(--space-sm); padding: var(--space-md); border-radius: var(--radius-card); background: var(--color-paper-2); font-size: var(--text-sm) }
+.fp-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); font-size: var(--text-md); font-weight: 700; color: var(--color-ink); overflow-wrap: anywhere }
+.fp-hint { margin: 0; color: var(--color-muted); line-height: 1.6 }
+.fp-legend { display: flex; flex-wrap: wrap; gap: var(--space-2xs) }
+.fp-dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2xs) var(--space-sm); margin: 0 }
+.fp-dl dt { color: var(--color-muted) }
+.fp-dl dd { margin: 0; color: var(--color-ink); overflow-wrap: anywhere }
+.fp-act { display: flex; align-items: center; gap: var(--space-md) }
+.fp-act .golink, .fp-act .more { margin: 0 }
+.fp-sub { font-size: var(--text-xs); font-weight: 700; color: var(--color-muted) }
+.fp-list { display: grid; gap: var(--space-2xs) }
+.fp-m { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: var(--space-xs); font-size: var(--text-meta) }
+.fp-ms { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink-2) }
+.fp-m time { font-size: var(--text-xs); color: var(--color-faint) }
 /* tokens: 처리 토큰 bars by size, coloured by engine */
 .toks { display: grid; gap: var(--space-2xs) }
 .tok { display: grid; grid-template-columns: minmax(0, 11em) minmax(0, 1fr) auto; align-items: center; gap: var(--space-sm); font-size: var(--text-meta) }
@@ -1792,7 +1852,8 @@ const nodeKey = n => n.listed ? status(n).key : 'closed'
 const nodeTip = n => [n.name,
   n.group === 'resident' ? '상시 ' + (n.lane || '') : n.group === 'task' ? '일회성 ' + (n.task || '') : n.group === 'codex' ? 'codex' : '',
   n.listed ? status(n).label : '목록에 없음(닫힘)', `보냄 ${n.sent}, 받음 ${n.got}`].filter(x => x && x.trim()).join(', ')
-const related = (m, sel) => !sel || (sel.node ? m.from === sel.node || m.to === sel.node : m.from === sel.edge[0] && m.to === sel.edge[1])
+const related = (m, sel) => !sel || (sel.node ? m.from === sel.node || m.to === sel.node
+  : sel.pair ? sel.pair.includes(m.from) && sel.pair.includes(m.to) && m.from !== m.to : m.from === sel.edge[0] && m.to === sel.edge[1])
 function select(sel) {
   const same = sel && flowSel && JSON.stringify(sel) === JSON.stringify(flowSel)
   flowSel = same ? null : sel
@@ -1803,7 +1864,7 @@ function select(sel) {
 // on an inner ring (name on hover or when picked). 입체 lays the rings on a tilted plane that a drag or the arrow keys
 // turn, and each route arcs above it; 평면 looks straight down. Edges bend left of travel so the two directions part.
 const RING = 16
-let flowView = store.get('flowView', 'orbit') === 'flat' ? 'flat' : 'orbit'
+let flowView = ['card', 'orbit', 'flat'].includes(store.get('flowView', 'card')) ? store.get('flowView', 'card') : 'card'
 const cam = { yaw: 0, pitch: 0.9 }   // 정면에서: JARVIS 가 위
 try { const c = store.get('flowCam2', null); if (c && isFinite(c.yaw) && isFinite(c.pitch)) Object.assign(cam, { yaw: c.yaw, pitch: c.pitch }) } catch (e) {}
 const PITCH = [0.45, 1.45]   // radians above the plane: flat on the edge to nearly straight down
@@ -1950,6 +2011,183 @@ function graphBox(f, W) {
   return box
 }
 
+
+// 카드: a layered tree read top down, like a trace viewer. 사장 -> JARVIS -> one column per Coordinator, its Workers stacked
+// under it on a spine. Each card is a session (role, state, task, its latest message); a connector between two levels
+// carries one label for both directions (배정 down, 보고·질문 up). Finished Workers fold into one line per column.
+const CARD = { w: 248, gx: 36, pad: 24, boss: 44, hub: 108, coord: 108, worker: 104, gap: 10, indent: 22 }
+const KIND_SHORT = { assign: '배정', report: '보고', notice: '질문', other: '진행', chat: '채팅', answer: '답' }
+const foldOpen = new Set()   // Coordinators whose finished Workers are shown
+const ROLE_LABEL = { jarvis: 'JARVIS', coordinator: 'Coordinator', worker: 'Worker' }
+
+function cardGraph(f, W) {
+  const sel = flowSel, byName = new Map(f.nodes.map(n => [n.name, n]))
+  const hub = byName.get(f.hub) || f.nodes.find(n => n.role === 'jarvis') || null
+  const last = new Map(), lastAt = new Map()
+  for (const m of f.messages) {   // newest first: the first one seen is the latest
+    if (!last.has(m.from)) last.set(m.from, m)
+    for (const n of [m.from, m.to]) if (!lastAt.has(n)) lastAt.set(n, m.t)
+  }
+  const isDone = n => !n.listed || status(n).key === 'done'
+  const coords = f.nodes.filter(n => n !== hub && (n.role === 'coordinator' || (n.group === 'resident' && !n.parent)))
+    .sort((a, b) => (a.lane || a.name).localeCompare(b.lane || b.name))
+  const cols = coords.map(c => ({ c, ws: [] })), loose = { c: null, ws: [] }
+  for (const n of f.nodes) {
+    if (n === hub || coords.includes(n)) continue
+    const col = cols.find(g => g.c.name === n.parent) || cols.find(g => n.lane && g.c.lane === n.lane)
+    ;(col || loose).ws.push(n)
+  }
+  if (loose.ws.length) cols.push(loose)
+  for (const g of cols) g.ws.sort((a, b) => isDone(a) - isDone(b) || (lastAt.get(b.name) || 0) - (lastAt.get(a.name) || 0))
+
+  // geometry
+  const n = Math.max(1, cols.length), innerW = n * CARD.w + (n - 1) * CARD.gx, Wt = Math.max(W, innerW + 2 * CARD.pad)
+  const x0 = (Wt - innerW) / 2, mid = Wt / 2
+  const bm = f.bossMessages || []
+  const boss = bm.length ? { name: f.boss || '사장', chat: bm.filter(m => m.kind === 'chat').length, answer: bm.filter(m => m.kind === 'answer').length } : null
+  let y = CARD.pad
+  const box = new Map()   // name -> {x, y, w, h}
+  if (boss) { box.set('@boss', { x: mid - 90, y, w: 180, h: CARD.boss }); y += CARD.boss + 44 }
+  if (hub) { box.set(hub.name, { x: mid - CARD.w / 2, y, w: CARD.w, h: CARD.hub }); y += CARD.hub + 70 }
+  const yc = y
+  let H = yc + CARD.coord
+  const folds = []
+  cols.forEach((g, i) => {
+    const x = x0 + i * (CARD.w + CARD.gx)
+    let yy = yc
+    if (g.c) { box.set(g.c.name, { x, y: yc, w: CARD.w, h: CARD.coord }); yy = yc + CARD.coord + 18 }
+    const key = g.c ? g.c.name : '@loose', open = foldOpen.has(key)
+    const live = g.ws.filter(w => !isDone(w)), done = g.ws.filter(isDone), shown = [...live, ...(open ? done : [])]
+    for (const w of shown) {
+      box.set(w.name, { x: x + CARD.indent, y: yy, w: CARD.w - CARD.indent, h: CARD.worker }); yy += CARD.worker + CARD.gap
+    }
+    if (done.length) { folds.push({ key, x: x + CARD.indent, y: yy, n: done.length, open }); yy += 34 }
+    g.spine = { x: x + 10, y0: g.c ? yc + CARD.coord : yc, ys: shown.map(w => box.get(w.name).y + CARD.worker / 2) }
+    H = Math.max(H, yy)
+  })
+  H += CARD.pad
+
+  // connectors
+  const f1 = v => v.toFixed(1)
+  const pairKinds = (a, b) => {   // a above b: down = a->b, up = b->a
+    const k = {}, add = (e, dir) => { for (const [kind, c] of Object.entries(e.kinds || {})) k[dir + kind] = (k[dir + kind] || 0) + c }
+    let total = 0, lastT = 0
+    for (const e of f.edges) {
+      if (e.from === a && e.to === b) { add(e, 'd:'); total += e.count; lastT = Math.max(lastT, e.last) }
+      if (e.from === b && e.to === a) { add(e, 'u:'); total += e.count; lastT = Math.max(lastT, e.last) }
+    }
+    return { k, total, last: lastT }
+  }
+  const pillText = k => [['d:assign', '배정'], ['u:report', '보고'], ['u:notice', '질문'], ['u:other', '진행'], ['d:other', '기타']]
+    .filter(([key]) => k[key]).map(([key, label]) => [label + ' ', h('b', {}, k[key])])
+  const isOn = (a, b) => !!sel && (sel.pair ? sel.pair.includes(a) && sel.pair.includes(b) : sel.node ? sel.node === a || sel.node === b : false)
+  const dimmed = (a, b) => !!sel && !isOn(a, b)
+  const paths = [], pills = []
+  const stroke = t => f1(1.25 + Math.min(3.5, Math.log2(1 + t) * 0.6))
+  if (boss && hub) {
+    const A = box.get('@boss'), B = box.get(hub.name), on = isOn(f.boss, hub.name)
+    paths.push(sv('path', { class: 'cedge' + (on ? ' on' : dimmed(f.boss, hub.name) ? ' dim' : ''), d: `M${f1(mid)},${f1(A.y + A.h)} L${f1(mid)},${f1(B.y)}`, 'stroke-width': stroke(boss.chat + boss.answer) }))
+    pills.push(h('span', { class: 'cpill static', style: `left:${f1(mid)}px;top:${f1((A.y + A.h + B.y) / 2)}px` }, '채팅 ', h('b', {}, boss.chat), ' 답 ', h('b', {}, boss.answer)))
+  }
+  cols.forEach((g, i) => {
+    if (!g.c || !hub) return
+    const A = box.get(hub.name), B = box.get(g.c.name), pk = pairKinds(hub.name, g.c.name)
+    const sx = A.x + A.w * (n === 1 ? 0.5 : 0.2 + 0.6 * i / (n - 1)), sy = A.y + A.h, tx = B.x + B.w / 2, ty = B.y, my = (sy + ty) / 2
+    const on = isOn(hub.name, g.c.name), cls = 'cedge' + (on ? ' on' : dimmed(hub.name, g.c.name) ? ' dim' : '')
+    const d = `M${f1(sx)},${f1(sy)} C${f1(sx)},${f1(my)} ${f1(tx)},${f1(my)} ${f1(tx)},${f1(ty)}`
+    const pick = ev => { ev.stopPropagation(); select({ pair: [hub.name, g.c.name] }) }
+    paths.push(sv('path', { class: 'chit', d, onclick: pick }), sv('path', { class: cls, d, 'stroke-width': stroke(pk.total) }))
+    const tip = `${hub.name} ↔ ${g.c.name}, ${pk.total}건` + (pk.last ? `, 마지막 ${short(pk.last)}` : '')
+    pills.push(h('button', { class: 'cpill' + (on ? ' on' : dimmed(hub.name, g.c.name) ? ' dim' : ''), style: `left:${f1((sx + tx) / 2)}px;top:${f1(my)}px`, title: tip, 'aria-label': tip, onclick: pick },
+      pk.total ? pillText(pk.k) : '메시지 없음'))
+  })
+  for (const g of cols) {   // spine: a rail down the column's left edge with a tick into each Worker
+    if (!g.spine.ys.length) continue
+    const { x, y0, ys } = g.spine, yEnd = ys[ys.length - 1]
+    const any = g.c && sel && g.ws.some(w => isOn(g.c.name, w.name))
+    const cls = 'cspine' + (sel && !any ? ' dim' : '')
+    paths.push(sv('path', { class: cls, d: `M${f1(x)},${f1(y0)} L${f1(x)},${f1(yEnd - 8)} Q${f1(x)},${f1(yEnd)} ${f1(x + 8)},${f1(yEnd)} L${f1(x + CARD.indent - 10)},${f1(yEnd)}` }))
+    for (const yy of ys.slice(0, -1)) paths.push(sv('path', { class: cls, d: `M${f1(x)},${f1(yy)} L${f1(x + CARD.indent - 10)},${f1(yy)}` }))
+  }
+
+  // cards
+  const cardEl = (nd, b) => {
+    const s = nd.listed ? status(nd) : { key: 'done', label: '닫힘' }, m = last.get(nd.name), t = lastAt.get(nd.name)
+    const role = nd === hub ? 'JARVIS' : ROLE_LABEL[nd.role] || (nd.group === 'codex' ? 'codex' : '세션')
+    const on = !!sel && (sel.node === nd.name || (sel.pair && sel.pair.includes(nd.name)))
+    const pick = ev => { ev.stopPropagation(); select({ node: nd.name }) }
+    const title = nd.role === 'worker' && nd.task ? nd.name.replace('-' + nd.task, '').replace(/-w$/, '') || nd.name : nd.name
+    return h('button', {
+      class: `ccard s-${s.key} r-${nd.role || nd.group}${nd === hub ? ' hub' : ''}${on ? ' on' : sel && !on ? ' dim' : ''}`,
+      style: `left:${f1(b.x)}px;top:${f1(b.y)}px;width:${f1(b.w)}px;height:${f1(b.h)}px`,
+      'aria-label': nodeTip(nd), title: nodeTip(nd), onclick: pick
+    },
+      h('span', { class: 'crow' }, h('span', { class: 'crole' }, role, nd.role === 'coordinator' && nd.lane ? ' · ' + nd.lane : ''), stateEl(s)),
+      h('span', { class: 'cname' }, h('span', { class: 'cnm' }, title), nd.task ? h('span', { class: 'ctask mono' }, nd.task.replace(/^W-\d{4}/, 'W-')) : null),
+      m ? h('span', { class: 'clast' }, h('span', { class: 'kb ' + m.kind }, KIND_SHORT[m.kind] || '기타'), ' ', m.sum.replace(/^\[[^\]]+\]\s*/, ''))
+        : h('span', { class: 'clast none' }, '보낸 메시지 없음'),
+      h('span', { class: 'cfoot' }, `보냄 ${nd.sent} · 받음 ${nd.got}`, t ? ' · ' + ago(t) : ''))
+  }
+  const cards = []
+  if (boss) {
+    const b = box.get('@boss')
+    cards.push(h('div', { class: 'ccard boss', style: `left:${f1(b.x)}px;top:${f1(b.y)}px;width:${f1(b.w)}px;height:${f1(b.h)}px` },
+      h('span', { class: 'cname' }, h('span', { class: 'crole' }, '사장'), boss.name)))
+  }
+  for (const nd of f.nodes) { const b = box.get(nd.name); if (b) cards.push(cardEl(nd, b)) }
+  for (const fo of folds) cards.push(h('button', {
+    class: 'more cfold', style: `left:${f1(fo.x)}px;top:${f1(fo.y)}px`, 'aria-expanded': String(fo.open),
+    onclick(ev) { ev.stopPropagation(); fo.open ? foldOpen.delete(fo.key) : foldOpen.add(fo.key); renderFlowTab() }
+  }, fo.open ? `끝난 Worker ${fo.n}개 접기` : `끝난 Worker ${fo.n}개 보기`))
+
+  const svg = sv('svg', { class: 'cedges', width: Wt, height: H, viewBox: `0 0 ${Wt} ${H}` }, paths)
+  return h('div', { class: 'cflow', onclick: () => { if (flowSel) select(null) } },
+    h('div', { class: 'cflow-in', style: `width:${Wt}px;height:${H}px` }, svg, cards, pills))
+}
+
+// right-hand panel: what the picked card or connector is about, without leaving the graph
+function flowPanel(f) {
+  const sel = flowSel, byName = new Map(f.nodes.map(n => [n.name, n]))
+  const STATE_HELP = { busy: '작업 중', blocked: '대기 중', idle: '쉬는 중', done: '끝남' }
+  if (!sel) return h('aside', { class: 'fpanel' }, h('div', { class: 'fp-h' }, '자세히'),
+    h('p', { class: 'fp-hint' }, '카드를 누르면 그 세션이, 선 위 이름표를 누르면 두 세션 사이 메시지가 여기 보입니다. 빈 곳을 누르면 선택이 풀립니다.'),
+    h('div', { class: 'fp-legend' }, Object.entries(STATE_HELP).map(([key, label]) => stateEl({ key, label }))))
+  const ms = f.messages.filter(m => related(m, sel)).slice(0, 8)
+  const list = h('div', { class: 'fp-list' }, ms.length ? ms.map(m => h('div', { class: 'fp-m', title: m.sum },
+    h('span', { class: 'kb ' + m.kind }, KIND_SHORT[m.kind] || '기타'), h('span', { class: 'fp-ms' }, m.sum), h('time', {}, short(m.t))))
+    : h('div', { class: 'sec-empty' }, '이 시간 안에 메시지 없음'))
+  if (sel.node) {
+    const n = byName.get(sel.node)
+    if (!n) return null
+    const s = n.listed ? status(n) : { key: 'done', label: '닫힘' }
+    return h('aside', { class: 'fpanel' },
+      h('div', { class: 'fp-h' }, h('b', {}, n.name), stateEl(s)),
+      h('dl', { class: 'fp-dl' },
+        h('dt', {}, '역할'), h('dd', {}, n.name === f.hub ? 'JARVIS' : ROLE_LABEL[n.role] || n.group),
+        n.lane ? [h('dt', {}, '프로젝트'), h('dd', {}, n.lane)] : null,
+        n.task ? [h('dt', {}, '작업'), h('dd', { class: 'mono' }, n.task)] : null,
+        n.parent ? [h('dt', {}, '위'), h('dd', {}, n.parent)] : null,
+        h('dt', {}, '메시지'), h('dd', {}, `보냄 ${n.sent} · 받음 ${n.got}`)),
+      h('div', { class: 'fp-act' }, n.sessionId ? h('a', { class: 'golink', href: '#/s/' + n.sessionId }, '대화 보기') : null,
+        h('button', { class: 'more', onclick: () => select(null) }, '선택 풀기')),
+      h('div', { class: 'fp-sub' }, '최근 메시지'), list)
+  }
+  const [a, b] = sel.pair || sel.edge
+  return h('aside', { class: 'fpanel' },
+    h('div', { class: 'fp-h' }, h('b', {}, a), h('span', { class: 'arrow' }, '↔'), h('b', {}, b)),
+    h('dl', { class: 'fp-dl' }, f.edges.filter(e => (e.from === a && e.to === b) || (e.from === b && e.to === a)).map(e => [
+      h('dt', {}, e.from + ' →'), h('dd', {}, Object.entries(e.kinds || {}).map(([k, c]) => `${KIND_SHORT[k] || k} ${c}`).join(' · ') || '0건')])),
+    h('div', { class: 'fp-act' }, h('button', { class: 'more', onclick: () => select(null) }, '선택 풀기')),
+    h('div', { class: 'fp-sub' }, '최근 메시지'), list)
+}
+
+// a redraw (new message every few seconds) keeps the card graph's horizontal scroll where the reader left it
+function keepScroll(scroll, el) {
+  const left = scroll.querySelector('.cflow')?.scrollLeft || 0
+  if (left && el.classList?.contains('cflow')) requestAnimationFrame(() => { el.scrollLeft = left })
+  return el
+}
+
 function msgEl(m) {
   const open = openMsgs.has(m.id)
   return h('article', { class: 'fmsg' },
@@ -1978,13 +2216,17 @@ function renderFlowTab() {
       renderFlowTab(); pollMessages()
     }
   }, label)))
-  const viewSeg = h('div', { class: 'seg flat vseg', role: 'group', 'aria-label': '그래프 보기' }, [['orbit', '입체'], ['flat', '평면']].map(([v, label]) => h('button', {
+  const viewSeg = h('div', { class: 'seg flat vseg', role: 'group', 'aria-label': '그래프 보기' }, [['card', '카드'], ['orbit', '입체'], ['flat', '평면']].map(([v, label]) => h('button', {
     class: 'segb', 'aria-pressed': String(flowView === v),
     onclick() { if (flowView !== v) { flowView = v; store.set('flowView', v); renderFlowTab() } }
   }, label)))
   // a graph that fails in 3D falls back to the flat drawing, and a flat failure leaves the list below it intact
+  const wide = scroll.clientWidth >= 1100
   const graph = () => {
-    const W = scroll.clientWidth - 34
+    const W = scroll.clientWidth - 34 - (flowView === 'card' && wide ? 340 : 0)
+    if (flowView === 'card') {
+      try { return cardGraph(f, W) } catch (e) { console.error(e); flowView = 'flat' }
+    }
     try { return graphBox(f, W) } catch (e) {}
     try { flowView = 'flat'; return graphBox(f, W) } catch (e) { return h('div', { class: 'banner' }, '그래프를 그리지 못했습니다: ' + e.message) }
   }
@@ -1993,9 +2235,10 @@ function renderFlowTab() {
     !f ? h('div', { class: 'empty' }, '불러오는 중…')
       : f.error ? h('div', { class: 'banner' }, '메시지를 읽지 못했습니다: ' + f.error)
       : !f.total ? h('div', { class: 'empty' }, '이 시간 안에 세션끼리 주고받은 메시지가 없습니다.')
-      : [graph(),
-        sel ? h('div', { class: 'fsel' },
-          sel.node ? [h('b', {}, sel.node), ' 이 보내거나 받은 메시지'] : ['보낸 쪽 ', h('b', {}, sel.edge[0]), ', 받는 쪽 ', h('b', {}, sel.edge[1]), ' 메시지'],
+      : [flowView === 'card' ? h('div', { class: 'flowgrid' + (wide ? ' wide' : '') }, keepScroll(scroll, graph()), flowView === 'card' ? flowPanel(f) : null) : graph(),
+        sel && flowView !== 'card' ? h('div', { class: 'fsel' },
+          sel.node ? [h('b', {}, sel.node), ' 이 보내거나 받은 메시지'] : sel.pair ? [h('b', {}, sel.pair[0]), ' ↔ ', h('b', {}, sel.pair[1]), ' 메시지']
+            : ['보낸 쪽 ', h('b', {}, sel.edge[0]), ', 받는 쪽 ', h('b', {}, sel.edge[1]), ' 메시지'],
           h('button', { onclick: () => select(null) }, '전체 보기')) : null,
         put(tokBox, tokenBars()) || tokBox,
         h('section', { class: 'sec' },
