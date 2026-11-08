@@ -8,6 +8,9 @@
 역할 매핑(lanekeeper 화면 기준)
 - JARVIS(제목이 JARVIS 인 에이전트) -> group resident, lane 'HUB' (오피스의 허브 자리, 흐름도 가운데)
 - Coordinator(registry 의 coordinator 이거나 부모가 JARVIS) -> group resident, lane 프로젝트 키
+- 이전 PM 세션(라벨 jarvis.role=pm 이나 제목 <키>-pm·<키>-coord 인데 registry 의 현재 PM 이 아님) -> role pm_prev,
+  group task, lane 프로젝트 키, task '이전 PM'. 세션 교체 뒤에도 그 PM 과 Worker 가 프로젝트 방에 남는다(docs/02).
+- JARVIS 는 registry.yaml `jarvis:`(대표 JARVIS)가 살아 있으면 그것.
 - Worker(부모가 Coordinator) -> group task, lane 프로젝트 키, task 작업 ID(제목의 W-…)
 """
 import glob
@@ -68,6 +71,19 @@ def registry(jarvis):
     return out
 
 
+def registry_jarvis(jarvis):
+    """registry.yaml 맨 위 `jarvis: <대표 JARVIS 에이전트 ID>`."""
+    try:
+        with open(os.path.join(jarvis, 'registry.yaml'), encoding='utf-8') as f:
+            for line in f:
+                m = re.match(r'^jarvis:\s*(\S+)', line)
+                if m:
+                    return m.group(1).strip('"').strip("'")
+    except OSError:
+        pass
+    return None
+
+
 def boss_name(jarvis):
     """사장실 명패: registry.yaml 맨 위 `boss: <이름>`, 없으면 JARVIS_BOSS 환경변수, 없으면 '사장'."""
     try:
@@ -87,7 +103,8 @@ def norm(p):
 
 # ---------- Paseo 에이전트 ----------
 
-def paseo_records(root=PASEO):
+def paseo_records(root=PASEO, archived=False):
+    """Paseo 에이전트 기록. archived=True 면 archive 된 것도(관계 계산용, 화면에는 안 보임)."""
     recs = []
     for p in glob.glob(os.path.join(root, 'agents', '*', '*.json')):
         try:
@@ -95,23 +112,26 @@ def paseo_records(root=PASEO):
                 d = json.load(f)
         except (OSError, ValueError):
             continue
-        if d.get('archivedAt') or d.get('internal'):
+        if d.get('internal') or (d.get('archivedAt') and not archived):
             continue
         recs.append(d)
     return recs
 
 
-def roles(recs, reg, home=None):
-    """에이전트 ID -> (역할, 프로젝트 키). 역할: jarvis | coordinator | worker | other.
-    JARVIS 는 제목이 JARVIS 인 것. 없으면 JARVIS 폴더(home)에서 부모 없이 뜬 것 중 최근 것."""
+def roles(recs, reg, home=None, rep=None):
+    """에이전트 ID -> (역할, 프로젝트 키). 역할: jarvis | coordinator | pm_prev | worker | other.
+    JARVIS 는 rep(registry 대표)가 살아 있으면 그것, 아니면 제목이 JARVIS 인 것, 없으면 JARVIS 폴더(home)에서
+    부모 없이 뜬 것 중 최근 것."""
     by_id = {r['id']: r for r in recs}
     parent = {r['id']: (r.get('labels') or {}).get('paseo.parent-agent-id') for r in recs}
-    live = [r for r in recs if r.get('lastStatus') != 'closed']
+    live = [r for r in recs if r.get('lastStatus') != 'closed' and not r.get('archivedAt')]
     jarvis = [r for r in live if (r.get('title') or '') == JARVIS_NAME]
     if not jarvis and home:
         jarvis = [r for r in live if not parent.get(r['id']) and norm(r.get('cwd')) == norm(home)]
     jarvis.sort(key=lambda r: r.get('lastActivityAt') or '', reverse=True)
     jid = jarvis[0]['id'] if jarvis else None
+    if rep and any(r['id'] == rep for r in live):
+        jid = rep
     coord_of = {v.get('coordinator'): k for k, v in reg.items() if v.get('coordinator')}
     roots = {}
     for k, v in reg.items():
@@ -122,7 +142,7 @@ def roles(recs, reg, home=None):
     def title_proj(r):   # 제목 '<프로젝트>-coord' / '<프로젝트>-w-<W-ID>' 의 프로젝트 키
         t = (r.get('title') or '').strip()
         for k in sorted(reg, key=len, reverse=True):
-            if t == k + '-coord' or t.startswith(k + '-w-') or t.startswith(k + '-coord'):
+            if t in (k + '-coord', k + '-pm') or t.startswith(k + '-w-') or t.startswith(k + '-coord')                     or t.startswith(k + '-pm-'):
                 return k
         return None
 
@@ -136,14 +156,26 @@ def roles(recs, reg, home=None):
             out[i] = ('coordinator', coord_of[i])
         elif jid and parent.get(i) == jid:
             out[i] = ('coordinator', proj or '')
+        elif is_prev_pm(r, reg, parent.get(i), title_proj):
+            lb = r.get('labels') or {}
+            out[i] = ('pm_prev', lb.get('jarvis.project') if lb.get('jarvis.project') in reg else title_proj(r))
         else:
             out[i] = None
     for r in recs:   # 부모가 Coordinator 면 Worker
         i = r['id']
         if out[i] is None:
             p = out.get(parent.get(i))
-            out[i] = ('worker', p[1] or title_proj(r) or root_of.get(norm(r.get('cwd'))) or '') if p and p[0] == 'coordinator' else ('other', '')
+            out[i] = ('worker', p[1] or title_proj(r) or root_of.get(norm(r.get('cwd'))) or '')                 if p and p[0] in ('coordinator', 'pm_prev') else ('other', '')
     return out, jid, by_id
+
+
+def is_prev_pm(r, reg, parent, title_proj):
+    """registry 의 현재 PM 이 아닌 PM 세션: 라벨 jarvis.role=pm, 또는 부모 없는 <키>-pm·<키>-coord."""
+    lb = r.get('labels') or {}
+    if lb.get('jarvis.role') == 'pm' and lb.get('jarvis.project') in reg:
+        return True
+    t = (r.get('title') or '').strip()
+    return not parent and any(t in (k + '-pm', k + '-coord') for k in reg)
 
 
 def row_of(r, role, proj, now_ms):
@@ -163,7 +195,7 @@ def row_of(r, role, proj, now_ms):
         row.update(status='busy', state='working')
     elif attention:
         row.update(status='idle', state='blocked', needs=reason or '확인 필요')
-    elif role == 'worker' or st == 'closed':
+    elif role in ('worker', 'pm_prev') or st == 'closed':
         row.update(status='idle', state='done')
     else:
         row.update(status='idle', state='idle')
@@ -171,6 +203,8 @@ def row_of(r, role, proj, now_ms):
         row.update(group='resident', lane='HUB', task='')
     elif role == 'coordinator':
         row.update(group='resident', lane=proj or '프로젝트', task='')
+    elif role == 'pm_prev':
+        row.update(group='task', lane=proj, task='이전 PM', name=title + ' (이전)')
     elif role == 'worker':
         m = TASK_LABEL_RE.search(title)   # 옛 제목 '<프로젝트>-w-<W-ID>'
         task = (r.get('labels') or {}).get(TASK_LABEL) or (m.group(0) if m else title)
@@ -183,13 +217,13 @@ def row_of(r, role, proj, now_ms):
 def agent_rows(jarvis, root=PASEO, now_ms=None):
     """(rows, roster, hub 이름). 오래전에 끝난 Worker 는 뺀다."""
     now_ms = now_ms or int(time.time() * 1000)
-    recs = paseo_records(root)
+    recs = paseo_records(root, archived=True)   # 관계(부모·이전 PM)는 archive 된 것까지 보고 계산, 표시만 거른다
     reg = registry(jarvis)
-    rl, jid, by_id = roles(recs, reg, jarvis)
+    rl, jid, by_id = roles(recs, reg, jarvis, registry_jarvis(jarvis))
     rows, names = [], {}
     for r in recs:
         role, proj = rl[r['id']]
-        if role == 'other':
+        if role == 'other' or r.get('archivedAt'):
             continue
         row = row_of(r, role, proj, now_ms)
         last = iso_ms(r.get('lastActivityAt') or r.get('updatedAt'))

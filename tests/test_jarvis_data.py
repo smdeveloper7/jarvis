@@ -93,6 +93,20 @@ try:
     assert jid == 'J' and out['A'] == ('coordinator', 'nipa') and out['W'] == ('worker', 'nipa'), out
     row = jd.row_of(recs[2], 'worker', 'nipa', 0)
     assert row['name'] == 'wf3-쿼리확인' and row['task'] == 'W-20261108-01', row
+
+    # PM 세션 교체 뒤: registry 의 현재 PM 만 coordinator, 옛 PM 은 pm_prev, 그 Worker 는 그대로 프로젝트 Worker
+    # 대표 JARVIS 는 registry jarvis: 가 살아 있으면 그것(제목이 JARVIS 인 세션이 여럿이어도)
+    recs = [{'id': 'J1', 'title': 'JARVIS', 'cwd': 'C:/J', 'lastActivityAt': '2026-11-09T02:00:00Z'},
+            {'id': 'J2', 'title': 'JARVIS', 'cwd': 'C:/J', 'lastActivityAt': '2026-11-09T01:00:00Z'},
+            {'id': 'NEW', 'title': 'nipa-pm', 'cwd': 'C:/p/nipa', 'labels': {'jarvis.role': 'pm', 'jarvis.project': 'nipa'}},
+            {'id': 'OLD', 'title': 'nipa-coord', 'cwd': 'C:/p/nipa', 'labels': {}},
+            {'id': 'W', 'title': 'wf3-일', 'cwd': 'C:/p/nipa', 'labels': {'paseo.parent-agent-id': 'OLD'}}]
+    reg = {'nipa': {'root': 'C:/p/nipa', 'coordinator': 'NEW'}}
+    out, jid, _ = jd.roles(recs, reg, home='C:/J', rep='J2')
+    assert jid == 'J2' and out['NEW'] == ('coordinator', 'nipa') and out['OLD'] == ('pm_prev', 'nipa'), out
+    assert out['W'] == ('worker', 'nipa') and out['J1'] == ('other', ''), out
+    row = jd.row_of(recs[3], 'pm_prev', 'nipa', 0)
+    assert row['group'] == 'task' and row['lane'] == 'nipa' and row['name'] == 'nipa-coord (이전)', row
     print('ok')
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
