@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS 구성</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="diagram.css" rel="stylesheet">
+</head>
+<body>
+<figure>
+<svg viewBox="0 0 1100 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
+<title id="t">JARVIS 구성</title>
+<desc id="d">사용자는 Paseo 앱에서 JARVIS 와만 대화한다. JARVIS 는 프로젝트별 Coordinator 에 배정하고, Coordinator 는 작업마다 Worker 를 띄운다. 보고는 거꾸로 올라온다. JARVIS 는 JARVIS 폴더의 state 파일에 기록하고, 대시보드는 그 파일과 Paseo 기록을 읽어 보여 준다. 플러그인 훅 두 개가 모든 세션에 걸린다.</desc>
+<defs>
+<pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" class="dot"/></pattern>
+<marker id="a" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="ah"/></marker>
+<marker id="aa" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="ah-acc"/></marker>
+</defs>
+<rect width="1100" height="600" class="bg"/>
+<rect width="1100" height="600" fill="url(#dots)"/>
+
+<!-- Paseo -->
+<rect x="250" y="56" width="830" height="196" rx="10" class="zone"/>
+<text x="268" y="78" class="eyebrow">PASEO · 세션 띄우기 · 메시지 · 권한 승인</text>
+
+<!-- 사용자 -->
+<rect x="24" y="116" width="160" height="84" rx="8" class="box ext"/>
+<text x="104" y="152" class="name" text-anchor="middle">사용자</text>
+<text x="104" y="176" class="sub" text-anchor="middle">Paseo 앱 · PC·휴대폰</text>
+
+<!-- JARVIS -->
+<rect x="282" y="116" width="190" height="84" rx="8" class="box hub"/>
+<text x="377" y="152" class="name hubname" text-anchor="middle">JARVIS</text>
+<text x="377" y="176" class="sub hubsub" text-anchor="middle">JARVIS 폴더에서 뜬 세션</text>
+
+<!-- Coordinator (여럿) -->
+<rect x="610" y="108" width="190" height="84" rx="8" class="box ghost"/>
+<rect x="602" y="116" width="190" height="84" rx="8" class="box"/>
+<text x="697" y="152" class="name" text-anchor="middle">Coordinator</text>
+<text x="697" y="176" class="sub" text-anchor="middle">프로젝트마다 하나</text>
+
+<!-- Worker (여럿) -->
+<rect x="892" y="108" width="170" height="84" rx="8" class="box ghost"/>
+<rect x="884" y="116" width="170" height="84" rx="8" class="box"/>
+<text x="969" y="152" class="name" text-anchor="middle">Worker</text>
+<text x="969" y="176" class="sub" text-anchor="middle">작업마다 · 동시 3개</text>
+
+<!-- 가로 화살표: 아래로 내려가는 일(위), 올라오는 보고(아래) -->
+<path d="M 184,144 H 280" class="ln acc" marker-end="url(#aa)"/>
+<text x="232" y="134" class="lbl acc-t" text-anchor="middle">대화</text>
+<path d="M 282,174 H 186" class="ln" marker-end="url(#a)"/>
+<text x="232" y="194" class="lbl" text-anchor="middle">요약 · 질문</text>
+
+<path d="M 472,144 H 600" class="ln acc" marker-end="url(#aa)"/>
+<text x="536" y="134" class="lbl acc-t" text-anchor="middle">[배정] W-…</text>
+<path d="M 602,174 H 474" class="ln" marker-end="url(#a)"/>
+<text x="538" y="194" class="lbl" text-anchor="middle">[보고] [질문]</text>
+<text x="538" y="210" class="lbl" text-anchor="middle">[승인요청]</text>
+
+<path d="M 792,144 H 882" class="ln acc" marker-end="url(#aa)"/>
+<text x="837" y="134" class="lbl acc-t" text-anchor="middle">띄우기 · 지시</text>
+<path d="M 884,174 H 794" class="ln" marker-end="url(#a)"/>
+<text x="839" y="194" class="lbl" text-anchor="middle">[완료] [질문]</text>
+
+<!-- JARVIS 폴더 -->
+<path d="M 282,330 a 95,12 0 0 1 190,0 v 66 a 95,12 0 0 1 -190,0 Z" class="box db"/>
+<path d="M 282,330 a 95,12 0 0 0 190,0" class="ln thin"/>
+<text x="377" y="368" class="name" text-anchor="middle">JARVIS 폴더</text>
+<text x="377" y="392" class="sub" text-anchor="middle">registry · criteria · state/</text>
+<path d="M 377,200 V 312" class="ln" marker-end="url(#a)"/>
+<text x="389" y="262" class="lbl">쓰기: 작업 · 결정 ·</text>
+<text x="389" y="278" class="lbl">점유 · 운영 반영 대기</text>
+
+<!-- 대시보드 -->
+<rect x="602" y="320" width="190" height="84" rx="8" class="box"/>
+<text x="697" y="356" class="name" text-anchor="middle">JARVIS 보드</text>
+<text x="697" y="380" class="sub" text-anchor="middle">127.0.0.1:4991 · 읽기만</text>
+<path d="M 472,362 H 600" class="ln dash" marker-end="url(#a)"/>
+<text x="536" y="352" class="lbl" text-anchor="middle">state/ 읽기</text>
+<path d="M 840,252 V 296 Q 840,304 832,304 H 744 Q 736,304 736,312 V 318" class="ln dash" marker-end="url(#a)"/>
+<text x="852" y="282" class="lbl">에이전트 기록 · 대화 읽기</text>
+<path d="M 697,404 V 444 Q 697,452 689,452 H 112 Q 104,452 104,444 V 202" class="ln dash" marker-end="url(#a)"/>
+<text x="400" y="444" class="lbl" text-anchor="middle">브라우저로 보기</text>
+
+<!-- 플러그인 훅 -->
+<rect x="250" y="488" width="830" height="88" rx="10" class="zone"/>
+<text x="1064" y="510" class="eyebrow" text-anchor="end">JARVIS 플러그인 · 모든 세션에 걸리는 훅</text>
+<rect x="268" y="524" width="380" height="36" rx="6" class="chip"/>
+<text x="284" y="547" class="chip-t">JARVIS 폴더 보호: 다른 세션의 Edit · Write 막기</text>
+<rect x="664" y="524" width="300" height="36" rx="6" class="chip"/>
+<text x="680" y="547" class="chip-t">커밋 · PR 문구 검사 (git-message)</text>
+<path d="M 330,524 V 412" class="ln dash acc" marker-end="url(#aa)"/>
+<text x="318" y="476" class="lbl acc-t" text-anchor="end">보호</text>
+</svg>
+</figure>
+</body>
+</html>

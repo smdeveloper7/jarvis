@@ -1,0 +1,43 @@
+/* JARVIS 그림 공통: 밝은 화면이 기본, prefers-color-scheme: dark 면 어두운 판 */
+:root {
+  --bg: #f5f5f3; --dot: rgba(35, 38, 47, 0.10); --ink: #23262f; --muted: #646a78; --line: #59606f;
+  --box: #ffffff; --box-line: #cfd2d8; --zone: rgba(35, 38, 47, 0.03); --zone-line: rgba(35, 38, 47, 0.14);
+  --acc: #c8501c; --hub: #23262f; --hub-ink: #ffffff; --hub-sub: #c9ccd3; --chip: #ffffff; --band: rgba(35, 38, 47, 0.035);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121316; --dot: rgba(232, 232, 234, 0.08); --ink: #e8e8ea; --muted: #9aa0ad; --line: #a3a9b5;
+    --box: #1d1f24; --box-line: #3a3d45; --zone: rgba(232, 232, 234, 0.025); --zone-line: rgba(232, 232, 234, 0.16);
+    --acc: #f07a3c; --hub: #f2f2f3; --hub-ink: #121316; --hub-sub: #4b4f59; --chip: #1d1f24; --band: rgba(232, 232, 234, 0.04);
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0 }
+body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans KR', sans-serif; padding: 24px }
+figure { max-width: 1100px; margin: 0 auto }
+svg { width: 100%; display: block }
+.bg { fill: var(--bg) }
+.dot { fill: var(--dot) }
+.ah { fill: var(--line) }
+.ah-acc { fill: var(--acc) }
+.zone { fill: var(--zone); stroke: var(--zone-line); stroke-width: 1 }
+.band { fill: var(--band) }
+.eyebrow { font: 500 12px 'IBM Plex Mono', 'Noto Sans KR', monospace; letter-spacing: 0.02em; fill: var(--muted) }
+.box { fill: var(--box); stroke: var(--box-line); stroke-width: 1.2 }
+.box.ghost { opacity: 0.55 }
+.box.hub { fill: var(--hub); stroke: var(--hub) }
+.box.ext { stroke-dasharray: 5 3 }
+.name { font: 700 17px 'Noto Sans KR', sans-serif; fill: var(--ink) }
+.sub { font: 400 12px 'Noto Sans KR', sans-serif; fill: var(--muted) }
+.hubname { fill: var(--hub-ink) }
+.hubsub { fill: var(--hub-sub) }
+.ln { fill: none; stroke: var(--line); stroke-width: 1.3 }
+.ln.thin { stroke: var(--box-line); stroke-width: 1.2 }
+.ln.acc { stroke: var(--acc); stroke-width: 1.6 }
+.ln.dash { stroke-dasharray: 5 4 }
+.lbl { font: 500 12px 'Noto Sans KR', sans-serif; fill: var(--muted) }
+.acc-t { fill: var(--acc) }
+.chip { fill: var(--chip); stroke: var(--box-line) }
+.chip-t { font: 500 13px 'Noto Sans KR', sans-serif; fill: var(--ink) }
+.mono { font: 500 12px 'IBM Plex Mono', monospace; fill: var(--muted) }
+.life { stroke: var(--box-line); stroke-width: 1.2; stroke-dasharray: 3 4 }
+.note { fill: var(--box); stroke: var(--box-line) }
