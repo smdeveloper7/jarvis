@@ -472,6 +472,18 @@ button.subs-t:active { background: var(--color-paper-3) }
 .ncard .tsub .dchips { margin-top: var(--space-3xs) }
 .nlink { color: var(--color-ink); text-decoration: none }
 .nrefresh { margin: 0 0 0 auto }
+.rgroup { margin-top: var(--space-sm) }
+.rgroup .tlist { margin-top: var(--space-2xs) }
+.rslot { font-size: var(--text-xs); font-weight: 700; color: var(--color-muted) }
+.rcard .tsum { align-items: center }
+.rcard .tmark { margin-top: 0 }
+.rdots { flex: none; display: inline-flex; gap: 4px; margin-left: auto }
+.rdot { display: block; flex: none; width: 10px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1.5px var(--color-rule-2) }
+.rdot.rdone { background: var(--color-ink-2); box-shadow: none }
+.rdot.rtodo { box-shadow: inset 0 0 0 1.5px var(--color-muted) }
+.rdot.rnone { box-shadow: none; background: var(--color-paper-3); opacity: 0.5 }
+.rdot.rrest { box-shadow: inset 0 0 0 1px var(--color-rule) }
+.dchip.rall { background: var(--color-live-tint); color: var(--color-ink) }
 button.ncheck { cursor: pointer; padding: 0; border: 0; background: none }
 button.ncheck:hover { box-shadow: inset 0 0 0 1.5px var(--color-ink) }
 .ti.completed button.ncheck { background: var(--color-rule-2) }
@@ -581,10 +593,6 @@ button.ncheck:hover { box-shadow: inset 0 0 0 1.5px var(--color-ink) }
 .ccard.on, .ccard.hub.on { box-shadow: inset 3px 0 0 var(--color-accent), 0 0 0 2px var(--color-accent) }
 .ccard:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px }
 .ccard.dim { opacity: 0.35 }
-.ccard.boss { align-content: center; justify-items: center; padding: 0 var(--space-sm); background: var(--color-ink); box-shadow: none; cursor: default }
-.ccard.boss .cname { align-items: center; font-size: var(--text-sm) }
-.ccard.boss .crole { color: var(--color-paper); opacity: 0.7 }
-.ccard.boss .cname { color: var(--color-paper) }
 .crow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); min-width: 0 }
 .crow .chip { flex: none }
 .crole { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); font-weight: 600; color: var(--color-muted) }
@@ -603,7 +611,6 @@ button.ncheck:hover { box-shadow: inset 0 0 0 1.5px var(--color-ink) }
 .cpill:hover { box-shadow: 0 0 0 1px var(--color-muted) }
 .cpill.on { box-shadow: 0 0 0 2px var(--color-accent); color: var(--color-ink) }
 .cpill.dim { opacity: 0.35 }
-.cpill.static { cursor: default }
 .cfold { position: absolute; margin: 0; min-height: 28px }
 .fpanel { position: sticky; top: var(--space-sm); display: grid; gap: var(--space-sm); padding: var(--space-md); border-radius: var(--radius-card); background: var(--color-paper-2); font-size: var(--text-sm) }
 .fp-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); font-size: var(--text-md); font-weight: 700; color: var(--color-ink); overflow-wrap: anywhere }
@@ -760,12 +767,14 @@ function renderTop() {
       group !== PAGES[i - 1]?.[3] ? h('div', { class: 'navg', 'aria-hidden': 'true' }, group) : null,
       h('button', { class: 'tab', role: 'tab', 'aria-selected': String(!cur && page === key), onclick: () => { location.hash = href } },
         label, key === 'decisions' && nNow ? h('span', { class: 'num', title: '지금 결정 필요' }, nNow) : null,
+        key === 'routine' && todo?.routine?.total ? h('span', { class: 'num' + (todo.routine.done === todo.routine.total ? ' ok' : ' plain'), title: '오늘 루틴 한 것 / 전체' },
+          `${todo.routine.done}/${todo.routine.total}`) : null,
         key === 'todo' ? [tc.in_progress ? h('span', { class: 'num ok', title: todo?.notion?.sections ? '오늘 남은 할 일(Notion)' : '진행 중인 할 일' }, tc.in_progress) : null,
           tc.pending ? h('span', { class: 'num plain', title: todo?.notion?.sections ? '이번 주 남은 할 일(Notion)' : '대기 중인 할 일' }, tc.pending) : null] : null)])))
 }
 const subRun = () => agents.reduce((n, a) => n + (a.subagents || []).filter(s => s.state === 'busy').length, 0)
 // [key, label, hash, sidebar group]; the narrow tab row keeps the same order without the group names
-const PAGES = [['agents', '에이전트', '#/', '세션'], ['flow', '흐름', '#/flow', '세션'], ['decisions', '결정', '#/decisions', '할 것'], ['todo', '할 일', '#/todo', '할 것'], ['status', '현황', '#/status', 'JARVIS']]
+const PAGES = [['routine', '루틴', '#/routine', '오늘'], ['agents', '에이전트', '#/', '세션'], ['flow', '흐름', '#/flow', '세션'], ['decisions', '결정', '#/decisions', '할 것'], ['todo', '할 일', '#/todo', '할 것'], ['status', '현황', '#/status', 'JARVIS']]
 
 /* ---------- alerts: tab title count and browser notifications ---------- */
 // reports to the hub newer than reportMark are new; unread ones count in the title until the page is seen
@@ -1626,9 +1635,9 @@ function todoGroup(g) {
 
 // Notion 할일 DB: one row per page, a mark (ticked when 완료), the name linking to Notion, then date and 유형 chips
 let todoSessions = store.get('todoSessions', false)
-const todoFold = new Set(store.get('todoFold', ['overdue_other', 'undated']))   // folded Notion sections
-const NOTION_SECTIONS = [['today', '오늘 할 일'], ['week', '이번 주 남은 일'], ['overdue', '밀린 일 · 이번 주 전 (프로젝트 있음)'],
-  ['overdue_other', '밀린 일 · 이번 주 전 (프로젝트 없음)'], ['undated', '날짜 없는 할 일 (프로젝트 있음)']]
+const todoFold = new Set(store.get('todoFold2', ['overdue_other', 'undated', 'done']))   // folded Notion sections
+const NOTION_SECTIONS = [['today', '오늘 할 일'], ['week', '이번 주'], ['next', '다음 주'], ['overdue', '이번 주 전'],
+  ['overdue_other', '이번 주 전 (프로젝트 없음)'], ['undated', '날짜 없는 할 일'], ['done', '완료 (지난주~다음 주)']]
 let todoProject = store.get('todoProject', '')   // '' 전체, 'none' 프로젝트 없음, 아니면 Notion 프로젝트 페이지 id
 const inProject = r => !todoProject || (todoProject === 'none' ? !r.projects.length : r.projects.includes(todoProject))
 const projName = id => todo?.notion?.projects?.[id] || id.slice(0, 8)
@@ -1657,26 +1666,67 @@ function notionItem(r) {
       title: r.done ? '완료 해제' : '완료로 체크', 'aria-label': (r.done ? '완료 해제: ' : '완료로 체크: ') + r.title,
       onclick() { notionUpdate(r, { done: !r.done }) } }, r.done ? icon('check') : null),
     h('span', { class: 'tsub' }, h('a', { class: 'tsj nlink', href: r.url, target: '_blank', rel: 'noopener' }, r.title),
-      h('span', { class: 'dchips' }, r.date ? h('span', { class: 'dchip' }, mmdd(r.date)) : null,
-        r.types.map(t => h('span', { class: 'dchip' }, t)), todoProject ? null : r.projects.map(p => h('span', { class: 'dchip nproj' }, projName(p))),
+      h('span', { class: 'dchips' }, r.date ? h('span', { class: 'dchip' }, mmdd(r.date) + (r.end && r.end !== r.date ? '~' + mmdd(r.end) : '')) : null,
+        r.types.map(t => h('span', { class: 'dchip' }, t)), todoProject || Object.keys(todo?.notion?.projects || {}).length < 2 ? null : r.projects.map(p => h('span', { class: 'dchip nproj' }, projName(p))),
         !r.done && today && r.date !== today ? h('button', { class: 'more ntoday', disabled: busy,
           onclick() { notionUpdate(r, { date: today }) } }, '오늘로') : null))))
 }
 
 function notionSection(key, title, rows) {
-  if (!rows.length && key !== 'today' && key !== 'week') return null
+  if (!rows.length && !['today', 'week', 'next'].includes(key)) return null
   const fold = todoFold.has(key)
   const left = key === 'today' ? rows.filter(r => !r.done).length : rows.length
   return h('article', { class: 'tcard ncard' },
     h('div', { class: 'r1' }, h('span', { class: 'name' }, title), h('span', { class: 'dchip' }, key === 'today' ? `남은 일 ${left} / ${rows.length}` : `${rows.length}건`),
       rows.length ? h('button', { class: 'more tfold', 'aria-expanded': String(!fold),
-        onclick() { fold ? todoFold.delete(key) : todoFold.add(key); store.set('todoFold', [...todoFold]); renderTodo() } }, fold ? '펼치기' : '접기') : null),
+        onclick() { fold ? todoFold.delete(key) : todoFold.add(key); store.set('todoFold2', [...todoFold]); renderTodo() } }, fold ? '펼치기' : '접기') : null),
     fold ? null : h('div', { class: 'tlist' }, rows.length ? rows.map(notionItem) : h('div', { class: 'empty' }, '없음')))
 }
 
 // one chip per Notion project with its open count (today's undone + this week + overdue + undated), plus 전체 and 프로젝트 없음
+// 오늘 루틴: Notion 루틴 기록의 오늘 줄. 동그라미를 누르면 완료, 오른쪽 점 7개는 최근 7일(채움 = 함, 빈 칸 = 안 함, 흐림 = 그날 없음).
+// 주 N회 루틴은 '이번 주 목표'에 따로 모으고 이번 주 횟수를 보이며, 오늘 n/m 에는 넣지 않는다
+const SLOT_LABEL = ['아침', '낮', '저녁']
+async function routineCheck(r) {
+  notionBusyIds.add(r.id); notionWriteError = ''; notionRender()
+  try {
+    const res = await fetch('/api/notion/update', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Jarvis': '1' },
+      body: JSON.stringify({ kind: 'routine', id: r.id, done: !r.done }) })
+    const d = await res.json()
+    if (!res.ok) throw new Error(d.error || res.status)
+    todo = { ...todo, routine: d }; todoKey = ''
+  } catch (err) { notionWriteError = `루틴 「${r.name}」 고치지 못함: ${err.message}` }
+  notionBusyIds.delete(r.id); renderTop(); notionRender()
+}
+
+function routinePart(rt) {
+  if (!rt || rt.configured === false) return null
+  const daily = (rt.rows || []).filter(r => !r.weekly), weekly = (rt.rows || []).filter(r => r.weekly)
+  const groups = [...[...SLOT_LABEL, ''].map(s => [s || '매일', daily.filter(r => (r.slot || '') === s)]), ['이번 주 목표', weekly]].filter(([, rs]) => rs.length)
+  const DAY = d => '일월화수목금토'[new Date(d + 'T00:00:00').getDay()]
+  return h('article', { class: 'tcard ncard rcard' },
+    h('div', { class: 'r1' }, h('span', { class: 'name' }, `오늘 루틴 · ${rt.weekday}요일`),
+      rt.total ? h('span', { class: 'dchip' + (rt.done === rt.total ? ' rall' : '') }, `${rt.done} / ${rt.total}`) : null,
+      h('a', { class: 'more tfold', href: rt.itemsUrl, target: '_blank', rel: 'noopener' }, '루틴 항목 편집')),
+    rt.error ? h('div', { class: 'banner' }, rt.error) : null,
+    !rt.total && !rt.error ? h('div', { class: 'empty' }, '오늘 요일에 든 루틴이 없습니다. 루틴 항목의 요일을 확인하세요.') : null,
+    groups.map(([slot, rs]) => h('div', { class: 'rgroup' }, h('div', { class: 'rslot' }, slot),
+      h('div', { class: 'tlist' }, rs.map(r => {
+        const busy = notionBusyIds.has(r.id), hist = (rt.hist || {})[r.id] || []
+        return h('div', { class: 'ti ' + (r.done ? 'completed' : 'pending') + (busy ? ' busy' : '') }, h('div', { class: 'tsum' },
+          h('button', { class: 'tmark ncheck', role: 'checkbox', 'aria-checked': String(r.done), disabled: busy,
+            'aria-label': (r.done ? '안 함으로: ' : '했음: ') + r.name, onclick() { routineCheck(r) } }, r.done ? icon('check') : null),
+          h('span', { class: 'tsub' }, h('a', { class: 'tsj nlink', href: r.url, target: '_blank', rel: 'noopener' }, r.name)),
+          r.weekly ? h('span', { class: 'dchip' + (r.weekly.count >= r.weekly.target ? ' rall' : ''), title: '이번 주(월~일) 한 횟수 / 목표' },
+            `이번 주 ${r.weekly.count}/${r.weekly.target}`) : null,
+          h('span', { class: 'rdots', role: 'img', 'aria-label': '최근 7일: ' + hist.map((x, i) => `${DAY(rt.days[i])} ${({ done: '함', miss: '안 함', rest: '쉼', todo: '오늘 아직', none: '없음' })[x]}`).join(', ') },
+            hist.map((x, i) => h('i', { class: 'rdot r' + x, title: `${rt.days[i].slice(5)} (${DAY(rt.days[i])}) ${({ done: '함', miss: '안 함', rest: '쉼', todo: '오늘 아직', none: '그날 없음' })[x]}` })))))
+      })))))
+}
+
 function projectBar(n) {
-  const open = Object.entries(n.sections).flatMap(([k, rs]) => k === 'today' ? rs.filter(r => !r.done) : rs)
+  if (Object.keys(n.projects || {}).length < 2) { todoProject = ''; return null }   // 한 프로젝트만 보이면 칩이 필요 없다
+  const open = Object.entries(n.sections).filter(([k]) => k !== 'done').flatMap(([k, rs]) => k === 'today' ? rs.filter(r => !r.done) : rs)
   const count = f => open.filter(f).length
   const chips = [['', '전체', count(() => true)],
     ...Object.entries(n.projects || {}).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => [id, name, count(r => r.projects.includes(id))]),
@@ -1719,9 +1769,25 @@ function renderTodo() {
 }
 
 let notionBusy = false
+const notionRender = () => { if (cur) return; if (page === 'routine') renderRoutine(); else if (page === 'todo') renderTodo() }
 async function refreshNotion() {
-  notionBusy = true; renderTodo()
-  try { await pollTodo('?refresh=1') } finally { notionBusy = false; renderTodo() }
+  notionBusy = true; notionRender()
+  try { await pollTodo('?refresh=1') } finally { notionBusy = false; notionRender() }
+}
+
+// 루틴 tab: today's routine from Notion (루틴 기록), checked here; the same /api/todos read feeds it
+function renderRoutine() {
+  const scroll = view.querySelector('.scroll.routine-page') || h('div', { class: 'scroll routine-page todo-page' })
+  const rt = todo?.routine
+  put(scroll,
+    h('div', { class: 'mdhead' }, h('span', {}, 'Notion 루틴'),
+      h('span', {}, rt?.at ? `마지막으로 읽음 ${hm(rt.at).trim()} · 오늘 ${rt.today}` : '그날 처음 읽을 때 오늘 줄을 만듦'),
+      h('button', { class: 'more nrefresh', disabled: notionBusy, onclick: refreshNotion }, notionBusy ? '읽는 중…' : '새로고침')),
+    notionWriteError ? h('div', { class: 'banner' }, notionWriteError) : null,
+    !todo ? h('div', { class: 'empty' }, '불러오는 중…')
+      : rt?.configured === false ? h('div', { class: 'banner' }, 'Notion 토큰이 없습니다. 할 일 탭의 안내대로 토큰을 넣어 주세요.')
+      : routinePart(rt))
+  if (!scroll.isConnected) put(view, scroll)
 }
 
 async function pollTodo(qs = '') {
@@ -1732,7 +1798,7 @@ async function pollTodo(qs = '') {
     if (text === todoKey) return   // unchanged: keep open items and scroll as they are
     todoKey = text; todo = JSON.parse(text)
   } catch (err) { if (!todo) todo = { groups: [], counts: {}, error: '서버 응답 없음: ' + err.message } }
-  if (!cur) { renderTop(); if (page === 'todo') renderTodo() }
+  if (!cur) { renderTop(); notionRender() }
 }
 
 /* ---------- STATUS.md ---------- */
@@ -2012,10 +2078,10 @@ function graphBox(f, W) {
 }
 
 
-// 카드: a layered tree read top down, like a trace viewer. 사장 -> JARVIS -> one column per Coordinator, its Workers stacked
+// 카드: a layered tree read top down, like a trace viewer. JARVIS -> one column per Coordinator, its Workers stacked
 // under it on a spine. Each card is a session (role, state, task, its latest message); a connector between two levels
 // carries one label for both directions (배정 down, 보고·질문 up). Finished Workers fold into one line per column.
-const CARD = { w: 248, gx: 36, pad: 24, boss: 44, hub: 108, coord: 108, worker: 104, gap: 10, indent: 22 }
+const CARD = { w: 248, gx: 36, pad: 24, hub: 108, coord: 108, worker: 104, gap: 10, indent: 22 }
 const KIND_SHORT = { assign: '배정', report: '보고', notice: '질문', other: '진행', chat: '채팅', answer: '답' }
 const foldOpen = new Set()   // Coordinators whose finished Workers are shown
 const ROLE_LABEL = { jarvis: 'JARVIS', coordinator: 'Coordinator', worker: 'Worker' }
@@ -2043,11 +2109,8 @@ function cardGraph(f, W) {
   // geometry
   const n = Math.max(1, cols.length), innerW = n * CARD.w + (n - 1) * CARD.gx, Wt = Math.max(W, innerW + 2 * CARD.pad)
   const x0 = (Wt - innerW) / 2, mid = Wt / 2
-  const bm = f.bossMessages || []
-  const boss = bm.length ? { name: f.boss || '사장', chat: bm.filter(m => m.kind === 'chat').length, answer: bm.filter(m => m.kind === 'answer').length } : null
   let y = CARD.pad
   const box = new Map()   // name -> {x, y, w, h}
-  if (boss) { box.set('@boss', { x: mid - 90, y, w: 180, h: CARD.boss }); y += CARD.boss + 44 }
   if (hub) { box.set(hub.name, { x: mid - CARD.w / 2, y, w: CARD.w, h: CARD.hub }); y += CARD.hub + 70 }
   const yc = y
   let H = yc + CARD.coord
@@ -2084,11 +2147,6 @@ function cardGraph(f, W) {
   const dimmed = (a, b) => !!sel && !isOn(a, b)
   const paths = [], pills = []
   const stroke = t => f1(1.25 + Math.min(3.5, Math.log2(1 + t) * 0.6))
-  if (boss && hub) {
-    const A = box.get('@boss'), B = box.get(hub.name), on = isOn(f.boss, hub.name)
-    paths.push(sv('path', { class: 'cedge' + (on ? ' on' : dimmed(f.boss, hub.name) ? ' dim' : ''), d: `M${f1(mid)},${f1(A.y + A.h)} L${f1(mid)},${f1(B.y)}`, 'stroke-width': stroke(boss.chat + boss.answer) }))
-    pills.push(h('span', { class: 'cpill static', style: `left:${f1(mid)}px;top:${f1((A.y + A.h + B.y) / 2)}px` }, '채팅 ', h('b', {}, boss.chat), ' 답 ', h('b', {}, boss.answer)))
-  }
   cols.forEach((g, i) => {
     if (!g.c || !hub) return
     const A = box.get(hub.name), B = box.get(g.c.name), pk = pairKinds(hub.name, g.c.name)
@@ -2129,11 +2187,6 @@ function cardGraph(f, W) {
       h('span', { class: 'cfoot' }, `보냄 ${nd.sent} · 받음 ${nd.got}`, t ? ' · ' + ago(t) : ''))
   }
   const cards = []
-  if (boss) {
-    const b = box.get('@boss')
-    cards.push(h('div', { class: 'ccard boss', style: `left:${f1(b.x)}px;top:${f1(b.y)}px;width:${f1(b.w)}px;height:${f1(b.h)}px` },
-      h('span', { class: 'cname' }, h('span', { class: 'crole' }, '사장'), boss.name)))
-  }
   for (const nd of f.nodes) { const b = box.get(nd.name); if (b) cards.push(cardEl(nd, b)) }
   for (const fo of folds) cards.push(h('button', {
     class: 'more cfold', style: `left:${f1(fo.x)}px;top:${f1(fo.y)}px`, 'aria-expanded': String(fo.open),
@@ -2608,7 +2661,7 @@ function route() {
   const m = location.hash.match(/^#\/s\/([\w-]+)(\/logs)?/)
   if (m) return showDetail(m[1], m[2] ? 'logs' : 'chat')
   cur = null
-  page = { '#/decisions': 'decisions', '#/status': 'status', '#/flow': 'flow', '#/todo': 'todo' }[location.hash] || 'agents'
+  page = { '#/decisions': 'decisions', '#/status': 'status', '#/flow': 'flow', '#/todo': 'todo', '#/routine': 'routine' }[location.hash] || 'agents'
   renderTop(); renderPage()
 }
 function renderPage() {
@@ -2616,6 +2669,7 @@ function renderPage() {
   else if (page === 'status') { renderStatus(); pollStatus() }
   else if (page === 'flow') { renderFlowTab(); pollMessages() }
   else if (page === 'todo') renderTodo()
+  else if (page === 'routine') renderRoutine()
   else renderList()
 }
 

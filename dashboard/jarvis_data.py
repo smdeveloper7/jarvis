@@ -14,6 +14,7 @@ import glob
 import json
 import os
 import re
+import socket
 import threading
 import time
 import urllib.error
@@ -504,7 +505,10 @@ def status_markdown(jarvis):
 NOTION_DS = os.environ.get('JARVIS_NOTION_DS') or '2ed3cf1a-c9b3-81aa-a0d6-000b40fab530'   # 할일 data source
 NOTION_KSM = '3fb3cf1ac9b380818136ed223027e043'   # 프로젝트 KSM 페이지(NIPA)
 NOTION_TOKEN_FILE = os.path.expanduser('~/.jarvis/notion_token')
+# 할 일 탭에 보일 프로젝트(Notion 프로젝트 페이지 id, 쉼표로 여럿). 기본은 KSM 만, 빈 값이면 전부
+NOTION_ONLY = {x.strip().replace('-', '') for x in os.environ.get('JARVIS_NOTION_PROJECTS', NOTION_KSM).split(',') if x.strip()}
 NOTION_VERSION = '2025-09-03'
+NOTION_TIMEOUT = 45   # 초. Notion 이 가끔 느려 20초로는 시간 초과가 났다(2026-11-08)
 KST = timezone(timedelta(hours=9))
 _notion = {'at': 0, 'data': None, 'rows': [], 'names': {}}
 _notion_lock = threading.Lock()
@@ -519,6 +523,25 @@ def notion_token():
             return f.read().strip()
     except OSError:
         return ''
+
+
+def notion_open(req, opener=None):
+    """Notion 요청 하나 -> JSON. 시간 초과·연결 오류면 한 번 더 시도한다. HTTP 오류(4xx·5xx)는 그대로 올린다."""
+    op = opener or urllib.request.urlopen
+    for attempt in (1, 2):
+        try:
+            with op(req, timeout=NOTION_TIMEOUT) as r:
+                return json.load(r)
+        except urllib.error.HTTPError:
+            raise
+        except (TimeoutError, socket.timeout, urllib.error.URLError):
+            if attempt == 2:
+                raise
+
+
+def uuid_dashed(x):
+    x = x.replace('-', '')
+    return f'{x[:8]}-{x[8:12]}-{x[12:16]}-{x[16:20]}-{x[20:]}' if len(x) == 32 else x
 
 
 def week_range(today):
@@ -540,30 +563,43 @@ def notion_row(p):
     d = prop('날짜', 'date') or {}
     rel = [str(r.get('id', '')).replace('-', '') for r in (prop('프로젝트', 'relation') or [])]
     return {'id': p.get('id', ''), 'url': p.get('url', ''), 'title': title or '(제목 없음)',
-            'done': bool(prop('완료', 'checkbox')), 'date': (d.get('start') or '')[:10],
+            'done': bool(prop('완료', 'checkbox')), 'date': (d.get('start') or '')[:10], 'end': (d.get('end') or '')[:10],
             'types': [o.get('name', '') for o in (prop('유형', 'multi_select') or [])],
             'ksm': NOTION_KSM in rel, 'project': bool(rel), 'projects': rel, 'edited': p.get('last_edited_time', '')}
 
 
+def only_projects(rows):
+    """NOTION_ONLY 에 든 프로젝트의 할 일만. NOTION_ONLY 가 비면 그대로."""
+    return [r for r in rows if set(r['projects']) & NOTION_ONLY] if NOTION_ONLY else rows
+
+
 def group_todos(rows, today):
-    """할 일 줄 -> 오늘 · 이번 주 남은 일 · 밀린 일(이번 주 전, 프로젝트 있음 / 없음) · 날짜 없는 일(프로젝트 있음). 주는 월요일 시작."""
+    """할 일 줄 -> 오늘 · 이번 주 · 다음 주 · 이번 주 전(프로젝트 있음 / 없음) · 날짜 없는 일(프로젝트 있음). 주는 월요일 시작.
+    기간(시작~끝)인 할 일은 오늘이 그 안에 들면 오늘, 아니면 시작 날짜로 나눈다."""
     mon, sun = week_range(today)
-    out = {'today': [], 'week': [], 'overdue': [], 'overdue_other': [], 'undated': []}
+    nmon, nsun = week_range((date.fromisoformat(sun) + timedelta(days=1)).isoformat())
+    pmon = (date.fromisoformat(mon) - timedelta(days=7)).isoformat()
+    out = {'today': [], 'week': [], 'next': [], 'overdue': [], 'overdue_other': [], 'undated': [], 'done': []}
     for r in rows:
         dt = r['date']
-        if dt == today:
+        if dt and (dt == today or dt <= today <= (r.get('end') or '')):
             out['today'].append(r)   # 오늘은 완료도 보인다
         elif r['done']:
-            continue
+            if dt and pmon <= dt <= nsun:
+                out['done'].append(r)   # 완료: 지난주 월요일 ~ 다음 주 일요일
         elif not dt:
             if r['project']:
                 out['undated'].append(r)   # 날짜 없고 프로젝트도 없는 옛 메모는 뺀다
         elif mon <= dt <= sun:
             out['week'].append(r)   # Notion '이번주 할일' 보기처럼 이번 주 지난 날도 여기
+        elif nmon <= dt <= nsun:
+            out['next'].append(r)
         elif dt < mon:
             out['overdue' if r['project'] else 'overdue_other'].append(r)
     out['today'].sort(key=lambda r: (r['done'], r['title']))
-    out['week'].sort(key=lambda r: (r['date'], r['title']))
+    for k in ('week', 'next'):
+        out[k].sort(key=lambda r: (r['date'], r['title']))
+    out['done'].sort(key=lambda r: (r['date'], r['title']), reverse=True)
     for k in ('overdue', 'overdue_other'):
         out[k].sort(key=lambda r: (r['date'], r['title']), reverse=True)   # 최근에 밀린 것이 위
     out['undated'].sort(key=lambda r: r['edited'], reverse=True)
@@ -571,20 +607,21 @@ def group_todos(rows, today):
 
 
 def notion_query(token, today, opener=None):
-    """완료 안 된 행과 이번 주 행(완료 포함)을 모두 읽는다. 100행씩, 최대 10쪽."""
+    """완료 안 된 행과 지난주 월요일부터의 행(완료 포함)을 모두 읽는다. 100행씩, 최대 10쪽."""
     mon, _ = week_range(today)
-    body = {'page_size': 100, 'filter': {'or': [
-        {'property': '완료', 'checkbox': {'equals': False}},
-        {'property': '날짜', 'date': {'on_or_after': mon}}]}}
-    opener = opener or urllib.request.urlopen
+    pmon = (date.fromisoformat(mon) - timedelta(days=7)).isoformat()
+    when = {'or': [{'property': '완료', 'checkbox': {'equals': False}},
+                   {'property': '날짜', 'date': {'on_or_after': pmon}}]}
+    if NOTION_ONLY:   # 보일 프로젝트만 Notion 에서 바로 거른다(읽는 양을 줄여 시간 초과를 막음)
+        when = {'and': [when, {'or': [{'property': '프로젝트', 'relation': {'contains': uuid_dashed(x)}} for x in sorted(NOTION_ONLY)]}]}
+    body = {'page_size': 100, 'filter': when}
     rows = []
     for _ in range(10):
         req = urllib.request.Request(f'https://api.notion.com/v1/data_sources/{NOTION_DS}/query',
                                      data=json.dumps(body).encode(), method='POST', headers={
                                          'Authorization': 'Bearer ' + token, 'Notion-Version': NOTION_VERSION,
                                          'Content-Type': 'application/json'})
-        with opener(req, timeout=20) as r:
-            d = json.load(r)
+        d = notion_open(req, opener)
         rows += [notion_row(p) for p in d.get('results') or [] if p.get('object') == 'page']
         if not d.get('has_more'):
             break
@@ -601,8 +638,7 @@ def project_names(token, rows, opener=None):
         req = urllib.request.Request(f'https://api.notion.com/v1/pages/{pid}', headers={
             'Authorization': 'Bearer ' + token, 'Notion-Version': NOTION_VERSION})
         try:
-            with (opener or urllib.request.urlopen)(req, timeout=20) as r:
-                props = json.load(r).get('properties') or {}
+            props = notion_open(req, opener).get('properties') or {}
             names[pid] = ''.join(t.get('plain_text', '') for v in props.values() if v.get('type') == 'title'
                                  for t in v.get('title') or []) or pid[:8]
         except (OSError, ValueError):
@@ -624,7 +660,7 @@ def notion_todos(now=None, opener=None, refresh=False):
         else:
             prev = _notion['data'] or {}
             try:
-                rows = notion_query(token, today, opener)
+                rows = only_projects(notion_query(token, today, opener))
                 _notion['rows'] = rows
                 data = {'configured': True, 'today': today, 'error': '', 'at': int(now * 1000),
                         'sections': group_todos(rows, today), 'projects': project_names(token, rows, opener)}
@@ -673,8 +709,7 @@ def notion_update(page_id, done=None, day=None, opener=None, now=None):
                                      'Authorization': 'Bearer ' + token, 'Notion-Version': NOTION_VERSION,
                                      'Content-Type': 'application/json'})
     try:
-        with (opener or urllib.request.urlopen)(req, timeout=20) as r:
-            row = notion_row(json.load(r))
+        row = notion_row(notion_open(req, opener))
     except urllib.error.HTTPError as e:
         why = {401: '토큰이 맞지 않음', 403: '쓰기 권한 없음(통합의 콘텐츠 업데이트 기능을 켜야 함)',
                404: '페이지를 못 찾음'}.get(e.code, '')
@@ -683,10 +718,147 @@ def notion_update(page_id, done=None, day=None, opener=None, now=None):
         return 502, {'error': 'Notion 쓰기 실패: ' + str(e)[:120]}
     now = time.time() if now is None else now
     with _notion_lock:
-        rows = [x for x in _notion['rows'] if x['id'].replace('-', '') != page_id.replace('-', '')] + [row]
+        rows = only_projects([x for x in _notion['rows'] if x['id'].replace('-', '') != page_id.replace('-', '')] + [row])
         _notion['rows'] = rows
         data = _notion['data'] or {'configured': True, 'error': '', 'at': 0}
         today = datetime.fromtimestamp(now, KST).date().isoformat()
         data = dict(data, today=today, sections=group_todos(rows, today))
         _notion['data'] = data
     return 200, data
+
+
+# ---------- Notion 루틴 (할 일 탭 맨 위) ----------
+# 루틴 항목: 이름·시간대·요일·사용·순서. 루틴 기록: 날짜별 한 줄(이름·날짜·완료·시간대·항목). 그날 처음 읽을 때 오늘 요일에 든
+# 항목 중 기록이 없는 것을 만든다(통합에 콘텐츠 입력 기능이 있어야 함). 완료 체크는 notion_patch 로 쓴다.
+ROUTINE_ITEMS_DS = os.environ.get('JARVIS_ROUTINE_ITEMS_DS') or 'e1640ede-1674-4fd4-b6cb-ccf7ed4f50f5'
+ROUTINE_LOG_DS = os.environ.get('JARVIS_ROUTINE_LOG_DS') or '22fe9031-5b32-4363-989a-b7e233a842ad'
+ROUTINE_ITEMS_URL = 'https://app.notion.com/p/8858ddf3ade34c58a433712859a05fdd'
+WEEKDAYS = '월화수목금토일'
+SLOT_ORDER = {'아침': 0, '낮': 1, '저녁': 2}
+ROUTINE_DAYS = 7   # 최근 며칠의 했는지 점
+_routine = {'data': None, 'today': ''}
+_routine_lock = threading.Lock()
+
+
+def notion_call(token, method, path, body=None, opener=None):
+    req = urllib.request.Request('https://api.notion.com/v1/' + path, method=method,
+                                 data=json.dumps(body).encode() if body is not None else None, headers={
+                                     'Authorization': 'Bearer ' + token, 'Notion-Version': NOTION_VERSION,
+                                     'Content-Type': 'application/json'})
+    return notion_open(req, opener)
+
+
+def query_all(token, ds, body, opener=None, pages=10):
+    rows, body = [], dict(body, page_size=100)
+    for _ in range(pages):
+        d = notion_call(token, 'POST', f'data_sources/{ds}/query', body, opener)
+        rows += [p for p in d.get('results') or [] if p.get('object') == 'page']
+        if not d.get('has_more'):
+            break
+        body['start_cursor'] = d.get('next_cursor')
+    return rows
+
+
+def _prop(p, name, kind):
+    v = (p.get('properties') or {}).get(name) or {}
+    return v.get(kind) if v.get('type') == kind else None
+
+
+def routine_item(p):
+    return {'id': p.get('id', '').replace('-', ''), 'name': ''.join(t.get('plain_text', '') for t in _prop(p, '이름', 'title') or []) or '(이름 없음)',
+            'slot': (_prop(p, '시간대', 'select') or {}).get('name', ''), 'days': [o.get('name', '') for o in _prop(p, '요일', 'multi_select') or []],
+            'order': _prop(p, '순서', 'number') or 0, 'note': ''.join(t.get('plain_text', '') for t in _prop(p, '설명', 'rich_text') or []),
+            'weekly': int(_prop(p, '주 횟수', 'number') or 0)}   # 0 = 요일마다, N = 이번 주(월~일) N번
+
+
+def routine_log(p):
+    rel = [str(r.get('id', '')).replace('-', '') for r in _prop(p, '항목', 'relation') or []]
+    return {'id': p.get('id', ''), 'url': p.get('url', ''), 'item': rel[0] if rel else '',
+            'name': ''.join(t.get('plain_text', '') for t in _prop(p, '이름', 'title') or []) or '(이름 없음)',
+            'date': ((_prop(p, '날짜', 'date') or {}).get('start') or '')[:10], 'done': bool(_prop(p, '완료', 'checkbox')),
+            'slot': (_prop(p, '시간대', 'select') or {}).get('name', '')}
+
+
+def routine_view(items, logs, today):
+    """오늘 줄(시간대·순서대로)과 항목별 최근 ROUTINE_DAYS 일의 했는지(done / miss / none, 오늘 안 한 것은 todo).
+    주 N회 항목은 이번 주(월~일) 한 횟수를 weekly 로 붙이고, 안 한 지난날은 miss 대신 rest. 오늘 n/m 에는 요일마다 하는 것만 센다."""
+    order = {i['id']: (SLOT_ORDER.get(i['slot'], 9), i['order'], i['name']) for i in items}
+    target = {i['id']: i.get('weekly') or 0 for i in items}
+    rows = sorted([dict(r) for r in logs if r['date'] == today],
+                  key=lambda r: order.get(r['item'], (SLOT_ORDER.get(r['slot'], 9), 99, r['name'])))
+    monday = (date.fromisoformat(today) - timedelta(days=date.fromisoformat(today).weekday())).isoformat()
+    for r in rows:
+        if target.get(r['item']):
+            r['weekly'] = {'target': target[r['item']],
+                           'count': sum(1 for x in logs if x['item'] == r['item'] and x['done'] and monday <= x['date'] <= today)}
+    d0 = date.fromisoformat(today)
+    days = [(d0 - timedelta(days=k)).isoformat() for k in range(ROUTINE_DAYS - 1, -1, -1)]
+    by = {(r['item'], r['date']): r for r in logs}
+    hist = {}
+    for r in rows:
+        idle = 'rest' if r.get('weekly') else 'miss'
+        hist[r['id']] = [('done' if by[(r['item'], d)]['done'] else 'todo' if d == today else idle) if (r['item'], d) in by else 'none'
+                         for d in days]
+    daily = [r for r in rows if not r.get('weekly')]
+    return {'rows': rows, 'days': days, 'hist': hist, 'done': sum(r['done'] for r in daily), 'total': len(daily)}
+
+
+def notion_routines(now=None, opener=None, refresh=False):
+    """오늘 루틴. 처음 한 번과 refresh, 날짜가 바뀌었을 때만 Notion 을 읽는다."""
+    now = time.time() if now is None else now
+    today = datetime.fromtimestamp(now, KST).date().isoformat()
+    with _routine_lock:
+        if _routine['data'] is not None and not refresh and _routine['today'] == today:
+            return _routine['data']
+        token = notion_token()
+        weekday = WEEKDAYS[date.fromisoformat(today).weekday()]
+        base = {'today': today, 'weekday': weekday, 'itemsUrl': ROUTINE_ITEMS_URL, 'error': ''}
+        if not token:
+            return dict(base, configured=False)
+        try:
+            items = [routine_item(p) for p in query_all(token, ROUTINE_ITEMS_DS, {'filter': {'property': '사용', 'checkbox': {'equals': True}}}, opener)]
+            since = (date.fromisoformat(today) - timedelta(days=ROUTINE_DAYS - 1)).isoformat()
+            logs = [routine_log(p) for p in query_all(token, ROUTINE_LOG_DS, {'filter': {'property': '날짜', 'date': {'on_or_after': since}}}, opener)]
+            have = {r['item'] for r in logs if r['date'] == today}
+            for it in items:   # 오늘 요일에 든 항목인데 오늘 기록이 없으면 만든다
+                if weekday not in it['days'] or it['id'] in have:
+                    continue
+                props = {'이름': {'title': [{'text': {'content': it['name']}}]}, '날짜': {'date': {'start': today}},
+                         '완료': {'checkbox': False}, '항목': {'relation': [{'id': it['id']}]}}
+                if it['slot']:
+                    props['시간대'] = {'select': {'name': it['slot']}}
+                logs.append(routine_log(notion_call(token, 'POST', 'pages', {'parent': {'type': 'data_source_id', 'data_source_id': ROUTINE_LOG_DS},
+                                                                            'properties': props}, opener)))
+                have.add(it['id'])
+            data = dict(base, configured=True, at=int(now * 1000), **routine_view(items, logs, today))
+            _routine['logs'], _routine['items'] = logs, items
+        except urllib.error.HTTPError as e:
+            why = {401: '토큰이 맞지 않음', 403: '권한 없음(통합에 콘텐츠 입력 기능을 켜야 오늘 루틴 줄을 만듦)', 404: '루틴 DB 를 못 찾음(통합 연결 확인)'}.get(e.code, '')
+            data = dict(_routine['data'] or {}, **base, configured=True, error=f'Notion {e.code} {why}'.strip())
+        except (OSError, ValueError) as e:
+            data = dict(_routine['data'] or {}, **base, configured=True, error='Notion 읽기 실패: ' + str(e)[:120])
+        _routine.update(data=data, today=today)
+        return data
+
+
+def routine_check(page_id, done, opener=None, now=None):
+    """루틴 기록 한 줄의 완료를 바꾼다. (상태 코드, 루틴 데이터 또는 {'error': …})."""
+    if not isinstance(page_id, str) or not PAGE_ID_RE.match(page_id) or not isinstance(done, bool):
+        return 400, {'error': 'id 와 done(true/false) 필요'}
+    token = notion_token()
+    if not token:
+        return 400, {'error': 'Notion 토큰 없음'}
+    try:
+        row = routine_log(notion_call(token, 'PATCH', f'pages/{page_id}', {'properties': {'완료': {'checkbox': done}}}, opener))
+    except urllib.error.HTTPError as e:
+        return 502, {'error': f'Notion {e.code} ' + {403: '쓰기 권한 없음', 404: '페이지를 못 찾음'}.get(e.code, '')}
+    except (OSError, ValueError) as e:
+        return 502, {'error': 'Notion 쓰기 실패: ' + str(e)[:120]}
+    now = time.time() if now is None else now
+    with _routine_lock:
+        logs = [x for x in _routine.get('logs') or [] if x['id'].replace('-', '') != page_id.replace('-', '')] + [row]
+        _routine['logs'] = logs
+        if _routine['data'] is not None:
+            today = _routine['today'] or datetime.fromtimestamp(now, KST).date().isoformat()
+            _routine['data'] = dict(_routine['data'], **routine_view(_routine.get('items') or [], logs, today))
+        return 200, _routine['data']

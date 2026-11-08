@@ -6,3 +6,5 @@ state/
 
 __pycache__/
 *.pyc
+
+./읽어볼내용.md

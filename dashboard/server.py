@@ -969,7 +969,10 @@ class Handler(BaseHTTPRequestHandler):
             body = None
         if not isinstance(body, dict):
             return self.send(400, {'error': 'JSON 본문 필요'})
-        code, out = jd.notion_update(body.get('id'), body.get('done'), body.get('date'))
+        if body.get('kind') == 'routine':
+            code, out = jd.routine_check(body.get('id'), body.get('done'))
+        else:
+            code, out = jd.notion_update(body.get('id'), body.get('done'), body.get('date'))
         return self.send(code, out)
 
     def do_GET(self):
@@ -1004,6 +1007,7 @@ class Handler(BaseHTTPRequestHandler):
                 out = todos(rows)   # 세션 작업 목록은 아래 접힌 칸으로
                 notion = jd.notion_todos(refresh=q.get('refresh') == '1')   # JARVIS: 할 일 탭 본문은 Notion 할일 DB, 새로고침 버튼일 때만 다시 읽음
                 out['notion'] = notion
+                out['routine'] = jd.notion_routines(refresh=q.get('refresh') == '1')   # 맨 위 오늘 루틴
                 if notion.get('sections') is not None:
                     out['counts'] = jd.notion_counts(notion)
                 return self.send(200, out)

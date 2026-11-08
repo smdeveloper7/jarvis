@@ -489,8 +489,11 @@ pages = [page('p1', '오늘 끝남', True, '2026-11-08'), page('p2', '오늘 남
          page('q1', '다른 프로젝트 밀림', False, '2026-11-01', other=True)]
 g = jd.group_todos([jd.notion_row(p) for p in pages], '2026-11-08')
 names = {k: [x['title'] for x in v] for k, v in g.items()}
-assert names == {'today': ['오늘 남음', '오늘 끝남'], 'week': ['수요일'], 'overdue': ['다른 프로젝트 밀림', '지난주 KSM'],
-                 'overdue_other': ['지난달 프로젝트 없음'], 'undated': ['날짜 없는 KSM']}, names
+assert names == {'today': ['오늘 남음', '오늘 끝남'], 'week': ['수요일'], 'next': ['다음 주'], 'overdue': ['다른 프로젝트 밀림', '지난주 KSM'],
+                 'overdue_other': ['지난달 프로젝트 없음'], 'undated': ['날짜 없는 KSM'], 'done': ['이번 주 끝남']}, names
+span = jd.notion_row(page('s1', '기간', day='2026-11-06'))
+span['end'] = '2026-11-10'
+assert [x['title'] for x in jd.group_todos([span], '2026-11-08')['today']] == ['기간']   # 오늘이 기간 안이면 오늘
 assert jd.notion_row(page('x1', 'a', ksm=True))['projects'] == [KSM]
 assert jd.notion_counts({'sections': g}) == {'in_progress': 1, 'pending': 1}
 
@@ -519,9 +522,11 @@ jd._notion.update(at=0, data=None)
 n = jd.notion_todos(now, opener)
 assert n['configured'] and not n['error'] and n['today'] == '2026-11-08' and len(sent) == 2, (n, sent)
 assert sent[0][0].endswith('/v1/data_sources/' + jd.NOTION_DS + '/query') and sent[0][1] == jd.NOTION_VERSION
-assert sent[0][2]['filter']['or'][1]['date'] == {'on_or_after': '2026-11-02'} and sent[1][2]['start_cursor'] == 'c2'
+assert sent[0][2]['filter']['and'][0]['or'][1]['date'] == {'on_or_after': '2026-10-26'}
+assert sent[0][2]['filter']['and'][1]['or'][0]['relation'] == {'contains': '3fb3cf1a-c9b3-8081-8136-ed223027e043'} and sent[1][2]['start_cursor'] == 'c2'
 assert [x['title'] for x in n['sections']['week']] == ['수요일']
-assert n['projects'] == {KSM: 'KSM', 'aaaa': 'KSM'}, n['projects']
+assert n['projects'] == {KSM: 'KSM'}, n['projects']   # 기본은 KSM 프로젝트만
+assert [x['title'] for x in n['sections']['overdue']] == ['지난주 KSM'] and n['sections']['overdue_other'] == []
 assert jd.notion_todos(now + 3600, opener) is n and len(sent) == 2   # cached until refresh
 
 
@@ -561,6 +566,87 @@ code, out = jd.notion_update(pages[2]['id'], day='2026-11-08', opener=lambda req
     jd.urllib.error.HTTPError(req.full_url, 403, 'no', {}, None)), now=now)
 assert code == 502 and '쓰기 권한' in out['error'], out
 del os.environ['NOTION_TOKEN']
+
+# 루틴: 오늘 요일(2026-11-08 일요일)에 든 항목 중 기록 없는 것만 만들고, 최근 7일 점과 완료 체크
+def ritem(i, name, slot, days, order):
+    return {'object': 'page', 'id': i, 'properties': {'이름': {'type': 'title', 'title': [{'plain_text': name}]},
+            '시간대': {'type': 'select', 'select': {'name': slot}}, '요일': {'type': 'multi_select', 'multi_select': [{'name': d} for d in days]},
+            '순서': {'type': 'number', 'number': order}, '설명': {'type': 'rich_text', 'rich_text': []}}}
+
+
+def rlog(i, item, name, day, done, slot):
+    return {'object': 'page', 'id': i, 'url': 'u/' + i, 'properties': {'이름': {'type': 'title', 'title': [{'plain_text': name}]},
+            '날짜': {'type': 'date', 'date': {'start': day}}, '완료': {'type': 'checkbox', 'checkbox': done},
+            '시간대': {'type': 'select', 'select': {'name': slot}}, '항목': {'type': 'relation', 'relation': [{'id': item}]}}}
+
+
+A, B, C = 'a' * 32, 'b' * 32, 'c' * 32
+items = [ritem(A, '아침 확인', '아침', ['월', '일'], 1), ritem(B, '다음 주 계획', '저녁', ['일'], 8), ritem(C, '평일만', '아침', ['월', '화'], 2)]
+logs = [rlog('11111111-1111-1111-1111-111111111111', A, '아침 확인', '2026-11-08', False, '아침'),
+        rlog('22222222-2222-2222-2222-222222222222', A, '아침 확인', '2026-11-02', True, '아침')]
+calls = []
+
+
+def ropener(req, timeout):
+    body = json.loads(req.data) if req.data else None
+    calls.append((req.get_method(), req.full_url.split('/v1/')[1], body))
+    if req.full_url.endswith(jd.ROUTINE_ITEMS_DS + '/query'):
+        return FakeResp(json.dumps({'results': items, 'has_more': False}).encode())
+    if req.full_url.endswith(jd.ROUTINE_LOG_DS + '/query'):
+        return FakeResp(json.dumps({'results': logs, 'has_more': False}).encode())
+    if req.get_method() == 'POST' and req.full_url.endswith('/pages'):
+        return FakeResp(json.dumps(rlog('33333333-3333-3333-3333-333333333333', B, '다음 주 계획', '2026-11-08', False, '저녁')).encode())
+    p = rlog('11111111-1111-1111-1111-111111111111', A, '아침 확인', '2026-11-08', True, '아침')   # PATCH 완료
+    return FakeResp(json.dumps(p).encode())
+
+
+os.environ['NOTION_TOKEN'] = 'test-token'
+jd._routine.update(data=None, today='')
+rt = jd.notion_routines(now, ropener)
+made = [c for c in calls if c[0] == 'POST' and c[1] == 'pages']
+assert len(made) == 1 and made[0][2]['properties']['항목'] == {'relation': [{'id': B}]}, made   # A 는 이미 있고 C 는 일요일 아님
+assert made[0][2]['properties']['날짜'] == {'date': {'start': '2026-11-08'}} and rt['weekday'] == '일'
+assert [r['name'] for r in rt['rows']] == ['아침 확인', '다음 주 계획'] and (rt['done'], rt['total']) == (0, 2)
+assert rt['days'][0] == '2026-11-02' and rt['days'][-1] == '2026-11-08'
+assert rt['hist']['11111111-1111-1111-1111-111111111111'] == ['done', 'none', 'none', 'none', 'none', 'none', 'todo']
+assert jd.notion_routines(now + 60, ropener) is rt and len(calls) == 3   # 같은 날은 다시 읽지 않는다
+code, rt2 = jd.routine_check('11111111-1111-1111-1111-111111111111', True, ropener, now)
+assert code == 200 and (rt2['done'], rt2['total']) == (1, 2) and rt2['hist']['11111111-1111-1111-1111-111111111111'][-1] == 'done'
+assert jd.routine_check('nope', True)[0] == 400 and jd.routine_check(pages[2]['id'], 'yes')[0] == 400
+# 주 N회: 이번 주 한 횟수, 지난날 안 한 것은 rest, 오늘 n/m 에서 뺀다
+witems = [jd.routine_item(dict(ritem(A, '헬스', '', ['일', '토'], 1), properties=dict(ritem(A, '헬스', '', ['일', '토'], 1)['properties'], **{'주 횟수': {'type': 'number', 'number': 3}})))]
+wlogs = [jd.routine_log(rlog('w1', A, '헬스', '2026-11-08', False, '')), jd.routine_log(rlog('w2', A, '헬스', '2026-11-07', True, '')),
+         jd.routine_log(rlog('w3', A, '헬스', '2026-11-03', True, '')), jd.routine_log(rlog('w4', A, '헬스', '2026-11-01', True, ''))]
+wv = jd.routine_view(witems, wlogs, '2026-11-08')
+assert wv['rows'][0]['weekly'] == {'target': 3, 'count': 2} and (wv['done'], wv['total']) == (0, 0), wv   # 11-01 은 지난주
+assert witems[0]['weekly'] == 3 and wv['hist']['w1'] == ['none', 'done', 'none', 'none', 'none', 'done', 'todo']
+del os.environ['NOTION_TOKEN']
+
+tries = []
+
+
+def slow(req, timeout):
+    tries.append(timeout)
+    raise TimeoutError('The read operation timed out')
+
+
+try:
+    jd.notion_open(jd.urllib.request.Request('https://api.notion.com/v1/x'), slow)
+    raise AssertionError('timeout not raised')
+except TimeoutError:
+    pass
+assert tries == [jd.NOTION_TIMEOUT, jd.NOTION_TIMEOUT], tries
+ok_after = []
+
+
+def flaky(req, timeout):
+    ok_after.append(1)
+    if len(ok_after) == 1:
+        raise TimeoutError('slow')
+    return FakeResp(b'{"ok": 1}')
+
+
+assert jd.notion_open(jd.urllib.request.Request('https://api.notion.com/v1/x'), flaky) == {'ok': 1} and len(ok_after) == 2
 
 missing = [n for n, _ in server.STATIC.values() if not os.path.isfile(os.path.join(server.ROOT, n))]
 assert not missing, missing   # every page and vendor file the server hands out is in the folder

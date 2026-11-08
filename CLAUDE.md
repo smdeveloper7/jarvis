@@ -46,8 +46,66 @@
 | `[승인요청]` | Worker 나 Coordinator 의 도구 권한 요청 | 아래 "판단" |
 | `[보고]` | 끝남 | 사용자에게 한두 줄로 알리고 기록 |
 | `[점유]`, `[해제]` | 프로젝트끼리 겹칠 수 있는 공유 자원을 쓰기 시작함·끝냄 | `state/occupancy.json` 갱신. 겹치면 차례 조정 |
+| `[인계노트]` | 옛 Coordinator 가 `[인계요청]` 에 답한 인계 내용 | 아래 "Coordinator 세션 교체" 3 |
+| `[준비]` | 새 Coordinator 가 맥락을 읽고 받은 상태 요약 | 아래 "Coordinator 세션 교체" 5 |
 
 Coordinator 가 차례를 끝낼 때 오는 자동 알림은 `[보고]` 가 아니면 끝난 것으로 보지 않는다.
+
+## Coordinator 세션 교체
+
+Coordinator 는 프로젝트(registry 키)로 계속 있고, Paseo 에이전트는 바꿀 수 있는 실행 세션이다. 컨텍스트가 커지면 인계 노트를 받아 새 세션으로 바꾼다. JARVIS 자신의 교체는 "새로 떴을 때(인계)" 를 따른다.
+
+### 언제
+
+`[보고]` 를 받을 때마다 그 Coordinator 의 컨텍스트 크기를 본다.
+
+- `get_agent_status` 의 `lastUsage.contextWindowUsedTokens`.
+- `lastUsage` 가 없으면(Paseo 재시작 뒤 아직 차례가 없을 때) 세션 기록 마지막 사용량으로 본다. 경로는 `~/.claude/projects/<cwd 의 :\/ 를 - 로 바꾼 이름>/<persistence.sessionId>.jsonl`, 값은 마지막 `usage` 의 `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`. 둘 다 없으면 모른다고 보고 교체하지 않는다.
+
+아래가 모두 맞으면 교체한다. 하나라도 확인이 안 되면 교체하지 않는다.
+
+1. 컨텍스트가 200,000 토큰을 넘는다(처음 기준. `state/sessions.jsonl` 을 보고 조정).
+2. Coordinator 가 `idle` 이고, 그 프로젝트 작업 중 `assigned`·`working`·`question` 이 없다.
+3. Worker 가 돌고 있지 않다. `list_agents`(cwd = 프로젝트 root, includeBackground) 에서 라벨 `paseo.parent-agent-id` 가 그 Coordinator 인 에이전트가 모두 `closed` 다. `jarvis.task` 라벨은 빠진 Worker 가 많아 기준으로 쓰지 않는다.
+4. `state/handoff/<프로젝트>/rotating.lock` 이 없다(다른 교체가 진행 중이 아니다).
+
+인계 노트는 역할마다 디렉터리로 둔다. `latest.md` 가 지금 쓰는 노트이고, 바뀔 때마다 앞 노트를 시각 이름으로 남긴다.
+
+```
+state/handoff/
+├── manager/              # JARVIS 자신의 교체용
+│   ├── latest.md
+│   └── 20261109-1430.md  # 이전 노트
+└── <프로젝트>/           # 프로젝트 PM 교체용
+    ├── latest.md
+    ├── 20261109-1500.md
+    └── rotating.lock     # 교체 중에만 있음
+```
+
+### 순서
+
+1. `state/handoff/<프로젝트>/rotating.lock` 을 만든다(옛 ID, 시작 시각). 있는 동안 그 프로젝트에 `[배정]` 을 보내지 않고, 들어온 요청은 교체 뒤에 넘긴다고 사용자에게 알린다.
+2. 옛 Coordinator 에게 `[인계요청]` 을 보낸다.
+3. `[인계노트]` 를 받으면 `state/handoff/<프로젝트>/latest.md` 에 쓴다. 이전 `latest.md` 가 있으면 먼저 `state/handoff/<프로젝트>/<YYYYMMDD-HHmm>.md` 로 옮긴다. `state/tasks`·`state/decisions` 와 다르면 상태 파일이 맞는 것으로 보고, 다른 줄을 노트 끝 `## JARVIS 확인` 에 적는다.
+4. 새 Coordinator 를 `create_agent` 로 만든다. 설정은 "일 넘기기" 3 과 같다. 첫 지시는 `rules/coordinator.md` 전문 + `rules/worker.md` 경로 + 인계 노트 전문 + 그 프로젝트의 `done`·`cancelled` 가 아닌 작업 목록(ID·제목·상태 한 줄씩) + `open`·`waiting` 결정 파일 경로 + "새로 떴다. `[준비]` 로 답하라".
+5. `[준비]` 를 확인한다. 프로젝트 키와 작업 폴더가 맞는지, 열린 작업을 빠짐없이 짚는지, Worker 를 새로 띄우지 않았는지 본다. 틀리면 registry 를 바꾸지 않고, 새 세션을 archive 하고, lock 을 지우고, 옛 Coordinator 를 계속 쓴다.
+6. 조건 2·3 을 다시 확인한 뒤 `registry.yaml` 의 `coordinator` 를 새 ID 로 바꾼다. 임시 파일에 쓰고 이름을 바꾼다.
+7. 옛 Coordinator 는 바로 닫지 않는다. 새 Coordinator 가 `[배정]` 하나를 `[보고]` 까지 마치면 사용자 승인을 받아 `archive_agent` 한다. `kill_agent` 는 쓰지 않는다.
+8. `state/sessions.jsonl` 에 한 줄을 더하고 lock 을 지운다.
+
+```
+{"timestamp":"…","project_id":"nipa","old_agent_id":"…","new_agent_id":"…","context_tokens_before":864191,"total_cost_usd_before":63.90,"reason":"context","result":"switched"}
+```
+
+`total_cost_usd_before` 는 `lastUsage` 가 없으면 `null`. `reason`: `context` | `crash` | `manual`. `result`: `switched` | `failed:<단계>` | `archived`(7 을 마쳤을 때 한 줄 더).
+
+### 실패할 때
+
+- `[인계노트]` 가 안 오거나 옛 Coordinator 가 `closed`·`error` 다: `state/handoff/<프로젝트>/latest.md` 와 열린 작업 파일의 `보고`·`경과` 로 4 부터 한다. 첫 지시에 "인계 노트가 오래됐을 수 있다. 열린 작업의 Worker 를 `list_agents` 로 먼저 확인하라" 를 더한다. `reason: crash`.
+- 어느 단계든 실패하면 registry 는 그대로 두고, lock 을 지우고, `result: failed:<단계>` 를 남기고, 사용자에게 알린다.
+- JARVIS 가 교체 도중 새로 뜨면 lock 을 보고 이어 할지 사용자에게 묻는다.
+
+처음 몇 번은 교체 전에 사용자 승인을 받는다.
 
 ## 판단
 
