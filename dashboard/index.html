@@ -1441,7 +1441,7 @@ const refEl = r => /^https?:\/\//.test(r)
 
 // a decision reads top down: its state and dates as chips, the question as one large line, who raised it,
 // then the detail at a reading measure and the options as a numbered list; open ones show their detail unfolded
-const DEC_STATE = { now: '열림', waiting: '미룸', decided: '정해짐' }
+const DEC_STATE = { now: '열림', stale: '작업 끝남', waiting: '미룸', decided: '정해짐' }
 const closedDetails = new Set()
 function decCard(d, sec) {
   const w = d.who || {}
@@ -1479,11 +1479,12 @@ function renderDecisions() {
   put(scroll,
     !dec ? h('div', { class: 'empty' }, '불러오는 중…') : null,
     d.error ? h('div', { class: 'banner' }, `decisions.json 을 읽지 못했습니다(${d.error}). 떠 있는 세션의 질문만 보입니다.`) : null,
-    dec ? [['now', '지금 결정 필요'], ['waiting', '미뤄 둔 것'], ['decided', '결정됨']].map(([key, title]) => {
+    dec ? [['now', '지금 결정 필요'], ['stale', '작업은 끝났는데 안 정한 것'], ['waiting', '미뤄 둔 것'], ['decided', '결정됨']].filter(([key]) => key !== 'stale' || (d.stale || []).length).map(([key, title]) => {
       const list = d[key] || []
       const fold = key === 'decided', open = !fold || decidedOpen
       const head = [h('h2', {}, title), h('span', { class: 'num' }, list.length),
         key === 'now' && asking ? h('span', { class: 'hint' }, `세션이 묻는 중 ${asking}`) : null,
+        key === 'stale' ? h('span', { class: 'hint' }, 'JARVIS 에게 정하기 · 미루기 · 필요 없음을 말해 주세요') : null,
         fold ? h('span', { class: 'chev', 'aria-hidden': 'true' }, open ? '접기' : '펼치기') : null]
       return h('section', { class: 'sec', 'data-sec': key },
         fold ? h('button', {
@@ -1502,7 +1503,7 @@ async function pollDecisions() {
     if (!r.ok) throw new Error(r.status)
     if (text === decKey) return   // unchanged: keep open details and scroll as they are
     decKey = text; dec = JSON.parse(text)
-  } catch (err) { if (!dec) dec = { now: [], waiting: [], decided: [], error: '서버 응답 없음: ' + err.message } }
+  } catch (err) { if (!dec) dec = { now: [], stale: [], waiting: [], decided: [], error: '서버 응답 없음: ' + err.message } }
   if (!cur) { renderTop(); if (page === 'decisions') renderDecisions() }
 }
 
@@ -1703,8 +1704,8 @@ function select(sel) {
 // turn, and each route arcs above it; 평면 looks straight down. Edges bend left of travel so the two directions part.
 const RING = 16
 let flowView = store.get('flowView', 'orbit') === 'flat' ? 'flat' : 'orbit'
-const cam = { yaw: -0.5, pitch: 0.62 }
-try { const c = store.get('flowCam', null); if (c && isFinite(c.yaw) && isFinite(c.pitch)) Object.assign(cam, { yaw: c.yaw, pitch: c.pitch }) } catch (e) {}
+const cam = { yaw: 0, pitch: 0.9 }   // 정면에서: JARVIS 가 위
+try { const c = store.get('flowCam2', null); if (c && isFinite(c.yaw) && isFinite(c.pitch)) Object.assign(cam, { yaw: c.yaw, pitch: c.pitch }) } catch (e) {}
 const PITCH = [0.45, 1.45]   // radians above the plane: flat on the edge to nearly straight down
 let dragged = false   // a drag that turned the orbit is not a click
 const unit = (p, q) => { const l = Math.hypot(q.x - p.x, q.y - p.y) || 1; return { x: (q.x - p.x) / l, y: (q.y - p.y) / l } }
@@ -1713,19 +1714,38 @@ function graphBox(f, W) {
   const H = Math.round(Math.min(500, Math.max(360, W * 0.7)))
   const load = n => n.sent + n.got
   const hub = f.nodes.find(n => n.name === f.hub) || [...f.nodes].sort((a, b) => load(b) - load(a))[0]
+  // JARVIS 를 맨 위에, 그 아래 호에 Coordinator, 더 아래 큰 호에 각 Coordinator 의 Worker 를 그 방향에 모은다
   const rest = f.nodes.filter(n => n !== hub)
-    .sort((a, b) => (GROUP_RANK[a.group] ?? 9) - (GROUP_RANK[b.group] ?? 9) || load(b) - load(a) || a.name.localeCompare(b.name))
-  const named = new Set([...rest].sort((a, b) => load(b) - load(a)).slice(0, RING).map(n => n.name))
-  const outer = rest.filter(n => named.has(n.name)), inner = rest.filter(n => !named.has(n.name))
-  const world = new Map([[hub.name, { x: 0, y: 0, r: 18 }]])   // the plane: outer ring radius 1
-  outer.forEach((n, i) => {
-    const a = -Math.PI / 2 + 2 * Math.PI * i / outer.length
-    world.set(n.name, { x: Math.cos(a), y: Math.sin(a), r: 7 + Math.min(9, Math.sqrt(load(n)) * 1.3) })
+  const coords = rest.filter(n => n.group === 'resident').sort((a, b) => (a.lane || a.name).localeCompare(b.lane || b.name))
+  const kids = new Map(coords.map(c => [c.name, []])), loose = []
+  const talk = (x, y) => f.edges.reduce((s, e) => s + ((e.from === x && e.to === y) || (e.from === y && e.to === x) ? e.count : 0), 0)
+  for (const n of rest.filter(n => n.group !== 'resident')) {   // 부모: 메시지를 가장 많이 주고받은 Coordinator, 없으면 같은 방
+    let best = null, most = 0
+    for (const c of coords) { const k = talk(n.name, c.name); if (k > most) { most = k; best = c } }
+    best = best || coords.find(c => n.lane && c.lane === n.lane)
+    ;(best ? kids.get(best.name) : loose).push(n)
+  }
+  const fans = coords.map(c => ({ c, ws: kids.get(c.name) }))
+  if (loose.length) fans.push({ c: null, ws: loose })
+  for (const g of fans) g.ws.sort((a, b) => (a.task || '').localeCompare(b.task || '') || a.name.localeCompare(b.name))   // 같은 작업 번호끼리 붙인다
+  const workers = fans.flatMap(g => g.ws)
+  const named = new Set([...coords, ...[...workers].sort((a, b) => load(b) - load(a)).slice(0, RING)].map(n => n.name))
+  const inner = workers.filter(n => !named.has(n.name))
+  const TOP = { x: 0, y: -0.95 }, R1 = 0.72, R2 = 1.75, SPAN = Math.asin(1.08 / R2)   // 아래쪽 ±SPAN 부채꼴
+  const at = (r, a) => ({ x: TOP.x + r * Math.sin(a), y: TOP.y + r * Math.cos(a) })
+  const world = new Map([[hub.name, { x: TOP.x, y: TOP.y, r: 18 }]])
+  const slots = fans.reduce((s, g) => s + Math.max(1, g.ws.length), 0) || 1
+  let k = 0
+  fans.forEach(g => {
+    const w = Math.max(1, g.ws.length), a0 = -SPAN + 2 * SPAN * k / slots, a1 = -SPAN + 2 * SPAN * (k + w) / slots
+    k += w
+    if (g.c) world.set(g.c.name, Object.assign(at(R1, -(a0 + a1) / 2), { r: 9 + Math.min(7, Math.sqrt(load(g.c))) }))
+    g.ws.forEach((n, i) => {
+      const a = -(a0 + (a1 - a0) * (i + 0.5) / g.ws.length), dot = !named.has(n.name)
+      world.set(n.name, Object.assign(at(R2, a), dot ? { r: 4.5, dot: true } : { r: 6 + Math.min(6, Math.sqrt(load(n))), low: i % 2 }))
+    })
   })
-  inner.forEach((n, i) => {
-    const a = -Math.PI / 2 + 2 * Math.PI * (i + 0.5) / inner.length
-    world.set(n.name, { x: 0.58 * Math.cos(a), y: 0.58 * Math.sin(a), r: 4.5, dot: true })
-  })
+  const outer = [...coords, ...workers.filter(n => named.has(n.name))]
   const orbit = flowView === 'orbit', sel = flowSel
   const svg = sv('svg', {
     viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'group', tabindex: 0,
@@ -1745,12 +1765,12 @@ function graphBox(f, W) {
       const xr = x * cs - y * sn, yr = x * sn + y * cs, k = 1 + 0.16 * yr * cp   // nearer the viewer, a little larger
       return { x: cx + xr * Rx * k, y: cy + yr * V * k - z * lift * k, k, d: yr }
     }
-    const pos = new Map([...world].map(([name, p]) => { const q = proj(p.x, p.y); return [name, Object.assign(q, { r: p.r * q.k, dot: p.dot })] }))
+    const pos = new Map([...world].map(([name, p]) => { const q = proj(p.x, p.y); return [name, Object.assign(q, { r: p.r * q.k, dot: p.dot, low: p.low })] }))
     const f1 = v => v.toFixed(1)
-    const ring = r => 'M' + Array.from({ length: 73 }, (_, i) => { const a = i / 72 * 2 * Math.PI, q = proj(r * Math.cos(a), r * Math.sin(a)); return f1(q.x) + ',' + f1(q.y) }).join(' L')
+    const arc = r => 'M' + Array.from({ length: 49 }, (_, i) => { const q = proj(TOP.x + r * Math.sin(-SPAN - 0.12 + (2 * SPAN + 0.24) * i / 48), TOP.y + r * Math.cos(-SPAN - 0.12 + (2 * SPAN + 0.24) * i / 48)); return f1(q.x) + ',' + f1(q.y) }).join(' L')
     const ground = sv('g', { 'aria-hidden': 'true' },
-      sv('path', { class: 'odisc', d: ring(1.16) + 'Z' }),
-      [1, 0.58].map(r => sv('path', { class: 'oring', d: ring(r) })))   // the two orbits the sessions sit on
+      sv('path', { class: 'odisc', d: (() => { const t = proj(TOP.x, TOP.y); return 'M' + f1(t.x) + ',' + f1(t.y) + ' L' + arc(R2 + 0.14).slice(1) + 'Z' })() }),   // 부채꼴 바닥
+      [R1, R2].map(r => sv('path', { class: 'oring', d: arc(r) })))   // Coordinator 호, Worker 호
     const edges = f.edges.map(e => {
       const A = world.get(e.from), B = world.get(e.to), a = pos.get(e.from), b = pos.get(e.to)
       if (!A || !B || A === B) return null
@@ -1791,7 +1811,7 @@ function graphBox(f, W) {
         onclick(ev) { ev.stopPropagation(); pick() },
         onkeydown(ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.stopPropagation(); pick() } }
       }, sv('title', {}, nodeTip(n)), sv('circle', { r: f1(p.r) }),
-        sv('text', { x: f1(tx), y: f1(p.r + 15), 'text-anchor': anchor, class: p.dot && !on ? 'hover' : null }, n.name.length > fit ? n.name.slice(0, fit - 1) + '…' : n.name))
+        sv('text', { x: f1(tx), y: f1(p.low ? -(p.r + 6) : p.r + 15), 'text-anchor': anchor, class: p.dot && !on ? 'hover' : null }, n.name.length > fit ? n.name.slice(0, fit - 1) + '…' : n.name))
     })
     const focused = svg.contains(document.activeElement) ? document.activeElement.getAttribute('data-name') : null
     put(svg, ground, edges, nodes)
@@ -1801,7 +1821,7 @@ function graphBox(f, W) {
 
   const box = h('div', { class: 'graph' + (orbit ? ' orbit' : '') }, svg,
     orbit ? h('div', { class: 'ghelp', 'aria-hidden': 'true' }, '끌어서 돌리기') : null,
-    inner.length ? h('div', { class: 'gnote' }, `건수가 많은 ${RING}개만 이름을 붙였습니다. 안쪽 점 ${inner.length}개는 올리거나 누르면 이름이 보입니다.`) : null)
+    inner.length ? h('div', { class: 'gnote' }, `Worker 는 건수가 많은 ${RING}개만 이름을 붙였습니다. 작은 점 ${inner.length}개는 올리거나 누르면 이름이 보입니다.`) : null)
   if (!orbit) return box
   let start = null, raf = 0
   const turn = (yaw, pitch) => {
@@ -1819,13 +1839,13 @@ function graphBox(f, W) {
   const end = () => {
     if (!start) return
     start = null; box.classList.remove('drag')
-    if (dragged) { store.set('flowCam', cam); setTimeout(() => { dragged = false }, 0) }   // the click after a drag is swallowed
+    if (dragged) { store.set('flowCam2', cam); setTimeout(() => { dragged = false }, 0) }   // the click after a drag is swallowed
   }
   svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end)
   svg.addEventListener('keydown', ev => {
     const step = { ArrowLeft: [-0.2, 0], ArrowRight: [0.2, 0], ArrowUp: [0, 0.12], ArrowDown: [0, -0.12] }[ev.key]
     if (!step) return
-    ev.preventDefault(); turn(cam.yaw + step[0], cam.pitch + step[1]); store.set('flowCam', cam)
+    ev.preventDefault(); turn(cam.yaw + step[0], cam.pitch + step[1]); store.set('flowCam2', cam)
   })
   return box
 }

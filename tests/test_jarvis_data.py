@@ -53,6 +53,20 @@ try:
     with open(os.path.join(J, 'state', 'tasks', 'W-20261106-02.md'), 'w', encoding='utf-8') as f:
         f.write('---\nid: W-20261106-02\nproject: nipa\ntitle: 고장확률 수정\nstatus: question\nverified: none\nrelease: dev_only\n'
                 'updated_at: 2026-11-06T19:22:00+09:00\n---\n## 보고\n원인 확인 | 결정 대기\n')
+    # 작업이 끝났는데 열린 결정은 stale, dropped 는 '필요 없어짐'
+    for n, st in (('02', 'open'), ('03', 'dropped')):
+        with open(os.path.join(J, 'state', 'decisions', 'D-20261106-%s.md' % n), 'w', encoding='utf-8') as f:
+            f.write('---\nid: D-20261106-%s\ntask: W-20261106-02\nstatus: %s\n---\n## 질문\nq\n' % (n, st))
+    st = {d['id']: d for d in jd.decisions(J)}
+    assert st['D-20261106-02']['status'] == 'open', st   # 작업이 아직 question
+    with open(os.path.join(J, 'state', 'tasks', 'W-20261106-02.md'), encoding='utf-8') as f:
+        txt = f.read()
+    with open(os.path.join(J, 'state', 'tasks', 'W-20261106-02.md'), 'w', encoding='utf-8') as f:
+        f.write(txt.replace('status: question', 'status: done'))
+    st = {d['id']: d for d in jd.decisions(J)}
+    assert st['D-20261106-02']['status'] == 'stale' and st['D-20261106-03']['decision'] == '필요 없어짐', st
+    with open(os.path.join(J, 'state', 'tasks', 'W-20261106-02.md'), 'w', encoding='utf-8') as f:
+        f.write(txt)
     md = jd.status_markdown(J)
     assert '| `W-20261106-02` | 고장확률 수정 | 질문 중 | - | 대기 | 원인 확인 / 결정 대기 |' in md, md
     assert jd.iso_ms('2026-11-06T10:00:00Z') == jd.iso_ms('2026-11-06T19:00:00+09:00')

@@ -355,7 +355,7 @@ def office(jarvis, rows):
         if r.get('role') in ('coordinator', 'worker') and r.get('lane') and r['lane'] not in seen:
             seen.add(r['lane'])
             projects.append({'key': r['lane'], 'name': r['lane']})
-    pending = sum(1 for d in decisions(jarvis) if d['status'] not in ('waiting', 'decided'))
+    pending = sum(1 for d in decisions(jarvis) if d['status'] not in ('waiting', 'decided', 'dropped', 'stale'))
     pending += sum(1 for r in rows if r.get('state') == 'blocked')
     return {'boss': boss_name(jarvis), 'projects': projects, 'pending': pending}
 
@@ -400,6 +400,11 @@ def section_text(body, title):
 def decisions(jarvis):
     """lanekeeper decisions.json 의 items 모양으로. 기준으로 정한 것은 결정 칸에 기준 번호를 붙인다."""
     items = []
+    task_st = {}
+    for p in glob.glob(os.path.join(jarvis, 'state', 'tasks', '*.md')):
+        m, _ = frontmatter(p)
+        if m.get('id'):
+            task_st[m['id']] = m.get('status') or ''
     for p in sorted(glob.glob(os.path.join(jarvis, 'state', 'decisions', '*.md'))):
         meta, body = frontmatter(p)
         q = section_text(body, '질문')
@@ -411,7 +416,12 @@ def decisions(jarvis):
         elif meta.get('decided_by') == 'user':
             dec = f"사용자: {dec}".strip()
         refs = [x for x in (meta.get('task'), meta.get('project')) if x]
-        items.append({'id': meta.get('id', ''), 'status': meta.get('status') or 'open', 'title': title,
+        st = meta.get('status') or 'open'
+        if st == 'open' and task_st.get(meta.get('task')) in TASK_CLOSED:
+            st = 'stale'   # 작업은 끝났는데 결정은 열린 채: 지금 결정 필요에서 빼고 따로 보인다
+        if st == 'dropped' and not dec:
+            dec = '필요 없어짐'
+        items.append({'id': meta.get('id', ''), 'status': st, 'title': title,
                       'detail': '\n\n'.join(x for x in (q, why) if x), 'options': meta.get('options') or [],
                       'source': meta.get('project') or '', 'task': meta.get('task') or '',
                       'raised': meta.get('raised_at') or '', 'until': meta.get('until') or '',
@@ -442,6 +452,7 @@ def occupancy(jarvis):
     return {'updated_at': d.get('updated_at') or '', 'items': items}
 
 
+TASK_CLOSED = ('done', 'cancelled')
 STATUS_KO = {'assigned': '배정됨', 'working': '진행 중', 'question': '질문 중', 'done': '끝남', 'cancelled': '취소'}
 VERIFIED_KO = {'confirmed': '확인함', 'reported': '보고만', 'none': '-'}
 

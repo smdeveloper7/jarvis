@@ -486,7 +486,7 @@ def merge_decisions(items, rows, names):
     def lst(v):
         return [str(x) for x in v] if isinstance(v, list) else [str(v)] if v else []
 
-    out = {'now': [], 'waiting': [], 'decided': []}
+    out = {'now': [], 'stale': [], 'waiting': [], 'decided': []}
     for a in rows:
         if a.get('state') == 'blocked' and a.get('needs'):
             out['now'].append({'live': True, 'title': a['needs'], 'source': a.get('name') or '',
@@ -497,13 +497,15 @@ def merge_decisions(items, rows, names):
              if i.get(k) not in (None, '')}
         d.update(options=lst(i.get('options')), refs=lst(i.get('refs')), who=who(d.get('source', '')))
         st = i.get('status')
-        out[st if st in ('waiting', 'decided') else 'now'].append(d)   # unknown status still needs a look
+        st = 'decided' if st == 'dropped' else st   # 필요 없어져 닫은 것은 결정됨에
+        out[st if st in ('stale', 'waiting', 'decided') else 'now'].append(d)   # unknown status still needs a look
     # sessions asking right now first (latest activity first), then open items newest raised first
     out['now'].sort(key=lambda d: d.get('raised', ''), reverse=True)
     out['now'].sort(key=lambda d: (not d.get('live'), -(d.get('at') or 0)))
     # dated deadlines first (soonest), then open-ended ones; newest raised first within each
     out['waiting'].sort(key=lambda d: d.get('raised', ''), reverse=True)
     out['waiting'].sort(key=lambda d: (0, d['until']) if re.match(r'\d{4}-\d\d-\d\d', d.get('until', '')) else (1, ''))
+    out['stale'].sort(key=lambda d: d.get('raised', ''), reverse=True)
     out['decided'].sort(key=lambda d: d.get('decided_at', ''), reverse=True)
     return out
 

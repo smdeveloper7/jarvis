@@ -101,7 +101,7 @@ release: none                 # none | dev_only(운영 반영 대기) | released
 id: D-20261106-01
 task: W-20261106-02
 project: nipa
-status: open                  # open(지금 결정 필요) | waiting(until 까지 미룸) | decided
+status: open                  # open(지금 결정 필요) | waiting(until 까지 미룸) | decided | dropped(필요 없어져 닫음)
 decided_by:                   # user | criteria
 criterion:                    # criteria.md 항목 번호(decided_by: criteria 일 때)
 options: ["① 근거 조건 붙여 유지", "② 수치 제거"]
@@ -115,7 +115,7 @@ decision:
 ## 결정과 이유
 ```
 
-`[질문]` 이 오면 `open` 으로 만든다. 기준으로 정하면 바로 `decided`, `decided_by: criteria`. 사용자가 "나중에" 라고 하면 `waiting`. 지우지 않는다. Coordinator 가 프로젝트 기준으로 정한 것은 이 파일을 만들지 않고 작업 파일의 `보고` 에만 남긴다.
+`[질문]` 이 오면 `open` 으로 만든다. 기준으로 정하면 바로 `decided`, `decided_by: criteria`. 사용자가 "나중에" 라고 하면 `waiting`. 지우지 않는다. 작업을 `done`·`cancelled` 로 닫을 때 그 작업의 `open` 결정이 남아 있으면 끝남 알림에 "안 정한 결정 D-… n건: 정하기 / 미루기 / 필요 없음" 을 붙여 묻는다. "필요 없음" 이면 `dropped` 로 바꾸고 `decided_at` 과 이유를 적는다. 대시보드는 작업이 끝났는데 `open` 인 결정을 "작업은 끝났는데 안 정한 것" 으로 따로 보인다. Coordinator 가 프로젝트 기준으로 정한 것은 이 파일을 만들지 않고 작업 파일의 `보고` 에만 남긴다.
 
 ### `state/occupancy.json` — 프로젝트끼리 겹칠 수 있는 공유 자원 점유
 
