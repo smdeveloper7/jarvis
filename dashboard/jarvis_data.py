@@ -14,8 +14,11 @@ import glob
 import json
 import os
 import re
+import threading
 import time
-from datetime import datetime
+import urllib.error
+import urllib.request
+from datetime import date, datetime, timedelta, timezone
 
 PASEO = os.path.abspath(os.path.expanduser(os.environ.get('PASEO_HOME') or '~/.paseo'))
 JARVIS_NAME = os.environ.get('JARVIS_NAME') or 'JARVIS'
@@ -492,3 +495,196 @@ def status_markdown(jarvis):
     lines += ['', '## 공유 자원 점유', '']
     lines += [f"- `{i['what']}` · {i['who']} · {i['since'][:16]} ~ {i['until'][:16]} {i['note']}" for i in occ] or ['없음.']
     return '\n'.join(lines) + '\n'
+
+
+# ---------- Notion 할일 DB (할 일 탭) ----------
+# 토큰: 환경변수 NOTION_TOKEN, 없으면 ~/.jarvis/notion_token 파일(저장소 밖). Notion 내부 통합을 할일 DB 에 연결해야 읽힌다.
+NOTION_DS = os.environ.get('JARVIS_NOTION_DS') or '2ed3cf1a-c9b3-81aa-a0d6-000b40fab530'   # 할일 data source
+NOTION_KSM = '3fb3cf1ac9b380818136ed223027e043'   # 프로젝트 KSM 페이지(NIPA)
+NOTION_TOKEN_FILE = os.path.expanduser('~/.jarvis/notion_token')
+NOTION_VERSION = '2025-09-03'
+KST = timezone(timedelta(hours=9))
+_notion = {'at': 0, 'data': None, 'rows': [], 'names': {}}
+_notion_lock = threading.Lock()
+
+
+def notion_token():
+    t = os.environ.get('NOTION_TOKEN', '').strip()
+    if t:
+        return t
+    try:
+        with open(NOTION_TOKEN_FILE, encoding='utf-8') as f:
+            return f.read().strip()
+    except OSError:
+        return ''
+
+
+def week_range(today):
+    """월요일 시작 이번 주 (월, 일) 날짜 문자열."""
+    d = date.fromisoformat(today)
+    mon = d - timedelta(days=d.weekday())
+    return mon.isoformat(), (mon + timedelta(days=6)).isoformat()
+
+
+def notion_row(p):
+    """Notion 페이지 하나 -> 할 일 한 줄(이름, 완료, 날짜, 유형, KSM 여부, 링크)."""
+    props = p.get('properties') or {}
+
+    def prop(name, kind):
+        v = props.get(name) or {}
+        return v.get(kind) if v.get('type') == kind else None
+
+    title = ''.join(t.get('plain_text', '') for t in (prop('이름', 'title') or []))
+    d = prop('날짜', 'date') or {}
+    rel = [str(r.get('id', '')).replace('-', '') for r in (prop('프로젝트', 'relation') or [])]
+    return {'id': p.get('id', ''), 'url': p.get('url', ''), 'title': title or '(제목 없음)',
+            'done': bool(prop('완료', 'checkbox')), 'date': (d.get('start') or '')[:10],
+            'types': [o.get('name', '') for o in (prop('유형', 'multi_select') or [])],
+            'ksm': NOTION_KSM in rel, 'project': bool(rel), 'projects': rel, 'edited': p.get('last_edited_time', '')}
+
+
+def group_todos(rows, today):
+    """할 일 줄 -> 오늘 · 이번 주 남은 일 · 밀린 일(이번 주 전, 프로젝트 있음 / 없음) · 날짜 없는 일(프로젝트 있음). 주는 월요일 시작."""
+    mon, sun = week_range(today)
+    out = {'today': [], 'week': [], 'overdue': [], 'overdue_other': [], 'undated': []}
+    for r in rows:
+        dt = r['date']
+        if dt == today:
+            out['today'].append(r)   # 오늘은 완료도 보인다
+        elif r['done']:
+            continue
+        elif not dt:
+            if r['project']:
+                out['undated'].append(r)   # 날짜 없고 프로젝트도 없는 옛 메모는 뺀다
+        elif mon <= dt <= sun:
+            out['week'].append(r)   # Notion '이번주 할일' 보기처럼 이번 주 지난 날도 여기
+        elif dt < mon:
+            out['overdue' if r['project'] else 'overdue_other'].append(r)
+    out['today'].sort(key=lambda r: (r['done'], r['title']))
+    out['week'].sort(key=lambda r: (r['date'], r['title']))
+    for k in ('overdue', 'overdue_other'):
+        out[k].sort(key=lambda r: (r['date'], r['title']), reverse=True)   # 최근에 밀린 것이 위
+    out['undated'].sort(key=lambda r: r['edited'], reverse=True)
+    return out
+
+
+def notion_query(token, today, opener=None):
+    """완료 안 된 행과 이번 주 행(완료 포함)을 모두 읽는다. 100행씩, 최대 10쪽."""
+    mon, _ = week_range(today)
+    body = {'page_size': 100, 'filter': {'or': [
+        {'property': '완료', 'checkbox': {'equals': False}},
+        {'property': '날짜', 'date': {'on_or_after': mon}}]}}
+    opener = opener or urllib.request.urlopen
+    rows = []
+    for _ in range(10):
+        req = urllib.request.Request(f'https://api.notion.com/v1/data_sources/{NOTION_DS}/query',
+                                     data=json.dumps(body).encode(), method='POST', headers={
+                                         'Authorization': 'Bearer ' + token, 'Notion-Version': NOTION_VERSION,
+                                         'Content-Type': 'application/json'})
+        with opener(req, timeout=20) as r:
+            d = json.load(r)
+        rows += [notion_row(p) for p in d.get('results') or [] if p.get('object') == 'page']
+        if not d.get('has_more'):
+            break
+        body['start_cursor'] = d.get('next_cursor')
+    return rows
+
+
+def project_names(token, rows, opener=None):
+    """할 일에 붙은 프로젝트 페이지 id -> 이름. 한 번 읽은 이름은 기억한다. 못 읽으면 id 앞 8자."""
+    names = _notion['names']
+    for pid in sorted({p for r in rows for p in r['projects']}):
+        if pid in names:
+            continue
+        req = urllib.request.Request(f'https://api.notion.com/v1/pages/{pid}', headers={
+            'Authorization': 'Bearer ' + token, 'Notion-Version': NOTION_VERSION})
+        try:
+            with (opener or urllib.request.urlopen)(req, timeout=20) as r:
+                props = json.load(r).get('properties') or {}
+            names[pid] = ''.join(t.get('plain_text', '') for v in props.values() if v.get('type') == 'title'
+                                 for t in v.get('title') or []) or pid[:8]
+        except (OSError, ValueError):
+            names[pid] = pid[:8]
+    return {pid: names[pid] for pid in {p for r in rows for p in r['projects']}}
+
+
+def notion_todos(now=None, opener=None, refresh=False):
+    """할 일 탭 데이터. 처음 한 번 읽고, 그 뒤로는 refresh(화면의 새로고침 버튼)일 때만 다시 읽는다.
+    실패하면 마지막으로 읽은 것을 오류와 함께 돌려준다."""
+    now = time.time() if now is None else now
+    with _notion_lock:
+        if _notion['data'] is not None and not refresh:
+            return _notion['data']
+        today = datetime.fromtimestamp(now, KST).date().isoformat()
+        token = notion_token()
+        if not token:
+            data = {'configured': False, 'today': today, 'error': '', 'at': 0, 'sections': None}
+        else:
+            prev = _notion['data'] or {}
+            try:
+                rows = notion_query(token, today, opener)
+                _notion['rows'] = rows
+                data = {'configured': True, 'today': today, 'error': '', 'at': int(now * 1000),
+                        'sections': group_todos(rows, today), 'projects': project_names(token, rows, opener)}
+            except urllib.error.HTTPError as e:
+                why = {401: '토큰이 맞지 않음', 403: '권한 없음', 404: '할일 DB 를 못 찾음(통합을 DB 에 연결했는지 확인)'}.get(e.code, '')
+                data = dict(prev, configured=True, today=today, error=f'Notion {e.code} {why}'.strip())
+            except (OSError, ValueError) as e:
+                data = dict(prev, configured=True, today=today, error='Notion 읽기 실패: ' + str(e)[:120])
+            data.setdefault('sections', None)
+            data.setdefault('at', 0)
+        _notion.update(at=now, data=data)
+        return data
+
+
+def notion_counts(data):
+    """탭 옆 숫자: 오늘 남은 일(초록), 이번 주 남은 일(회색)."""
+    s = (data or {}).get('sections') or {}
+    return {'in_progress': sum(not r['done'] for r in s.get('today', [])), 'pending': len(s.get('week', []))}
+
+
+PAGE_ID_RE = re.compile(r'^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$')
+DATE_RE = re.compile(r'^\d{4}-\d\d-\d\d$')
+
+
+def notion_update(page_id, done=None, day=None, opener=None, now=None):
+    """할 일 한 줄 고치기: 완료 체크(done) 또는 날짜(day, YYYY-MM-DD). Notion 에 쓰고 캐시도 같이 고친다.
+    돌려주는 값: (상태 코드, 할 일 탭 데이터 또는 {'error': …})."""
+    if not isinstance(page_id, str) or not PAGE_ID_RE.match(page_id):
+        return 400, {'error': 'id 가 맞지 않음'}
+    props = {}
+    if done is not None:
+        if not isinstance(done, bool):
+            return 400, {'error': 'done 은 true/false'}
+        props['완료'] = {'checkbox': done}
+    if day is not None:
+        if not isinstance(day, str) or not DATE_RE.match(day):
+            return 400, {'error': 'date 는 YYYY-MM-DD'}
+        props['날짜'] = {'date': {'start': day}}
+    if not props:
+        return 400, {'error': '바꿀 것이 없음'}
+    token = notion_token()
+    if not token:
+        return 400, {'error': 'Notion 토큰 없음'}
+    req = urllib.request.Request(f'https://api.notion.com/v1/pages/{page_id}', method='PATCH',
+                                 data=json.dumps({'properties': props}).encode(), headers={
+                                     'Authorization': 'Bearer ' + token, 'Notion-Version': NOTION_VERSION,
+                                     'Content-Type': 'application/json'})
+    try:
+        with (opener or urllib.request.urlopen)(req, timeout=20) as r:
+            row = notion_row(json.load(r))
+    except urllib.error.HTTPError as e:
+        why = {401: '토큰이 맞지 않음', 403: '쓰기 권한 없음(통합의 콘텐츠 업데이트 기능을 켜야 함)',
+               404: '페이지를 못 찾음'}.get(e.code, '')
+        return 502, {'error': f'Notion {e.code} {why}'.strip()}
+    except (OSError, ValueError) as e:
+        return 502, {'error': 'Notion 쓰기 실패: ' + str(e)[:120]}
+    now = time.time() if now is None else now
+    with _notion_lock:
+        rows = [x for x in _notion['rows'] if x['id'].replace('-', '') != page_id.replace('-', '')] + [row]
+        _notion['rows'] = rows
+        data = _notion['data'] or {'configured': True, 'error': '', 'at': 0}
+        today = datetime.fromtimestamp(now, KST).date().isoformat()
+        data = dict(data, today=today, sections=group_todos(rows, today))
+        _notion['data'] = data
+    return 200, data

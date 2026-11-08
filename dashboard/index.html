@@ -467,6 +467,23 @@ button.subs-t:active { background: var(--color-paper-3) }
 .tnote .dtext { margin: 0 }
 .tnote b { font-weight: 600; color: var(--color-ink) }
 .tfold { justify-self: start; margin: var(--space-2xs) 0 0 var(--space-xs) }
+.ncard .r1 { display: flex; align-items: center; gap: var(--space-xs) }
+.ncard .r1 .tfold { margin: 0 0 0 auto }
+.ncard .tsub .dchips { margin-top: var(--space-3xs) }
+.nlink { color: var(--color-ink); text-decoration: none }
+.nrefresh { margin: 0 0 0 auto }
+button.ncheck { cursor: pointer; padding: 0; border: 0; background: none }
+button.ncheck:hover { box-shadow: inset 0 0 0 1.5px var(--color-ink) }
+.ti.completed button.ncheck { background: var(--color-rule-2) }
+.ti.busy { opacity: 0.55 }
+.ntoday { min-height: 24px; margin: 0 }
+.nproj-bar { display: flex; flex-wrap: wrap; gap: var(--space-2xs); margin: 0 0 var(--space-sm) }
+.nproj-chip { display: inline-flex; align-items: center; gap: var(--space-xs); min-height: 32px; padding: 0 var(--space-sm); border-radius: var(--radius-ctl); background: var(--color-paper-2); font-size: var(--text-sm); color: var(--color-muted) }
+.nproj-chip:hover { color: var(--color-ink) }
+.nproj-chip b { font-weight: 700; color: var(--color-ink-2) }
+.nproj-chip[aria-selected="true"] { background: var(--color-ink); color: var(--color-paper) }
+.nproj-chip[aria-selected="true"] b { color: var(--color-paper) }
+.nlink:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--color-accent) }
 
 /* status.md */
 .mdhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2xs) var(--space-sm); padding: var(--space-md) 0 0; font-size: var(--text-xs); color: var(--color-faint) }
@@ -683,8 +700,8 @@ function renderTop() {
       group !== PAGES[i - 1]?.[3] ? h('div', { class: 'navg', 'aria-hidden': 'true' }, group) : null,
       h('button', { class: 'tab', role: 'tab', 'aria-selected': String(!cur && page === key), onclick: () => { location.hash = href } },
         label, key === 'decisions' && nNow ? h('span', { class: 'num', title: '지금 결정 필요' }, nNow) : null,
-        key === 'todo' ? [tc.in_progress ? h('span', { class: 'num ok', title: '진행 중인 할 일' }, tc.in_progress) : null,
-          tc.pending ? h('span', { class: 'num plain', title: '대기 중인 할 일' }, tc.pending) : null] : null)])))
+        key === 'todo' ? [tc.in_progress ? h('span', { class: 'num ok', title: todo?.notion?.sections ? '오늘 남은 할 일(Notion)' : '진행 중인 할 일' }, tc.in_progress) : null,
+          tc.pending ? h('span', { class: 'num plain', title: todo?.notion?.sections ? '이번 주 남은 할 일(Notion)' : '대기 중인 할 일' }, tc.pending) : null] : null)])))
 }
 const subRun = () => agents.reduce((n, a) => n + (a.subagents || []).filter(s => s.state === 'busy').length, 0)
 // [key, label, hash, sidebar group]; the narrow tab row keeps the same order without the group names
@@ -1547,26 +1564,109 @@ function todoGroup(g) {
       open ? done.map(t => todoItem(g, t)) : null))
 }
 
-// the server already sorts: newest changed session first; in progress, pending, completed inside each
+// Notion 할일 DB: one row per page, a mark (ticked when 완료), the name linking to Notion, then date and 유형 chips
+let todoSessions = store.get('todoSessions', false)
+const todoFold = new Set(store.get('todoFold', ['overdue_other', 'undated']))   // folded Notion sections
+const NOTION_SECTIONS = [['today', '오늘 할 일'], ['week', '이번 주 남은 일'], ['overdue', '밀린 일 · 이번 주 전 (프로젝트 있음)'],
+  ['overdue_other', '밀린 일 · 이번 주 전 (프로젝트 없음)'], ['undated', '날짜 없는 할 일 (프로젝트 있음)']]
+let todoProject = store.get('todoProject', '')   // '' 전체, 'none' 프로젝트 없음, 아니면 Notion 프로젝트 페이지 id
+const inProject = r => !todoProject || (todoProject === 'none' ? !r.projects.length : r.projects.includes(todoProject))
+const projName = id => todo?.notion?.projects?.[id] || id.slice(0, 8)
+const mmdd = d => d ? d.slice(5).replace('-', '/') : ''
+
+// clicking the mark ticks 완료 in Notion; 오늘로 moves the date to today. The row waits (busy) until Notion answers.
+const notionBusyIds = new Set()
+let notionWriteError = ''
+async function notionUpdate(r, change) {
+  notionBusyIds.add(r.id); notionWriteError = ''; renderTodo()
+  try {
+    const res = await fetch('/api/notion/update', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Jarvis': '1' },
+      body: JSON.stringify({ id: r.id, ...change }) })
+    const d = await res.json()
+    if (!res.ok) throw new Error(d.error || res.status)
+    todo = { ...todo, notion: d, counts: notionCounts(d) }; todoKey = ''
+  } catch (err) { notionWriteError = `「${r.title}」 고치지 못함: ${err.message}` }
+  notionBusyIds.delete(r.id); renderTop(); renderTodo()
+}
+const notionCounts = n => ({ in_progress: (n.sections?.today || []).filter(r => !r.done).length, pending: (n.sections?.week || []).length })
+
+function notionItem(r) {
+  const busy = notionBusyIds.has(r.id), today = todo?.notion?.today
+  return h('div', { class: 'ti ' + (r.done ? 'completed' : 'pending') + (busy ? ' busy' : '') }, h('div', { class: 'tsum' },
+    h('button', { class: 'tmark ncheck', role: 'checkbox', 'aria-checked': String(r.done), disabled: busy,
+      title: r.done ? '완료 해제' : '완료로 체크', 'aria-label': (r.done ? '완료 해제: ' : '완료로 체크: ') + r.title,
+      onclick() { notionUpdate(r, { done: !r.done }) } }, r.done ? icon('check') : null),
+    h('span', { class: 'tsub' }, h('a', { class: 'tsj nlink', href: r.url, target: '_blank', rel: 'noopener' }, r.title),
+      h('span', { class: 'dchips' }, r.date ? h('span', { class: 'dchip' }, mmdd(r.date)) : null,
+        r.types.map(t => h('span', { class: 'dchip' }, t)), todoProject ? null : r.projects.map(p => h('span', { class: 'dchip nproj' }, projName(p))),
+        !r.done && today && r.date !== today ? h('button', { class: 'more ntoday', disabled: busy,
+          onclick() { notionUpdate(r, { date: today }) } }, '오늘로') : null))))
+}
+
+function notionSection(key, title, rows) {
+  if (!rows.length && key !== 'today' && key !== 'week') return null
+  const fold = todoFold.has(key)
+  const left = key === 'today' ? rows.filter(r => !r.done).length : rows.length
+  return h('article', { class: 'tcard ncard' },
+    h('div', { class: 'r1' }, h('span', { class: 'name' }, title), h('span', { class: 'dchip' }, key === 'today' ? `남은 일 ${left} / ${rows.length}` : `${rows.length}건`),
+      rows.length ? h('button', { class: 'more tfold', 'aria-expanded': String(!fold),
+        onclick() { fold ? todoFold.delete(key) : todoFold.add(key); store.set('todoFold', [...todoFold]); renderTodo() } }, fold ? '펼치기' : '접기') : null),
+    fold ? null : h('div', { class: 'tlist' }, rows.length ? rows.map(notionItem) : h('div', { class: 'empty' }, '없음')))
+}
+
+// one chip per Notion project with its open count (today's undone + this week + overdue + undated), plus 전체 and 프로젝트 없음
+function projectBar(n) {
+  const open = Object.entries(n.sections).flatMap(([k, rs]) => k === 'today' ? rs.filter(r => !r.done) : rs)
+  const count = f => open.filter(f).length
+  const chips = [['', '전체', count(() => true)],
+    ...Object.entries(n.projects || {}).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => [id, name, count(r => r.projects.includes(id))]),
+    ['none', '프로젝트 없음', count(r => !r.projects.length)]]
+  if (todoProject && !chips.some(c => c[0] === todoProject)) todoProject = ''
+  return h('div', { class: 'nproj-bar', role: 'tablist', 'aria-label': '프로젝트' }, chips.map(([id, name, c]) =>
+    h('button', { class: 'nproj-chip', role: 'tab', 'aria-selected': String(todoProject === id),
+      onclick() { todoProject = id; store.set('todoProject', id); renderTodo() } }, name, h('b', {}, c))))
+}
+
+function notionPart(n) {
+  if (!n) return h('div', { class: 'empty' }, '불러오는 중…')
+  if (!n.configured) return h('div', { class: 'banner' }, 'Notion 토큰이 없습니다. Notion 내부 통합을 만들어 할일 DB 에 연결하고, 토큰을 ',
+    h('span', { class: 'mono' }, '~/.jarvis/notion_token'), ' 파일(또는 환경변수 NOTION_TOKEN)에 넣으면 1분 안에 보입니다.')
+  return [n.error ? h('div', { class: 'banner' }, n.error + (n.at ? ' · 마지막으로 읽은 내용을 보여 줍니다' : '')) : null,
+    notionWriteError ? h('div', { class: 'banner' }, notionWriteError) : null,
+    n.sections ? projectBar(n) : null,
+    n.sections ? NOTION_SECTIONS.map(([k, t]) => notionSection(k, t, (n.sections[k] || []).filter(inProject))) : null]
+}
+
+// Notion first; the sessions' own task lists (~/.claude/tasks) stay below, folded
 function renderTodo() {
   const scroll = view.querySelector('.scroll.todo-page') || h('div', { class: 'scroll todo-page' })
-  const gs = todo?.groups || [], old = gs.filter(g => g.stale), shown = gs.filter(g => todoStale || !g.stale)
+  const n = todo?.notion, gs = todo?.groups || [], old = gs.filter(g => g.stale), shown = gs.filter(g => todoStale || !g.stale)
   put(scroll,
-    h('div', { class: 'mdhead' }, h('span', { class: 'mono' }, '~/.claude/tasks'), h('span', {}, '3초마다 다시 읽음, 읽기만 함')),
-    !todo ? h('div', { class: 'empty' }, '불러오는 중…') : null,
+    h('div', { class: 'mdhead' }, h('span', {}, 'Notion 할일 DB'),
+      h('span', {}, n?.at ? `마지막으로 읽음 ${hm(n.at).trim()} · 오늘 ${n.today}` : '읽기만 함'),
+      h('button', { class: 'more nrefresh', disabled: notionBusy, onclick: refreshNotion }, notionBusy ? '읽는 중…' : '새로고침')),
     todo?.error ? h('div', { class: 'banner' }, `할 일을 읽지 못했습니다(${todo.error}).`) : null,
-    todo && !todo.error && !shown.length ? h('div', { class: 'empty' }, gs.length ? '최근 7일 안에 바뀐 할 일이 없습니다.' : '할 일 목록이 있는 세션이 없습니다.') : null,
-    shown.map(todoGroup),
-    old.length ? h('button', {
-      class: 'more', 'aria-expanded': String(todoStale),
-      onclick() { todoStale = !todoStale; store.set('todoStale', todoStale); renderTodo() }
-    }, `7일 넘게 안 바뀐 세션 ${old.length}개 ${todoStale ? '숨기기' : '보기'}`) : null)
+    todo ? notionPart(n) : h('div', { class: 'empty' }, '불러오는 중…'),
+    gs.length ? h('button', { class: 'more', 'aria-expanded': String(todoSessions),
+      onclick() { todoSessions = !todoSessions; store.set('todoSessions', todoSessions); renderTodo() } },
+      `세션 작업 목록(~/.claude/tasks) ${shown.length}개 ${todoSessions ? '접기' : '보기'}`) : null,
+    todoSessions ? [shown.map(todoGroup),
+      old.length ? h('button', {
+        class: 'more', 'aria-expanded': String(todoStale),
+        onclick() { todoStale = !todoStale; store.set('todoStale', todoStale); renderTodo() }
+      }, `7일 넘게 안 바뀐 세션 ${old.length}개 ${todoStale ? '숨기기' : '보기'}`) : null] : null)
   if (!scroll.isConnected) put(view, scroll)
 }
 
-async function pollTodo() {
+let notionBusy = false
+async function refreshNotion() {
+  notionBusy = true; renderTodo()
+  try { await pollTodo('?refresh=1') } finally { notionBusy = false; renderTodo() }
+}
+
+async function pollTodo(qs = '') {
   try {
-    const r = await fetch('/api/todos')
+    const r = await fetch('/api/todos' + qs)
     const text = await r.text()
     if (!r.ok) throw new Error(r.status)
     if (text === todoKey) return   // unchanged: keep open items and scroll as they are

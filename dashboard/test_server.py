@@ -1,4 +1,5 @@
 """Parser self-check: python3 test_server.py"""
+import io
 import json
 import os
 import shutil
@@ -462,6 +463,104 @@ assert gone['closed'] and gone['stale'] and gone['name'] == '01234567' and 'grou
 assert t['counts'] == {'in_progress': 2, 'pending': 2}, t['counts']   # stale groups and unknown status stay out of the tab count
 assert server.todos([], os.path.join(d, 'none'), os.path.join(d, 'none')) == {'groups': [], 'counts': {'in_progress': 0, 'pending': 0}}
 shutil.rmtree(d)
+
+# Notion 할일 DB: page -> row, rows -> 오늘 / 이번 주 / 밀린 일 / 날짜 없는 KSM (2026-11-08 은 일요일, 이번 주 11/02~11/08)
+jd = server.jd
+KSM = jd.NOTION_KSM
+
+
+def page(i, title, done=False, day=None, ksm=False, other=False, types=()):
+    rel = [{'id': KSM}] if ksm else [{'id': 'aaaa'}] if other else []
+    return {'object': 'page', 'id': i, 'url': 'https://www.notion.so/' + i, 'last_edited_time': '2026-11-08T0' + i[-1] + ':00:00Z',
+            'properties': {'이름': {'type': 'title', 'title': [{'plain_text': title}]}, '완료': {'type': 'checkbox', 'checkbox': done},
+                           '날짜': {'type': 'date', 'date': {'start': day} if day else None},
+                           '유형': {'type': 'multi_select', 'multi_select': [{'name': t} for t in types]},
+                           '프로젝트': {'type': 'relation', 'relation': rel}}}
+
+
+assert jd.week_range('2026-11-08') == ('2026-11-02', '2026-11-08') and jd.week_range('2026-11-09') == ('2026-11-09', '2026-11-15')
+r = jd.notion_row(page('p1', '쿼리 최적화', day='2026-11-08T10:00:00.000+09:00', ksm=True, types=('조사', '개발')))
+assert r['date'] == '2026-11-08' and r['ksm'] and r['project'] and r['types'] == ['조사', '개발'] and not r['done']
+assert jd.notion_row({'properties': {}})['title'] == '(제목 없음)'
+pages = [page('p1', '오늘 끝남', True, '2026-11-08'), page('p2', '오늘 남음', False, '2026-11-08'),
+         page('p3', '수요일', False, '2026-11-05', ksm=True), page('p4', '이번 주 끝남', True, '2026-11-04'),
+         page('p5', '지난주 KSM', False, '2026-10-30', ksm=True), page('p6', '지난달 프로젝트 없음', False, '2026-10-01'),
+         page('p7', '날짜 없는 KSM', ksm=True), page('p8', '날짜 없는 기타'), page('p9', '다음 주', False, '2026-11-10'),
+         page('q1', '다른 프로젝트 밀림', False, '2026-11-01', other=True)]
+g = jd.group_todos([jd.notion_row(p) for p in pages], '2026-11-08')
+names = {k: [x['title'] for x in v] for k, v in g.items()}
+assert names == {'today': ['오늘 남음', '오늘 끝남'], 'week': ['수요일'], 'overdue': ['다른 프로젝트 밀림', '지난주 KSM'],
+                 'overdue_other': ['지난달 프로젝트 없음'], 'undated': ['날짜 없는 KSM']}, names
+assert jd.notion_row(page('x1', 'a', ksm=True))['projects'] == [KSM]
+assert jd.notion_counts({'sections': g}) == {'in_progress': 1, 'pending': 1}
+
+
+class FakeResp(io.BytesIO):
+    def __enter__(self): return self
+    def __exit__(self, *a): self.close()
+
+
+sent = []
+
+
+def opener(req, timeout):
+    if req.get_method() == 'GET':   # 프로젝트 이름
+        return FakeResp(json.dumps({'properties': {'이름': {'type': 'title', 'title': [{'plain_text': 'KSM'}]}}}).encode())
+    body = json.loads(req.data)
+    sent.append((req.full_url, req.headers.get('Notion-version'), body))
+    if 'start_cursor' not in body:
+        return FakeResp(json.dumps({'results': pages[:5], 'has_more': True, 'next_cursor': 'c2'}).encode())
+    return FakeResp(json.dumps({'results': pages[5:], 'has_more': False}).encode())
+
+
+now = time.mktime((2026, 11, 8, 12, 0, 0, 0, 0, -1))
+os.environ['NOTION_TOKEN'] = 'test-token'
+jd._notion.update(at=0, data=None)
+n = jd.notion_todos(now, opener)
+assert n['configured'] and not n['error'] and n['today'] == '2026-11-08' and len(sent) == 2, (n, sent)
+assert sent[0][0].endswith('/v1/data_sources/' + jd.NOTION_DS + '/query') and sent[0][1] == jd.NOTION_VERSION
+assert sent[0][2]['filter']['or'][1]['date'] == {'on_or_after': '2026-11-02'} and sent[1][2]['start_cursor'] == 'c2'
+assert [x['title'] for x in n['sections']['week']] == ['수요일']
+assert n['projects'] == {KSM: 'KSM', 'aaaa': 'KSM'}, n['projects']
+assert jd.notion_todos(now + 3600, opener) is n and len(sent) == 2   # cached until refresh
+
+
+def broken(req, timeout):
+    raise jd.urllib.error.HTTPError(req.full_url, 404, 'nf', {}, None)
+
+
+m = jd.notion_todos(now + 3600, broken, refresh=True)
+assert m['error'].startswith('Notion 404') and m['sections'] == n['sections'], m['error']   # keeps the last good read
+del os.environ['NOTION_TOKEN']
+jd.NOTION_TOKEN_FILE = os.path.join(tempfile.gettempdir(), 'no-such-notion-token')
+jd._notion.update(at=0, data=None)
+assert jd.notion_todos(now) == {'configured': False, 'today': '2026-11-08', 'error': '', 'at': 0, 'sections': None}
+
+# 할 일 고치기: 완료 체크·날짜 옮기기 -> PATCH /v1/pages/<id>, 캐시를 다시 묶는다
+os.environ['NOTION_TOKEN'] = 'test-token'
+jd._notion.update(at=0, data=None, rows=[])
+pages[2]['id'] = '4123cf1a-c9b3-814b-b7ef-c7062be9c276'   # '수요일' (이번 주)
+jd.notion_todos(now, lambda req, timeout: FakeResp(json.dumps({'results': pages, 'has_more': False}).encode()))
+patched = []
+
+
+def patcher(req, timeout):
+    patched.append((req.get_method(), req.full_url, json.loads(req.data)))
+    p = json.loads(json.dumps(pages[2]))
+    p['properties']['완료']['checkbox'] = True
+    return FakeResp(json.dumps(p).encode())
+
+
+code, out = jd.notion_update(pages[2]['id'], done=True, opener=patcher, now=now)
+assert code == 200 and patched[0][0] == 'PATCH' and patched[0][1].endswith('/v1/pages/' + pages[2]['id'])
+assert patched[0][2] == {'properties': {'완료': {'checkbox': True}}}
+assert out['sections']['week'] == [] and jd._notion['data'] is out   # 끝낸 일은 이번 주 남은 일에서 빠진다
+assert jd.notion_update('x; drop', done=True)[0] == 400 and jd.notion_update(pages[2]['id'])[0] == 400
+assert jd.notion_update(pages[2]['id'], day='11/08')[0] == 400 and jd.notion_update(pages[2]['id'], done='yes')[0] == 400
+code, out = jd.notion_update(pages[2]['id'], day='2026-11-08', opener=lambda req, timeout: (_ for _ in ()).throw(
+    jd.urllib.error.HTTPError(req.full_url, 403, 'no', {}, None)), now=now)
+assert code == 502 and '쓰기 권한' in out['error'], out
+del os.environ['NOTION_TOKEN']
 
 missing = [n for n, _ in server.STATIC.values() if not os.path.isfile(os.path.join(server.ROOT, n))]
 assert not missing, missing   # every page and vendor file the server hands out is in the folder

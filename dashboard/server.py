@@ -953,6 +953,25 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):
+        """JARVIS: 할 일 탭에서 Notion 할 일 한 줄 고치기(완료 체크, 날짜 옮기기). 이 화면에서 온 요청만 받는다."""
+        if self.headers.get('Host') not in (f'127.0.0.1:{PORT}', f'localhost:{PORT}'):
+            return self.send(403, {'error': 'bad host'})
+        origin = self.headers.get('Origin')
+        if origin not in (f'http://127.0.0.1:{PORT}', f'http://localhost:{PORT}') or self.headers.get('X-Jarvis') != '1':
+            return self.send(403, {'error': 'bad origin'})   # 다른 사이트가 이 PC 의 4991 로 보내는 요청 막기
+        if urlparse(self.path).path != '/api/notion/update':
+            return self.send(404, {'error': 'not found'})
+        try:
+            n = int(self.headers.get('Content-Length') or 0)
+            body = json.loads(self.rfile.read(n)) if 0 < n <= 4096 else None
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            return self.send(400, {'error': 'JSON 본문 필요'})
+        code, out = jd.notion_update(body.get('id'), body.get('done'), body.get('date'))
+        return self.send(code, out)
+
     def do_GET(self):
         # DNS-rebinding guard: only answer requests addressed to this machine by name.
         if self.headers.get('Host') not in (f'127.0.0.1:{PORT}', f'localhost:{PORT}'):
@@ -982,7 +1001,12 @@ class Handler(BaseHTTPRequestHandler):
                     rows = agents()
                 except (subprocess.SubprocessError, OSError, ValueError):
                     rows = []
-                return self.send(200, todos(rows))
+                out = todos(rows)   # 세션 작업 목록은 아래 접힌 칸으로
+                notion = jd.notion_todos(refresh=q.get('refresh') == '1')   # JARVIS: 할 일 탭 본문은 Notion 할일 DB, 새로고침 버튼일 때만 다시 읽음
+                out['notion'] = notion
+                if notion.get('sections') is not None:
+                    out['counts'] = jd.notion_counts(notion)
+                return self.send(200, out)
             if url.path == '/api/dev':
                 return self.send(200, dev_occupancy())
             if url.path == '/api/messages':

@@ -15,8 +15,9 @@
 옛 JARVIS 대화가 길어져 새로 띄운 경우다. 대화 기억이 없으니 파일에서 이어받는다.
 
 1. `registry.yaml`, `criteria.md`, `state/tasks/` 중 `done`·`cancelled` 가 아닌 것, `state/decisions/` 중 `open` 인 것, `state/occupancy.json`, `state/releases.json` 을 읽는다.
-2. 살아 있는 Coordinator 마다 `send_agent_prompt` 로 `[인계] JARVIS 가 바뀜. 이제 보고·질문은 <내 에이전트 ID> 로` 를 보낸다.
-3. 사용자에게 진행 중인 작업, 열린 결정, 운영 반영 대기를 다섯 줄 안으로 알린다.
+2. `registry.yaml` 맨 위 `jarvis:` 를 내 에이전트 ID 로 바꾼다(아침 할일 정리 schedule 이 여기로 보고한다).
+3. 살아 있는 Coordinator 마다 `send_agent_prompt` 로 `[인계] JARVIS 가 바뀜. 이제 보고·질문은 <내 에이전트 ID> 로` 를 보낸다.
+4. 사용자에게 진행 중인 작업, 열린 결정, 운영 반영 대기를 다섯 줄 안으로 알린다.
 
 ## 하지 않는 일
 
