@@ -6,3 +6,7 @@ projects:
     name: "NIPA"
     root: "C:/Users/<나>/projects/nipa"
     coordinator: null
+  ask:                        # 프로젝트와 관계없는 질문
+    name: "질문"
+    root: "C:/Users/<나>/ask"
+    coordinator: null
