@@ -36,11 +36,11 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 
 ### 구성 요소
 
-세 계층의 세션은 모두 Paseo 위에서 돕니다. JARVIS 는 JARVIS 폴더에 상태를 쓰고, 대시보드는 그 폴더와 Paseo 기록을 읽어 보여 줍니다. 플러그인 훅은 모든 세션에 걸려 JARVIS 폴더를 다른 세션이 고치지 못하게 막고 커밋 문구를 검사합니다.
+세 계층의 세션은 모두 Paseo 위에서 돕니다. JARVIS 는 JARVIS 폴더에 상태를 쓰고, 할 일은 Notion 할일 DB 에 넣고 정리합니다. 대시보드는 JARVIS 폴더와 Paseo 기록, Notion 할 일을 읽어 한 화면에 보여 줍니다. 플러그인 훅은 모든 세션에 걸려 JARVIS 폴더를 다른 세션이 고치지 못하게 막고 커밋 문구를 검사합니다.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/architecture-dark.png">
-  <img alt="JARVIS 구성: 사용자는 Paseo 앱에서 JARVIS 와 대화하고, JARVIS 는 Coordinator 에 배정하고, Coordinator 는 Worker 를 띄운다. 보고는 거꾸로 올라온다. JARVIS 는 JARVIS 폴더에 기록하고 대시보드는 그 폴더와 Paseo 기록을 읽는다. 플러그인 훅 두 개가 모든 세션에 걸린다" src="docs/images/architecture-light.png" width="800">
+  <img alt="JARVIS 구성: 사용자는 Paseo 앱에서 JARVIS 와 대화하고, JARVIS 는 Coordinator 에 배정하고, Coordinator 는 Worker 를 띄운다. 보고는 거꾸로 올라온다. JARVIS 는 JARVIS 폴더에 기록하고 Notion 할일 DB 에 할 일을 넣는다. 대시보드는 그 폴더와 Paseo 기록, Notion 할 일을 읽는다. 플러그인 훅 두 개가 모든 세션에 걸린다" src="docs/images/architecture-light.png" width="800">
 </picture>
 
 그림과 화면에 나오는 세션과 데이터는 설명용 예시입니다.

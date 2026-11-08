@@ -11,7 +11,7 @@
 <figure>
 <svg viewBox="0 0 1100 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
 <title id="t">JARVIS 구성</title>
-<desc id="d">사용자는 Paseo 앱에서 JARVIS 와만 대화한다. JARVIS 는 프로젝트별 Coordinator 에 배정하고, Coordinator 는 작업마다 Worker 를 띄운다. 보고는 거꾸로 올라온다. JARVIS 는 JARVIS 폴더의 state 파일에 기록하고, 대시보드는 그 파일과 Paseo 기록을 읽어 보여 준다. 플러그인 훅 두 개가 모든 세션에 걸린다.</desc>
+<desc id="d">JARVIS 는 notion-todo 스킬로 Notion 할일 DB 에 할 일을 넣고 정리하고, 대시보드 할 일 탭은 그 DB 를 읽고 완료 체크를 쓴다. 사용자는 Paseo 앱에서 JARVIS 와만 대화한다. JARVIS 는 프로젝트별 Coordinator 에 배정하고, Coordinator 는 작업마다 Worker 를 띄운다. 보고는 거꾸로 올라온다. JARVIS 는 JARVIS 폴더의 state 파일에 기록하고, 대시보드는 그 파일과 Paseo 기록을 읽어 보여 준다. 플러그인 훅 두 개가 모든 세션에 걸린다.</desc>
 <defs>
 <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" class="dot"/></pattern>
 <marker id="a" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="ah"/></marker>
@@ -69,17 +69,27 @@
 <text x="377" y="368" class="name" text-anchor="middle">JARVIS 폴더</text>
 <text x="377" y="392" class="sub" text-anchor="middle">registry · criteria · state/</text>
 <path d="M 377,200 V 312" class="ln" marker-end="url(#a)"/>
-<text x="389" y="262" class="lbl">쓰기: 작업 · 결정 ·</text>
-<text x="389" y="278" class="lbl">점유 · 운영 반영 대기</text>
+<text x="365" y="262" class="lbl" text-anchor="end">쓰기: 작업 · 결정 ·</text>
+<text x="365" y="278" class="lbl" text-anchor="end">점유 · 운영 반영 대기</text>
 
 <!-- 대시보드 -->
 <rect x="602" y="320" width="190" height="84" rx="8" class="box"/>
 <text x="697" y="356" class="name" text-anchor="middle">JARVIS 보드</text>
-<text x="697" y="380" class="sub" text-anchor="middle">127.0.0.1:4991 · 읽기만</text>
+<text x="697" y="380" class="sub" text-anchor="middle">127.0.0.1:4991</text>
 <path d="M 472,362 H 600" class="ln dash" marker-end="url(#a)"/>
 <text x="536" y="352" class="lbl" text-anchor="middle">state/ 읽기</text>
-<path d="M 840,252 V 296 Q 840,304 832,304 H 744 Q 736,304 736,312 V 318" class="ln dash" marker-end="url(#a)"/>
-<text x="852" y="282" class="lbl">에이전트 기록 · 대화 읽기</text>
+<path d="M 760,252 V 318" class="ln dash" marker-end="url(#a)"/>
+<text x="752" y="302" class="lbl" text-anchor="end">에이전트 기록 · 대화 읽기</text>
+
+<!-- Notion -->
+<rect x="880" y="320" width="190" height="84" rx="8" class="box ext"/>
+<text x="975" y="356" class="name" text-anchor="middle">Notion 할일 DB</text>
+<text x="975" y="380" class="sub" text-anchor="middle">할 일의 원본</text>
+<path d="M 460,200 V 268 Q 460,276 468,276 H 967 Q 975,276 975,284 V 318" class="ln" marker-end="url(#a)"/>
+<text x="880" y="268" class="lbl" text-anchor="middle">할 일 넣기 · 정리 (notion-todo 스킬)</text>
+<path d="M 878,362 H 794" class="ln dash" marker-end="url(#a)"/>
+<text x="836" y="352" class="lbl" text-anchor="middle">할 일 탭</text>
+<text x="836" y="384" class="lbl" text-anchor="middle">완료 체크</text>
 <path d="M 697,404 V 444 Q 697,452 689,452 H 112 Q 104,452 104,444 V 202" class="ln dash" marker-end="url(#a)"/>
 <text x="400" y="444" class="lbl" text-anchor="middle">브라우저로 보기</text>
 
