@@ -1,7 +1,7 @@
 # 03. Work Lifecycle Management
 
 > **핵심 질문:** 프로젝트·기능·작업을 어떻게 관리하고 완료할 것인가?
-> **버전:** v0.2 · 2026-11-09 · 초안 (Linear API 읽기 확인)
+> **버전:** v0.3 · 2026-11-09 · 구현 반영 (`scripts/linear.py`, Codex 검토 1차 반영)
 > **관련:** [01 State & Memory](01_State_Memory_Management.md) · [02 Agent Lifecycle](02_Agent_Lifecycle_Management.md) · 원안 `Integrated_Work_Lifecycle_Management.md`(IWLM v0.1)
 > **범위:** Notion · Linear · Obsidian · JARVIS state. 배포 이력(Jira)은 사용자가 수작업으로 남기며 이 문서에서 다루지 않는다.
 
@@ -24,14 +24,17 @@ flowchart TD
     J --> N["Notion<br/>프로젝트 · 기능 정의<br/>(완료 조건)"]
     N --> G{"작업으로 쪼갤 만큼<br/>정해졌나?"}
     G -- 아니오 --> N
-    G -- 예 --> L["Linear<br/>기능별 작업 이슈"]
-    L --> A["JARVIS 가 [배정] W-…<br/>(state/tasks)"]
+    G -- 예 --> PL["PM 에게 분해안만 [배정]<br/>→ [계획]"]
+    PL --> L["JARVIS 가 Linear 에<br/>상위 이슈 Feature + 하위 이슈"]
+    L --> A["구현 [배정] W-…<br/>(state/tasks, linear: PRO-n)"]
     A --> PM["프로젝트 PM"]
     PM --> W["Worker<br/>Claude Code · Codex"]
     W --> V{"검증<br/>테스트 · 리뷰 · 완료 조건"}
     V -- 미흡 --> PM
-    V -- 통과 --> R["[보고] → W done"]
-    R --> LD["Linear 이슈 완료"]
+    V -- 통과 --> R["[보고] → W done<br/>이슈에 코멘트"]
+    R --> IC{"이슈 완료 조건<br/>모두 충족?"}
+    IC -- 아니오 --> A
+    IC -- 예 --> LD["Linear 이슈 Done<br/>(하위가 다 끝나면 상위도)"]
     R --> O["Obsidian<br/>raw 작업일지 → wiki"]
     LD --> NF["Notion 기능 상태 갱신"]
     R --> DEV{"dev 에만 반영?"}
@@ -61,7 +64,7 @@ flowchart LR
 
 팀은 지금 `PRO` 하나뿐이라 프로젝트 구분은 Linear **Project** 로 한다. 이슈 키는 모두 `PRO-n` 이다. JARVIS 프로젝트 키와 Linear Project 이름이 다를 수 있으므로(nipa ↔ KSM) 이름으로 짝짓지 않고 registry 의 `linear_project` 로만 연결한다.
 
-**연결 정보 저장 위치:** `registry.yaml` 에 넣지 않는다(실행 상태 파일이라 짧게 유지). 대신
+**연결 정보 저장 위치:** 프로젝트 ↔ Linear Project 는 registry `linear_project` 한 칸(프로젝트 단위라 바뀔 일이 드묾). 기능·이슈 단위 연결은 registry 에 넣지 않고
 - W 작업 파일 앞부분에 `linear: PRO-12`, `feature: nipa:anomaly-detection` 필드를 더하고
 - 기능 ↔ Notion URL ↔ Linear 상위 이슈는 `state/features/<프로젝트>.yaml` 에 둔다 **(제안)**.
 
@@ -71,7 +74,7 @@ flowchart LR
   notion_url: <Notion 기능 페이지>
   linear_parent: PRO-11
   linear_issues: [PRO-12, PRO-13]
-  status: in_progress
+  status: in_progress   # 복사본. 원본은 Linear 이슈 상태, JARVIS 가 갱신
 ```
 
 이름이 같다고 자동으로 짝짓지 않는다. 연결은 위 필드로만 한다.
@@ -110,6 +113,7 @@ stateDiagram-v2
 | cancelled | 보류 | Canceled · Duplicate | `cancelled` | — |
 
 - Linear 상태는 팀 `PRO` 의 실제 값이다: Backlog, Todo, In Progress, In Review, Done, Canceled, Duplicate.
+- **집계 규칙:** W `done` 은 이슈에 코멘트만 남긴다. 이슈 `Done` 은 PM `[보고]` 의 "이슈 완료 조건: 충족" 일 때만. 같은 이슈의 다른 W 가 열려 있으면 Done 으로 바꾸지 않는다. 상위 이슈(기능)는 하위가 모두 `Done`·`Canceled`·`Duplicate` 일 때만 Done. W 가 `cancelled` 되면 이슈는 그대로 두고 사용자에게 다시 맡길지 묻는다.
 - `done` 과 `deployed` 는 다르다. dev 에만 반영하면 `release: dev_only` 이고 `state/releases.json` 에 대기로 남는다. 운영 반영과 배포 기록은 사용자가 한다.
 
 ## 5. 역할별 책임
@@ -117,10 +121,10 @@ stateDiagram-v2
 | 주체 | 한다 | 하지 않는다 |
 |---|---|---|
 | **JARVIS** | 요청 접수, Notion 기능·할일 쓰기, Linear 이슈 만들기·닫기, PM 에게 [배정], 결정 처리, 작업일지 | 프로젝트 코드 읽기·고치기, 결과 재검증 |
-| **PM** | 기능을 작업으로 나누는 **안** 제시, Worker 배치·검증, [보고] | Notion·Linear 직접 쓰기, JARVIS state 쓰기 |
+| **PM** | 기능을 작업으로 나누는 **안** 제시(`[계획]`), Worker 배치·검증, [보고](이슈 완료 조건 포함) | Notion·Linear 직접 쓰기, JARVIS state 쓰기 (`rules/coordinator.md`) |
 | **Worker** | 맡은 작업 구현·테스트, `[완료]` 보고 | 범위 밖 작업, push·배포·삭제 |
 
-외부 도구(Notion·Linear) 쓰기는 JARVIS 하나로 모은다. PM 이 나눈 작업 안은 `[보고]` 로 받아 JARVIS 가 Linear 에 만든다. 이렇게 하면 중복 생성과 권한 분산을 막는다. 나중에 PM 에게 Linear 쓰기를 열지는 운영해 보고 정한다.
+외부 도구(Notion·Linear) 쓰기는 JARVIS 하나로 모은다. PM 이 나눈 작업 안은 `[계획]`(구현 완료 신호인 `[보고]` 와 구분)으로 받아 JARVIS 가 Linear 에 만든다. API 키는 사용자 환경변수라 기술적으로는 모든 세션이 읽을 수 있다. 접근 제한은 규칙(`rules/`)으로 하고, 강제가 필요해지면 키를 JARVIS 만 읽는 위치로 옮긴다. 이렇게 하면 중복 생성과 권한 분산을 막는다. 나중에 PM 에게 Linear 쓰기를 열지는 운영해 보고 정한다.
 
 ## 6. 판단과 승인
 
@@ -141,8 +145,8 @@ stateDiagram-v2
 1. **출처:** 새 기능은 Notion, 새 작업은 Linear, 위임·결정은 JARVIS state, 지식은 Obsidian.
 2. **링크 우선:** 원문을 복제하지 않고 제목·상태·URL·갱신 시각만.
 3. **한 방향:** JARVIS state → Linear·Notion 상태 갱신 → Obsidian 요약. Notion·Linear 에서 사람이 바꾼 것은 자동으로 state 에 덮어쓰지 않고 JARVIS 가 확인 후 반영.
-4. **중복 방지:** 만들기 전에 `state/features`·W 필드로 기존 이슈를 찾는다. 다시 시도할 때 같은 W-ID 를 쓴다.
-5. **부분 실패:** Linear·Notion 갱신이 실패해도 W 작업은 `done` 으로 두고, 작업 파일 `## 경과` 에 실패를 적어 다음에 다시 한다.
+4. **중복 방지:** `linear.py create --key <W-ID|기능ID>` 가 설명 끝에 `<!-- jarvis:key=… -->` 표식을 넣고, 만들기 전에 같은 표식의 이슈를 Linear 에서 찾는다. 응답을 잃고 다시 시도해도 같은 이슈를 돌려준다.
+5. **부분 실패:** Linear 쓰기가 실패하면 `state/linear_pending.jsonl` 에 남는다(작업 파일과 별도라 W 가 done 이어도 빠지지 않음). JARVIS 가 새로 뜰 때·하루 정리 때 `linear.py pending`·`retry`.
 6. **공개 범위:** 프롬프트, 토큰·비용, 내부 세션 ID 는 외부 도구에 올리지 않는다.
 
 ## 9. Linear 연결
@@ -151,7 +155,7 @@ stateDiagram-v2
 - 키 보관: 사용자 환경변수 `LINEAR_API_KEY`(설정함). 저장소·state·작업일지·문서에 쓰지 않는다.
 - 프로젝트 연결: `registry.yaml` 의 `projects.<키>.linear_project`(nipa → `KSM`). 기존 이슈 8개는 그대로 둔다.
 - 쓰기 동작(이슈 만들기·상태 바꾸기·코멘트)은 외부에 남는 일이므로 처음 몇 번은 사용자 확인 후 한다.
-- 나중에 반복 동작이 정해지면 `skills/linear-work` 같은 스킬로 묶는다.
+- 명령: `scripts/linear.py projects | issues <프로젝트> | get PRO-n | create | state | comment | pending | retry`. 쓰기 명령은 `--dry-run` 으로 보낼 내용만 볼 수 있다. 읽기·dry-run 시험 완료(2026-11-09).
 
 ## 10. 결정 필요
 

@@ -1,7 +1,7 @@
 # 01. State & Memory Management
 
 > **핵심 질문:** 무엇을 영구적으로 기억하고 보존할 것인가?
-> **버전:** v0.1 · 2026-11-09 · 초안
+> **버전:** v0.2 · 2026-11-09 · 구현 반영 (Codex 검토 1차 반영)
 > **관련:** [02 Agent Lifecycle](02_Agent_Lifecycle_Management.md) · [03 Work Lifecycle](03_Work_Lifecycle_Management.md)
 > **실행 지침:** `CLAUDE.md`, `rules/` 는 이 문서를 운영 규칙으로 줄인 것이다. 둘이 다르면 이 문서를 고치고 규칙에 반영한다.
 
@@ -66,7 +66,10 @@ flowchart LR
 | 하루 작업 기록 | `worklog/raw/YYYY-MM-DD.md` | wiki |
 | 프로젝트 지식, 결정 배경, 재사용할 해결법 | `worklog/wiki/` | — |
 | 할 일, 일정 | Notion 할일 DB | — |
-| 기능 정의, 작업 단위 | Notion, Linear (03 에서 확정) | `state/tasks` 에 링크 |
+| 프로젝트 ↔ Linear Project 연결 | `registry.yaml` `linear_project` (프로젝트 단위 한 칸) | — |
+| 기능 정의 | Notion 기능 페이지 | Linear 상위 이슈 설명에 링크 |
+| 작업 단위·진행 상태 | Linear 이슈 | W 작업 파일 `linear:` 필드, `state/features/` (복사본, 03) |
+| Linear 쓰기 실패 | `state/linear_pending.jsonl` | — |
 | 에이전트 실제 상태, 대화 원문 | Paseo, Claude transcript | 요약만, 원문 복제 안 함 |
 
 **원칙**
@@ -91,13 +94,17 @@ C:/Users/SMDEVELOPER/
 │       ├── handoff/
 │       │   ├── manager/             # JARVIS 교체용
 │       │   │   ├── latest.md
-│       │   │   └── YYYYMMDD-HHmm.md # 이전 노트
+│       │   │   ├── YYYYMMDD-HHmmss.md # 이전 노트
+│       │   │   └── transfer.json    # 대표를 넘길 때만
 │       │   └── <프로젝트>/          # PM 교체용
 │       │       ├── latest.md
-│       │       ├── YYYYMMDD-HHmm.md
-│       │       └── rotating.lock    # 교체 중에만 있음
+│       │       ├── YYYYMMDD-HHmmss.md
+│       │       └── rotating.lock    # 교체 중에만 있음 (jarvisctl 이 배타적으로 만듦)
 │       ├── sessions.jsonl           # 세션 이벤트 이력
 │       ├── sessions/<에이전트ID>.json # 마지막 사용량 Snapshot
+│       ├── sessions/reconciled.json # 이미 알린 닫힘
+│       ├── linear_pending.jsonl     # Linear 쓰기 실패 → retry
+│       ├── features/<프로젝트>.yaml # 기능 ↔ Notion ↔ Linear (03, 도입 시)
 │       ├── occupancy.json
 │       └── releases.json
 └── projects/
@@ -133,7 +140,7 @@ projects:
 
 ### 5.3 인계 노트 `state/handoff/<역할>/`
 
-- `latest.md` 가 지금 쓰는 노트다. 새 노트를 쓰기 전에 `latest.md` 를 `YYYYMMDD-HHmm.md` 로 옮긴다. 지우지 않는다.
+- `latest.md` 가 지금 쓰는 노트다. 새 노트는 `jarvisctl handoff <역할> <파일>` 로 둔다. 기존 `latest.md` 는 `YYYYMMDD-HHmmss.md`(같은 초면 `-2`)로 옮겨진다. 지우지 않는다.
 - 60줄 이하. 대화 요약이 아니라 **다음 세션이 일을 이어 가는 데 필요한 최소 맥락**이다.
 - 상태 파일·결정 파일에 이미 있는 내용은 경로만 적는다.
 
@@ -162,26 +169,29 @@ Manager 노트(`manager/latest.md`, JARVIS 가 직접 쓴다):
 ### 5.4 `state/sessions.jsonl` (이벤트 이력, 한 줄 = 한 이벤트)
 
 ```json
-{"timestamp":"2026-11-09T15:00:00+09:00","event":"rotation","project_id":"nipa","old_agent_id":"…","new_agent_id":"…","context_tokens_before":864356,"total_cost_usd_before":63.90,"reason":"context","result":"switched"}
+{"event_id":"3f9c…","timestamp":"2026-11-09T15:00:00+09:00","event":"rotation","project_id":"nipa","old_agent_id":"…","new_agent_id":"…","context_tokens_before":864356,"total_cost_usd_before":63.90,"reason":"context","result":"switched"}
 {"timestamp":"…","event":"closed","project_id":"nipa","agent_id":"…","closed_by":"user","source":"paseo:agent.archive.after"}
 ```
 
 | 필드 | 값 |
 |---|---|
-| `event` | `rotation` · `closed` · `session_end` · `pre_compact` |
+| `event_id` | 12자리 무작위 ID (중복 판별) |
+| `event` | `rotation` · `closed` · `session_end` · `pre_compact` · `jarvis_claim` |
 | `reason` | `context` · `crash` · `manual` |
 | `result` | `switched` · `failed:<단계>` · `archived` |
-| `closed_by` | `jarvis` · `user` · `unknown` |
+| `closed_by` | `jarvis` · `pm` · `unknown` (대조·Paseo 이벤트로는 누가 닫았는지 모름) |
 | `source` | 기록한 곳: `jarvis` · `hook:<이름>` · `paseo:<이벤트>` · `reconcile` |
 
-모르는 값은 `null`. 추정값을 넣지 않는다.
+모르는 값은 `null`. 추정값을 넣지 않는다. 여러 훅이 동시에 써도 줄이 섞이지 않게 `sessions.jsonl.lock` 으로 잠그고 한 줄씩 추가한다.
 
 ### 5.5 `state/sessions/<에이전트ID>.json` (마지막 사용량, Stop 훅이 덮어씀)
 
 ```json
 {"agent_id":"…","project_id":"nipa","role":"pm","observed_at":"2026-11-09T15:00:00+09:00",
- "context_tokens":864356,"source":"transcript"}
+ "context_tokens":864356,"source":"transcript","claude_session_id":"…"}
 ```
+
+임시 파일에 쓰고 이름을 바꿔(원자적) 덮어쓴다. `observed_at` 이 6시간보다 오래되면 교체 판단에 쓰지 않는다.
 
 `context_tokens` = transcript 마지막 assistant `usage` 의 `input_tokens + cache_read_input_tokens + cache_creation_input_tokens + output_tokens`. Paseo `contextWindowUsedTokens` 와 같은 값이다(nipa PM 에서 확인).
 
@@ -201,9 +211,11 @@ flowchart TD
 | 주체 | 쓸 수 있는 것 | 강제 방법 |
 |---|---|---|
 | 대표 JARVIS | JARVIS 폴더 전부, worklog, Notion 할일 | — |
-| 다른 JARVIS 세션 | 없음(읽기) | `jarvis_only_write` 확장: `PASEO_AGENT_ID` ≠ `registry.jarvis` 면 막음 **(계획)** |
-| PM, Worker | 프로젝트 폴더. JARVIS 폴더는 못 씀 | `jarvis_only_write` **(코드 있음, 플러그인 미설치 → 지금 동작 안 함)** |
-| 훅 스크립트 | `state/sessions*` 만 | 스크립트가 쓰는 경로를 코드로 고정 |
+| 다른 JARVIS 세션 | 없음(읽기). 대표가 되려면 `jarvisctl claim-jarvis` | `jarvis_only_write`: `PASEO_AGENT_ID` ≠ `registry.jarvis` 면 막음. schedule 로 뜬 세션은 예외 |
+| PM, Worker | 프로젝트 폴더. JARVIS 폴더는 못 씀 | `jarvis_only_write`(작업 폴더가 JARVIS 밖이면 막음) |
+| 훅 스크립트, `scripts/` | `state/sessions*`, lock, `linear_pending` | 쓰는 경로를 코드로 고정. registry 는 `jarvisctl` 만 CAS 로 바꿈 |
+
+설정(`jarvis_dir`)이 비어 있으면 보호 훅은 아무것도 막지 않는다(설치 확인 항목). 훅 입력이 깨졌을 때도 통과시킨다(세션을 멈추지 않는 쪽을 택함).
 
 **알려진 빈틈:** `jarvis_only_write` 는 Edit·Write 도구만 막는다. Bash·PowerShell·Python 으로 쓰는 것은 막지 못한다. 규칙(`rules/`)으로 금지하고, 필요해지면 Bash 패턴 검사를 더한다.
 
@@ -242,8 +254,9 @@ flowchart LR
 
 | 항목 | 상태 |
 |---|---|
-| `jarvis` 플러그인 설치, `agent-hub-ao` 끄기 | 사용자 승인 대기 |
-| 대표 JARVIS 쓰기 강제(`jarvis_only_write` 확장) | 계획 |
+| `jarvis` 플러그인 설치 | 2026-11-09 설치 시도(02 11절) |
+| `agent-hub-ao` 끄기 | 결정 대기: 끄면 `C:/Users/SMDEVELOPER/hub` 보호·hub 훅이 빠짐. 켜 두면 커밋 문구 검사가 두 번 돔(무해) |
+| state 백업 | git 제외라 백업이 없다. 결정 대기(OneDrive 복사 등) |
 | wiki 정리 | 11-05 이후 멈춤. 구조 바꾸기 전에 밀린 정리 먼저 |
 | OneDrive 동기화 충돌 | raw 는 스크립트 잠금으로 추가. wiki 동시 수정은 JARVIS 하나만 하므로 낮음 |
 | claude-mem | JARVIS 에서만 시험. 공식 상태를 대체하지 않는 보조 검색으로만 검토 |
