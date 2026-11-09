@@ -18,7 +18,7 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 | 계층 | 비유 | 수와 수명 | 일하는 곳 | 하는 일 | 하지 않는 일 |
 |---|---|---|---|---|---|
 | 사용자 | 사장 | 한 명 | Paseo 앱(PC, 휴대폰) | 요청, 판단, 되돌리기 어려운 일 승인 | Coordinator 나 Worker 에 직접 지시 |
-| Manager Agent (JARVIS) | 비서 | 하나, 계속 떠 있음 | JARVIS 폴더 | 어느 프로젝트 일인지 정해 넘기기, 기준으로 판단, 보고 요약, 기록, Notion 할 일 관리 | 코드 읽기, 일 쪼개기, 직접 검증 |
+| Manager Agent (JARVIS) | 비서 | 논리적으로 하나. 대화창(세션)은 여러 개 열 수 있음 | JARVIS 폴더 | 어느 프로젝트 일인지 정해 넘기기, 기준으로 판단, 보고 요약, 기록, Notion 할 일 관리 | 코드 읽기, 일 쪼개기, 직접 검증 |
 | Coordinator Agent (PM) | 프로젝트 PM | 프로젝트마다 하나(역할은 계속, 실행 세션은 컨텍스트가 커지면 교체) | 프로젝트 폴더 | 일 나누기, Worker 붙이기, 차례 정하기, 결과 검수, `[보고]` | 다른 프로젝트 건드리기, 권한 승인, 기록, Notion·Linear 쓰기 |
 | Coding Agent (Worker) | 실무 담당자 | 작업마다 하나, PM 하나에 동시 3개까지, 끝나면 닫힘 | 프로젝트 폴더(같은 저장소를 동시에 고치면 git worktree) | 맡은 일 하나, `[완료]` 로 끝맺기 | 범위 밖 수정, push, 운영 반영, DB 변경, 삭제 |
 
@@ -32,7 +32,7 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 
 ### Coding Agent: Worker, 실무 담당자
 
-작업 하나를 받아 투입됐다가 끝나면 세션을 닫고 빠집니다. 이름은 맡은 일이 보이게 `결제-오류수정` 처럼 짓습니다. 맡은 범위만 고치고, 범위를 넘거나 판단이 필요하면 손을 멈추고 PM 에게 `[질문]` 을 올립니다. push, 운영 반영, DB 변경, 삭제처럼 되돌리기 어려운 일은 준비까지만 합니다. 끝나면 바뀐 것, 확인한 것, 남은 것을 적어 `[완료]` 를 냅니다.
+작업 하나를 받아 투입됐다가 끝나면 세션을 닫고 빠집니다. 이름은 맡은 일이 보이게 `<영역>-<작업 이름>`(예: `결제-오류수정`, `wf3-쿼리확인`)으로 짓고, 작업 번호는 라벨(`jarvis.task`)에 둡니다. 번호나 순번만 있는 이름은 훅이 막습니다. 맡은 범위만 고치고, 범위를 넘거나 판단이 필요하면 손을 멈추고 PM 에게 `[질문]` 을 올립니다. push, 운영 반영, DB 변경, 삭제처럼 되돌리기 어려운 일은 준비까지만 합니다. 끝나면 바뀐 것, 확인한 것, 남은 것을 적어 `[완료]` 를 냅니다.
 
 ### 구성 요소
 
@@ -47,7 +47,7 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 
 ## 관리 영역: 세 문서
 
-운영 규칙은 질문 셋으로 나뉩니다. 문서가 정책이고, `CLAUDE.md` 와 `rules/` 는 그것을 실행 지침으로 줄인 것입니다.
+운영 규칙은 질문 셋으로 나뉩니다. 문서가 정책이고, `CLAUDE.md` 와 `rules/` 는 그것을 실행 지침으로 줄인 것입니다. 읽는 순서와 그림 안내는 [docs/README.md](docs/README.md) 에 있습니다.
 
 | 순서 | 영역 | 핵심 질문 | 문서 | 구현 |
 |---|---|---|---|---|
@@ -55,7 +55,20 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 | 02 | Agent Lifecycle Management (에이전트 수명주기 관리) | Agent 와 세션을 어떻게 생성·교체·복구할 것인가? | [docs/02_Agent_Lifecycle_Management.md](docs/02_Agent_Lifecycle_Management.md) | `hooks/`, `scripts/jarvisctl.py` |
 | 03 | Work Lifecycle Management (업무 수명주기 관리) | 프로젝트·기능·작업을 어떻게 관리하고 완료할 것인가? | [docs/03_Work_Lifecycle_Management.md](docs/03_Work_Lifecycle_Management.md) | `scripts/linear.py`, Notion 할 일 |
 
-핵심은 **역할은 영구, 세션은 교체 가능** 입니다. PM 은 프로젝트(registry 키)로 계속 있고, 그 역할을 맡은 Paseo 세션은 컨텍스트가 커지면 인계 노트를 받아 새 세션으로 바뀝니다. 언제 바꿀지는 JARVIS 가 정하고, lock·registry 전환·기록은 `jarvisctl` 이 원자적으로 하며, 훅이 규칙을 어기는 도구 호출을 막습니다.
+핵심은 역할은 영구, 세션은 교체 가능이라는 점입니다. PM 은 프로젝트(registry 키)로 계속 있고, 그 역할을 맡은 Paseo 세션은 컨텍스트가 커지면 인계 노트를 받아 새 세션으로 바뀝니다. 언제 바꿀지는 JARVIS 가 정하고, lock·registry 전환·기록은 `jarvisctl` 이 원자적으로 하며, 훅이 규칙을 어기는 도구 호출을 막습니다.
+
+## 지식은 어디에 두나
+
+지식은 종류마다 한 곳에 둡니다. 에이전트가 자동으로 읽는 것은 JARVIS 폴더와 프로젝트 폴더뿐이고, Obsidian 은 사람이 읽고 정리하는 기록입니다.
+
+| 지식 | 자리 | 누가 쓰나 |
+|---|---|---|
+| 판단 기준(사용자가 "기준으로 남겨"라고 한 것) | `criteria.md` | JARVIS |
+| 프로젝트 기술 지식(구조, 도구 사용법, 주의점) | 프로젝트 저장소 `docs/`·`CLAUDE.md` | PM·Worker |
+| 진행 상황(작업, 결정, 인계) | `state/` | JARVIS·훅·`jarvisctl` |
+| 결정 배경, 회고, 하루 기록 | Obsidian(`projects/worklog/`) | JARVIS(작업일지·위키 정리) |
+
+지금 상태는 JARVIS 보드에서 봅니다. Obsidian 에 상태 사본을 두지 않습니다.
 
 ## 무엇이 들어 있나
 
@@ -67,7 +80,7 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 | 수명주기·상태 명령 | `scripts/jarvisctl.py` | 작업·결정 번호 발급, 결정 확정(CAS), 공유 자원 점유, 프로젝트 등록·필드, 교체 조건 점검, 교체 lock(소유 창만), registry 전환(CAS), 인계 노트 보관, 기본 수신자 전환. 모두 잠금 안에서 |
 | Linear 연동 | `scripts/linear.py` | JARVIS 만 쓰는 Linear 조회·이슈 만들기·상태·코멘트, 실패 재시도 |
 | 판단 기준 | `criteria.md` | JARVIS 가 사용자 대신 정해도 되는 기준. 사용자가 결정할 때마다 하나씩 늘어남 |
-| 프로젝트 목록 | `registry.yaml` | 프로젝트 키, 폴더, 지금 Coordinator ID. 개인 상태라 git 에 올리지 않음(`registry.example.yaml` 참고) |
+| 프로젝트 목록 | `registry.yaml` | 프로젝트 키, 폴더, 지금 PM ID, PM 제목(`pm_title`), Linear Project, 기본 수신 JARVIS. `jarvisctl` 로만 바꿈. 개인 상태라 git 에 올리지 않음(`registry.example.yaml` 참고) |
 | 상태 파일 | `state/` | 작업, 결정, 인계 노트, 세션 이력, 공유 자원 점유, 운영 반영 대기. JARVIS·훅·`scripts/` 만 쓰고 git 에 올리지 않음 |
 | 대시보드 | `dashboard/` | 읽기만 하는 로컬 웹 화면(JARVIS 보드). Python 표준 라이브러리만 씀. 할 일 탭만 Notion 에 완료 체크와 날짜 옮기기를 씀 |
 | 플러그인 | `.claude-plugin/`, `hooks/`, `skills/` | 모든 세션에 걸리는 훅: PM 맥락 주입(SessionStart), 닫힌 PM 대조(UserPromptSubmit), 사용량 기록(Stop), PM 생성·닫기 가드(PreToolUse·PostToolUse), 종료 기록(SessionEnd·PreCompact), JARVIS 폴더 보호, 커밋 문구 검사. `git-message` 스킬 |
@@ -98,14 +111,14 @@ python scripts\jarvisctl.py can-rotate nipa          # 컨텍스트 > 20만 · P
 python scripts\jarvisctl.py lock acquire nipa --reason context
 #  옛 PM 에 [인계요청] → [인계노트] 를 파일로 저장
 python scripts\jarvisctl.py handoff nipa note.md    # state/handoff/nipa/latest.md (이전 노트는 이력으로)
-#  create_agent: 제목 nipa-pm, labels {"jarvis.role":"pm","jarvis.project":"nipa"} → 훅이 맥락을 넣고 detach
+#  create_agent: 제목은 registry pm_title(nipa-pm), labels {"jarvis.role":"pm","jarvis.project":"nipa"} → 훅이 맥락을 넣고 detach
 python scripts\jarvisctl.py hook-check <새 ID>      # [준비] 의 표식과 비교
 python scripts\jarvisctl.py switch nipa <새 ID>     # registry 를 CAS 로 바꾸고 lock 해제
 ```
 
 새 프로젝트, 닫힌 PM 다시 만들기, 교체가 모두 같은 "PM 띄우기" 절차를 씁니다. 사용자가 Paseo 화면에서 PM 을 닫으면 JARVIS 가 다음 글을 받을 때 훅이 알아채 알려 주고, 다음 `[배정]` 때 새로 띄웁니다. 자세한 순서와 실패 처리는 [docs/02](docs/02_Agent_Lifecycle_Management.md) 와 `CLAUDE.md` 의 "PM 띄우기", "PM 세션 교체" 에 있습니다.
 
-JARVIS 대화창은 동시에 여러 개 열 수 있고, 모두 같은 상태 파일을 고칩니다. 창끼리 겹치면 안 되는 일(작업·결정 번호 발급, registry 변경, PM 교체)은 `jarvisctl` 이 잠금 안에서 처리하고, 훅이 그 밖의 경로를 막습니다. registry 의 `jarvis:` 는 쓰기 권한이 아니라 기본 수신자(아침 정리 보고와 맡긴 창이 닫힌 보고를 받는 창)이고, `jarvisctl claim-jarvis <자기 ID>` 로 바꿉니다(그 창이 닫혔거나 넘겼을 때만).
+JARVIS 대화창은 동시에 여러 개 열 수 있고, 모두 같은 상태 파일을 고칩니다. 창끼리 겹치면 안 되는 일(작업·결정 번호 발급, 결정 확정, 공유 자원 점유, registry 변경, PM 교체)은 `jarvisctl` 이 잠금 안에서 처리하고, 훅이 그 밖의 경로를 막습니다. 창끼리는 사용자와 나눈 대화를 모르므로, 지켜야 할 지시는 결정 파일이나 `criteria.md` 에 남깁니다. registry 의 `jarvis:` 는 쓰기 권한이 아니라 기본 수신자(아침 정리 보고와 맡긴 창이 닫힌 보고를 받는 창)이고, `jarvisctl claim-jarvis <자기 ID>` 로 바꿉니다(그 창이 닫혔거나 넘겼을 때만).
 
 ## Linear
 
@@ -126,7 +139,7 @@ JARVIS 는 이 저장소를 받은 폴더에서 돌아갑니다. 플러그인에
    Copy-Item registry.example.yaml registry.yaml
    ```
 
-   `registry.yaml` 에 프로젝트마다 이름과 폴더(`root`)를 적습니다. `coordinator` 를 비워 두면 JARVIS 가 처음 일을 맡길 때 만들고 채웁니다.
+   `registry.yaml` 에 프로젝트마다 이름과 폴더(`root`)를 적습니다. `coordinator` 를 비워 두면 JARVIS 가 처음 일을 맡길 때 만들고 채웁니다. 처음 만든 뒤 프로젝트를 더할 때는 `python scripts\jarvisctl.py register <키> --root <폴더>` 를 씁니다.
 3. JARVIS 폴더와 각 프로젝트 폴더를 Claude Code 로 한 번씩 열어 신뢰를 승인합니다. 신뢰하지 않은 폴더에서는 그 폴더의 권한 설정이 무시됩니다.
 4. 프로젝트 폴더마다 `templates/project-settings.json` 을 `.claude/settings.json` 으로 둡니다. Coordinator 가 Worker 를 만들고 지시하는 것은 허용하고, 권한 승인과 강제 종료는 막는 설정입니다.
 5. 전역 `~/.claude/settings.json` 에서는 Paseo 도구 중 상태와 목록 보기만 허용합니다. 전역 deny 는 두지 마세요. deny 는 어느 설정 파일에 있든 이기기 때문에 JARVIS 폴더의 허용까지 막습니다.
@@ -185,13 +198,13 @@ $env:JARVIS_DIR = "C:\Users\<나>\JARVIS"; $env:PORT = "4991"; python dashboard\
 
 | 탭 | 보여 주는 것 | 출처 |
 |---|---|---|
-| 에이전트 | 3D 사무실. 사장실, JARVIS 자리, 프로젝트별 방에 PM 과 Worker 책상이 있습니다. 일하는 세션은 앉아서 타자를 치고, 권한을 기다리면 머리 위에 주황 `!` 가 뜨고, 쉬면 휴게실로 갑니다. 교체된 옛 PM 은 archive 전까지 그 방에 "(이전)" 으로 남습니다 | Paseo 에이전트 기록(제목, 부모, 상태, `jarvis.role`·`jarvis.project`·`jarvis.task` 라벨), registry 의 기본 수신 JARVIS·현재 PM |
+| 에이전트 | 3D 사무실. 사장실, JARVIS 자리, 프로젝트별 방에 PM 과 Worker 책상이 있습니다. 일하는 세션은 앉아서 타자를 치고, 권한을 기다리면 머리 위에 주황 `!` 가 뜨고, 쉬면 휴게실로 갑니다. 방은 일이 있을 때(세션 작업·대기, 진행 중 작업, 정할 결정, PM 교체 중, 최근 활동) 보이고, 그 밖의 방은 장면 위 "항상 보이기" 에서 체크한 것만 보입니다(브라우저에 저장). 프로세스가 닫혔거나 2시간 넘게 활동이 없는 세션은 숨기고 "꺼진 세션 보기" 로 다시 봅니다. PM 이 꺼진 방에는 "PM 꺼짐" 이 붙습니다 | Paseo 에이전트 기록(제목, 부모, 상태, `jarvis.role`·`jarvis.project`·`jarvis.task` 라벨), registry 의 기본 수신 JARVIS·현재 PM |
 | 흐름 | `[배정]` `[보고]` `[질문]` 메시지를 카드 트리, 3D 부채꼴, 평면 그래프와 목록으로 | 각 세션 대화 기록 |
 | 결정 | 지금 정할 것, 작업은 끝났는데 안 정한 것, 미뤄 둔 것, 정한 것(누가, 기준 몇 번으로). 권한을 기다리는 세션 | `state/decisions/*.md`, Paseo 주의 표시 |
 | 할 일 | Notion 할일 DB 의 오늘, 이번 주, 밀린 일. 완료 체크와 오늘로 옮기기 | Notion API |
 | 현황 | 프로젝트별 작업판, 운영 반영 대기, 공유 자원 점유 | `state/tasks`, `releases.json`, `occupancy.json` |
 
-탭마다 자세한 설명은 [dashboard/README.md](dashboard/README.md) 에 있습니다. JARVIS 팀 밖의 Claude, Codex 세션까지 보려면 `JARVIS_SHOW_OTHER=1` 을 줍니다.
+탭마다 자세한 설명은 [dashboard/README.md](dashboard/README.md) 에 있습니다. JARVIS 팀 밖의 Claude, Codex 세션까지 보려면 `JARVIS_SHOW_OTHER=1` 을, 활동 기준 시간을 바꾸려면 `JARVIS_ACTIVE_HOURS`(기본 2)를 줍니다.
 
 ## Notion 할 일
 
@@ -226,10 +239,11 @@ JARVIS 는 상태가 바뀌는 즉시 `state/` 에 씁니다. 대화가 길어�
 
 ## 지금 상태
 
-- 확인함: Paseo 가 띄운 Claude 세션도 CLAUDE.md, 플러그인, 스킬, MCP 를 그대로 읽습니다. git 저장소가 아닌 폴더도 프로젝트로 등록됩니다. JARVIS → Coordinator → Worker 가 승인 창 없이 이어지고, 부모와 자식 관계가 기록됩니다.
-- 고친 것: Coordinator 가 Worker 를 기다리며 낸 이른 보고를 JARVIS 가 완료로 받던 문제. 하위 에이전트가 끝났다는 알림은 부모에게 처음 한 번만 가서, Coordinator 가 모두 끝난 뒤 JARVIS 에게 `[보고]` 를 직접 보내게 바꿨습니다.
-- 확인함(2026-11-09): 시험 PM 에서 SessionStart 훅이 규칙·인계 노트·열린 작업과 세션별 표식을 넣고, Stop 훅이 컨텍스트 크기를 남기고, Paseo 에서 archive 하면 SessionEnd 훅이 불리고, 대조 훅이 닫힌 PM 을 한 번만 알립니다. 에이전트가 `create_agent` 로 만든 에이전트는 그 에이전트의 subagent 가 되므로, PM 은 만든 직후 `paseo agent detach` 로 떼어 냅니다.
-- 고친 것: Coordinator 가 Worker 를 기다리며 낸 이른 보고를 JARVIS 가 완료로 받던 문제. 하위 에이전트가 끝났다는 알림은 부모에게 처음 한 번만 가서, Coordinator 가 모두 끝난 뒤 JARVIS 에게 `[보고]` 를 직접 보내게 바꿨습니다.
+- 확인함: Paseo 가 띄운 Claude 세션도 CLAUDE.md, 플러그인, 스킬, MCP 를 그대로 읽습니다. git 저장소가 아닌 폴더도 프로젝트로 등록됩니다. JARVIS → PM → Worker 가 승인 창 없이 이어지고, 부모와 자식 관계가 기록됩니다.
+- 확인함(2026-11-09): 시험 PM 에서 SessionStart 훅이 규칙·인계 노트·열린 작업과 세션별 표식을 넣고, Stop 훅이 컨텍스트 크기를 남기고, Paseo 에서 archive 하면 SessionEnd 훅이 불리고, 대조 훅이 닫힌 PM 을 한 번만 알립니다. nipa PM 을 실제로 교체했습니다(87.8만 → 6.8만 토큰).
+- 확인함: 에이전트가 `create_agent` 로 만든 에이전트는 그 에이전트의 subagent 가 되므로, PM 은 만든 직후 `paseo agent detach` 로 떼어 냅니다. detach 한 PM 의 끝남 알림은 JARVIS 에게 오지 않아, PM 이 `[준비]`·`[보고]` 를 직접 보냅니다.
+- 고친 것: PM 이 Worker 를 기다리며 낸 이른 보고를 JARVIS 가 완료로 받던 문제. 하위 에이전트가 끝났다는 알림은 부모에게 처음 한 번만 가서, PM 이 모두 끝난 뒤 JARVIS 에게 `[보고]` 를 직접 보내게 바꿨습니다.
+- 실측 필요: 새로 뜬 JARVIS 창에서 PM 을 만들 때의 생성 가드와 자동 detach, UserPromptSubmit 대조, PreCompact 기록, JARVIS 폴더 쓰기 차단.
 - 남은 일: Paseo 플러그인 `agent.archive.after` 로 닫힘 즉시 감지(지금은 대조), state 백업, 설치를 맡을 setup 스킬, 규칙에 적힌 JARVIS 폴더 경로 걷어내기.
 
 ## 라이선스와 참고
