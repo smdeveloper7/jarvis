@@ -40,7 +40,7 @@ $env:HUB_DIR = "C:\Users\<나>\hub"; $env:PORT = "4990"; python dashboard\server
 |---|---|---|
 | UserPromptSubmit, PreToolUse | 세션 status busy 또는 state working(3초 주기) | 자기 책상에 앉아 말풍선, 모니터가 흰빛, 흰 상태 링 |
 | Notification | state blocked(대기 중) | 책상에 앉은 채 오렌지 느낌표, 모니터가 오렌지로 깜빡임, 오렌지 링 |
-| Stop | 그 밖의 상태(쉬는 중, 지시 대기, 끝남) | 라운지 소파로 걸어가 앉고 zzz, 회색 링 |
+| Stop | 그 밖의 상태(쉬는 중, 지시 대기, 끝남) | 자기 책상에 그대로 앉아 모니터가 꺼지고 zzz, 회색 링(라운지 없음. 책상이 모자라면 방 앞 통로에 섬) |
 | SessionEnd | 목록에서 세션이 사라짐 | 장면에서 빠짐 |
 | (배정) | `/api/messages` 의 새 `[배정]`, 보낸 쪽이 허브(15초 주기 24시간 창) | 허브 자리에서 그 세션 책상으로 오렌지 서류가 날아감 |
 | (보고) | `/api/messages` 의 새 `[보고]`, 받는 쪽이 허브 | 책상에서 허브로 흰 서류가 날아감 |

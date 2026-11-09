@@ -118,7 +118,10 @@ try:
     reg = {'nipa': {'root': 'C:/p/nipa', 'coordinator': 'NEW'}}
     out, jid, _ = jd.roles(recs, reg, home='C:/J', rep='J2')
     assert jid == 'J2' and out['NEW'] == ('coordinator', 'nipa') and out['OLD'] == ('pm_prev', 'nipa'), out
-    assert out['W'] == ('worker', 'nipa') and out['J1'] == ('other', ''), out
+    # JARVIS 창이 여럿이면 모두 jarvis(흐름도에서 한 노드), 대표(jid)만 오피스 비서 자리 (2026-11-09)
+    assert out['W'] == ('worker', 'nipa') and out['J1'] == ('jarvis', ''), out
+    row = jd.row_of(recs[0], 'jarvis', '', 0)
+    assert row['name'] == 'JARVIS' and row['lane'] == 'HUB' and row['title'] == 'JARVIS', row
     row = jd.row_of(recs[3], 'pm_prev', 'nipa', 0)
     assert row['group'] == 'task' and row['lane'] == 'nipa' and row['name'] == 'nipa-coord (이전)', row
     print('ok')

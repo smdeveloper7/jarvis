@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import threading
 import time
+import urllib.error
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -358,10 +359,72 @@ def usage_of(get, now):
                 windows=[dict(w, reset=bool(w['resets'] and w['resets'] <= now)) for w in r['windows']])
 
 
+CREDS = os.path.expanduser('~/.claude/.credentials.json')   # Claude Code 로그인(claudeAiOauth)
+OAUTH_USAGE = 'https://api.anthropic.com/api/oauth/usage'      # Claude Code 의 /usage 가 읽는 곳(공개 API 아님)
+OAUTH_EVERY = 5 * 60   # seconds between account reads; the dashboard polls every 3 s
+_oauth = {'at': 0, 'r': None, 'err': None}
+
+
+def oauth_limits(creds=CREDS, fetch=None, now=None):
+    """Claude 계정 사용량을 로그인 토큰으로 직접 읽는다. Paseo 세션은 상태줄을 돌리지 않아 usage.json 이 안 생기므로.
+    토큰은 읽기만 하고 갱신하지 않는다(갱신은 Claude Code 몫, 여기서 하면 로그인이 꼬일 수 있다). 5분에 한 번만 묻는다."""
+    now = time.time() if now is None else now
+    if now - _oauth['at'] < OAUTH_EVERY and (_oauth['r'] or _oauth['err']):
+        if _oauth['err']:
+            raise _oauth['err']
+        return _oauth['r']
+    _oauth['at'] = now
+    try:
+        with open(creds, encoding='utf-8') as f:
+            o = (json.load(f) or {}).get('claudeAiOauth') or {}
+        tok, exp = o.get('accessToken'), o.get('expiresAt')
+        if not tok:
+            raise KeyError('Claude 로그인 토큰 없음')
+        if isinstance(exp, (int, float)) and exp / 1000 < now:
+            raise ValueError('로그인 토큰 만료: Claude Code 를 한 번 쓰면 갱신됩니다')
+        d = (fetch or _fetch_json)(OAUTH_USAGE, {'Authorization': 'Bearer ' + tok, 'anthropic-beta': 'oauth-2025-04-20'})
+        wins = []
+        for k, w in d.items():
+            if isinstance(w, dict) and isinstance(w.get('utilization'), (int, float)):
+                rs = w.get('resets_at')
+                rs = iso_ms(rs) / 1000 if isinstance(rs, str) and rs else rs
+                wins.append(window(k, CLAUDE_WINDOWS.get(k, 10080), w['utilization'], rs))
+        if not wins:
+            raise ValueError('사용량 응답에 창이 없음')
+        r = {'at': int(now * 1000), 'plan': str(o.get('subscriptionType') or ''), 'windows': wins}
+        _oauth.update(r=r, err=None)
+        return r
+    except Exception as e:   # FileNotFoundError stays 'missing'; the rest show as 읽지 못함 with the reason
+        _oauth.update(r=None, err=e if isinstance(e, (OSError, ValueError, KeyError, TypeError)) else ValueError(str(e)[:200]))
+        raise _oauth['err']
+
+
+def _fetch_json(url, headers):
+    import urllib.request
+    req = urllib.request.Request(url, headers=dict(headers, **{'User-Agent': 'jarvis-dashboard', 'Accept': 'application/json'}))
+    try:
+        with urllib.request.urlopen(req, timeout=10) as res:
+            return json.loads(res.read().decode('utf-8'))
+    except urllib.error.HTTPError as e:
+        raise ValueError(f'계정 사용량 요청 실패 HTTP {e.code}') from None
+
+
+def claude_usage(path=USAGE):
+    """계정에서 직접 읽고, 안 되면 상태줄이 써 둔 usage.json(있을 때)."""
+    try:
+        return oauth_limits()
+    except FileNotFoundError:
+        return by_stat(path, claude_limits)
+    except Exception:
+        if os.path.exists(path):
+            return by_stat(path, claude_limits)
+        raise
+
+
 def usage(claude=USAGE, codex=CODEX, now=None):
     now = int(time.time() * 1000) if now is None else now
-    return {'now': now, 'claude': usage_of(lambda: by_stat(claude, claude_limits), now),
-            'codex': usage_of(lambda: codex_usage(codex), now)}
+    get = (lambda: claude_usage(claude)) if claude == USAGE else (lambda: by_stat(claude, claude_limits))   # tests pass a file
+    return {'now': now, 'claude': usage_of(get, now), 'codex': usage_of(lambda: codex_usage(codex), now)}
 
 
 def load_json(path):
@@ -886,13 +949,38 @@ def parse_hours(v):
     return h, ''
 
 
+PASEO_APP = os.environ.get('PASEO_APP') or r'C:\Program Files\Paseo\Paseo.exe'
+
+
+def paseo_open(agent):
+    """Paseo 앱에서 그 에이전트 화면 열기. Windows 에는 paseo:// 가 등록돼 있지 않아 브라우저 링크로는 안 열리므로,
+    앱을 딥링크 인자로 한 번 더 실행한다(앱은 하나만 뜨고 떠 있던 창이 그 에이전트로 간다). 목록에 있는 Paseo ID 만 받는다."""
+    known = {a.get('paseoId') for a in agents() if a.get('paseoId')}
+    if not isinstance(agent, str) or agent not in known:
+        return 404, {'error': '목록에 없는 에이전트'}
+    try:
+        with open(os.path.join(jd.PASEO, 'server-id'), encoding='utf-8') as f:
+            srv = f.read().strip()
+    except OSError:
+        return 500, {'error': 'Paseo server-id 를 못 읽음'}
+    if not re.fullmatch(r'[\w-]+', srv) or not os.path.exists(PASEO_APP):
+        return 500, {'error': 'Paseo 앱을 찾지 못함'}
+    link = f'paseo://h/{srv}/agent/{agent}'
+    try:
+        subprocess.Popen([PASEO_APP, link], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as e:
+        return 500, {'error': str(e)[:200]}
+    return 200, {'ok': True, 'link': link}
+
+
 def messages(hours=24, now=None, root=PROJECTS, rows=(), names=None):
     """Messages between Claude sessions in the last `hours` (0: all), with the graph's nodes and edges.
 
     Every top-level transcript touched in the window counts, closed sessions included (sub-agent ones do not).
     """
     if root == PROJECTS and names is None:   # JARVIS: 배정·보고 머리말 메시지와 부모-자식 관계로
-        return jd.messages([a for a in rows if a.get('kind') == 'paseo'], transcript_path, hours, now, MAX_MESSAGES, jd.boss_name(HUB))
+        return jd.messages([a for a in rows if a.get('kind') == 'paseo'], transcript_path, hours, now, MAX_MESSAGES, jd.boss_name(HUB),
+                           jd.jarvis_sessions(HUB), jd.senders(HUB))
     now = time.time() if now is None else now
     since = int((now - hours * 3600) * 1000) if hours > 0 else 0
     names = roster() if names is None else names
@@ -960,7 +1048,8 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get('Origin')
         if origin not in (f'http://127.0.0.1:{PORT}', f'http://localhost:{PORT}') or self.headers.get('X-Jarvis') != '1':
             return self.send(403, {'error': 'bad origin'})   # 다른 사이트가 이 PC 의 4991 로 보내는 요청 막기
-        if urlparse(self.path).path != '/api/notion/update':
+        path = urlparse(self.path).path
+        if path not in ('/api/notion/update', '/api/paseo/open'):
             return self.send(404, {'error': 'not found'})
         try:
             n = int(self.headers.get('Content-Length') or 0)
@@ -969,6 +1058,8 @@ class Handler(BaseHTTPRequestHandler):
             body = None
         if not isinstance(body, dict):
             return self.send(400, {'error': 'JSON 본문 필요'})
+        if path == '/api/paseo/open':
+            return self.send(*paseo_open(body.get('agent')))
         if body.get('kind') == 'routine':
             code, out = jd.routine_check(body.get('id'), body.get('done'))
         else:

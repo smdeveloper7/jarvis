@@ -254,6 +254,7 @@ button.subs-t:active { background: var(--color-paper-3) }
 .tag:hover { background: var(--color-paper-3) }
 .tag[data-state="rest"] { color: var(--color-muted); font-weight: 600 }
 .tag.hub { background: var(--color-ink); color: var(--color-paper) }
+.tag.prev { opacity: 0.6; font-style: italic }   /* 교체된 옛 PM: archive 전까지 칸막이 안 둘째 책상 */
 .tag.dup { max-width: 15em; box-shadow: inset 0 0 0 1px var(--color-accent) }
 .sign { position: absolute; left: 0; top: 0; padding: 0 var(--space-xs); border-radius: var(--radius-ctl); color: var(--color-muted); background: var(--color-paper); font-size: var(--text-xs); font-weight: 600; line-height: 18px; white-space: nowrap; pointer-events: none; will-change: transform; border: 1px solid var(--color-rule) }
 .sign.room { color: var(--color-ink); font-weight: 700; border-color: var(--color-rule-2); background: var(--color-paper-2) }
@@ -275,51 +276,10 @@ button.subs-t:active { background: var(--color-paper-3) }
   .hstage { aspect-ratio: 1.35 / 1; min-height: 260px }
 }
 
-/* the session canvas: a dotted field, the hub in the middle, a card per session */
+/* the 세션 head on the agents page: title, hint, and the 흐름도 | 목록 switch */
 .vhead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); margin-top: var(--space-lg) }
 .vhead h2 { margin: 0; font: 700 var(--text-md)/1.4 var(--font-body) }
 .vhead .seg { margin: 0 0 0 auto }
-.canvas-wrap { container-type: inline-size }
-.canvas {
-  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-areas: "mid mid" "left right"; gap: var(--space-xl) var(--space-2xl); align-items: start;
-  margin-top: var(--space-sm); padding: var(--space-lg) var(--space-md); border-radius: var(--radius-card);
-  background-color: var(--color-canvas); background-image: radial-gradient(var(--color-dot) 1px, transparent 1.2px); background-size: 16px 16px
-}
-.canvas.nohub { grid-template-areas: "left right" }
-.canvas .links { position: absolute; inset: 0; pointer-events: none; overflow: visible }
-.ccol { position: relative; display: grid; gap: var(--space-lg); align-content: start; min-width: 0 }
-.ccol.left { grid-area: left } .ccol.right { grid-area: right }
-.ccol.mid { grid-area: mid; justify-self: center; width: min(100%, 300px) }
-@container (min-width: 760px) {
-  .canvas { grid-template-columns: minmax(0, 1fr) minmax(0, 260px) minmax(0, 1fr); grid-template-areas: "left mid right"; column-gap: var(--space-2xl); align-items: center; padding: var(--space-xl) var(--space-lg) }
-  .canvas.nohub { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "left right" }
-  .ccol.mid { width: 100% }
-}
-.link { fill: none; stroke: var(--color-rule-2); stroke-width: 1.25; stroke-dasharray: 3 4 }
-.link.on { stroke: var(--color-muted); stroke-dasharray: none; stroke-width: 1.5 }
-.link.ask { stroke: var(--color-accent); stroke-dasharray: none; stroke-width: 2 }
-.lnum { fill: var(--color-muted); font: 700 11px var(--font-body); paint-order: stroke; stroke: var(--color-canvas); stroke-width: 4px; stroke-linejoin: round }
-.node {
-  position: relative; z-index: 1; display: grid; gap: var(--space-2xs); min-width: 0; padding: var(--space-sm) var(--space-sm) var(--space-md);
-  border-radius: var(--radius-card); background: var(--color-node); transition: background-color var(--dur-micro) var(--ease-out)
-}
-.node:hover { background: var(--color-paper-3) }
-.node:active { background: var(--color-hover) }
-.node:hover .name { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; text-decoration-color: var(--color-accent) }
-.node.blocked .name { font-weight: 800 }
-.node.done { background: none; opacity: 0.62 }
-.node.hub { padding: var(--space-md) }
-.node.hub .name { font-size: var(--text-lg) }
-.ntag { position: absolute; left: var(--space-sm); top: calc(-1 * var(--space-md)); max-width: calc(100% - var(--space-lg)); font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.nhead { display: flex; align-items: center; gap: var(--space-xs); min-width: 0 }
-.nhead .chip { margin-left: auto }
-.ndesc { font-size: var(--text-meta); color: var(--color-muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden }
-.node.busy .ndesc, .node.blocked .ndesc, .node.hub .ndesc { color: var(--color-ink) }
-.nmeta { display: flex; flex-wrap: wrap; gap: var(--space-3xs) var(--space-sm); font-size: var(--text-xs); color: var(--color-muted) }
-.nmeta b { font-weight: 600; color: var(--color-ink) }
-.nflag { margin-top: var(--space-2xs); padding: var(--space-2xs) var(--space-xs); border-radius: var(--radius-ctl); background: var(--color-paper-3); font-size: var(--text-xs); font-weight: 600; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden }
-.nflag.ask { padding: 0; background: none; color: var(--color-ink-2); font-weight: 400 }
 
 /* sidebar: wordmark, grouped pages, the usage card at its foot; below 1000px it folds back into the top rows */
 .brand, .navg, .page-t { display: none }
@@ -779,7 +739,7 @@ function renderTop() {
 }
 const subRun = () => agents.reduce((n, a) => n + (a.subagents || []).filter(s => s.state === 'busy').length, 0)
 // [key, label, hash, sidebar group]; the narrow tab row keeps the same order without the group names
-const PAGES = [['routine', '루틴', '#/routine', '오늘'], ['agents', '에이전트', '#/', '세션'], ['flow', '흐름', '#/flow', '세션'], ['decisions', '결정', '#/decisions', '할 것'], ['todo', '할 일', '#/todo', '할 것'], ['status', '현황', '#/status', 'JARVIS']]
+const PAGES = [['routine', '루틴', '#/routine', '오늘'], ['agents', '에이전트', '#/', '세션'], ['decisions', '결정', '#/decisions', '할 것'], ['todo', '할 일', '#/todo', '할 것'], ['status', '현황', '#/status', 'JARVIS']]
 
 /* ---------- alerts: tab title count and browser notifications ---------- */
 // reports to the hub newer than reportMark are new; unread ones count in the title until the page is seen
@@ -831,8 +791,8 @@ function checkReports(d) {
   fresh.forEach(m => unread.add(m.id))
   reportMark = top; store.set('reportMark', reportMark)
   const news = canNotify() ? fresh.filter(m => firstTime('r:' + m.id)) : []
-  if (news.length > 3) notify(`${d.hub} 에게 보고 ${news.length}건`, news.map(m => `${m.from}: ${m.sum}`).join('\n'), 'reports', '#/flow')
-  else news.forEach(m => notify(`${m.from} 보고`, m.sum, 'r:' + m.id, '#/flow'))
+  if (news.length > 3) notify(`${d.hub} 에게 보고 ${news.length}건`, news.map(m => `${m.from}: ${m.sum}`).join('\n'), 'reports', '#/')
+  else news.forEach(m => notify(`${m.from} 보고`, m.sum, 'r:' + m.id, '#/'))
   renderTitle(); seen()
 }
 // the label hides below 620 px and the bell stays (title and aria-label carry the words)
@@ -913,7 +873,7 @@ function agentCard(a) {
   return h('article', { class: `agent ${s.key} g-${a.group || 'other'}` },
     h('a', { class: 'amain', href: '#/s/' + a.sessionId },
       h('div', { class: 'r1' }, h('span', { class: 'name' }, a.name || a.sessionId.slice(0, 8)), badge(a), stateEl(s)),
-      a.detail ? h('div', { class: 'why' }, a.detail) : null,
+      a.detail || a.title ? h('div', { class: 'why' }, a.detail || '창: ' + a.title) : null,
       s.key === 'blocked' && a.needs ? h('div', { class: 'needs' }, a.needs) : null,
       h('div', { class: 'meta' },
         h('span', {}, '활동 ', h('b', {}, ago(a.lastActivity)), hm(a.lastActivity)),
@@ -926,7 +886,7 @@ function agentCard(a) {
 
 /* office: the sessions as low-poly figures in an isometric room (three.js r128, vendored).
    The hub sits at its own desk; a session at work sits at its desk with a typing bubble and a lit screen, a waiting
-   one shows an orange "!" and a blinking screen, one at rest or finished sits in the lounge. A new [배정] from the hub
+   one shows an orange "!" and a blinking screen, one at rest or finished stays at its desk with the screen dark and a zzz (no lounge: rooms are per project). A new [배정] from the hub
    flies a sheet from the hub to that desk, a [보고] flies one back. Drag turns the room. It pauses on hover or focus;
    under reduced motion nothing walks or flies; without WebGL the list beside it stays. #/demo adds buttons that
    override a session's scene locally, for trying the scenes; nothing is sent anywhere. */
@@ -971,7 +931,7 @@ function officeInit() {
   const std = () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 })
   const M = { floor: std(), wall: std(), rug: std(), desk: std(), leg: std(), sofa: std(), seat: std(), hubSeat: std(), plant: std(), pot: std(), bean: std(), body: std(), skull: std(), hubTile: std(), room: std(), booth: std(),
     dark: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.55 }) }
-  hero.o = { renderer, scene, camera, controls, hemi, sun, M, room: null, rows: -1, desks: [], hub: null, lounge: [], packets: [], tex: {}, v: new THREE.Vector3(), down: null }
+  hero.o = { renderer, scene, camera, controls, hemi, sun, M, room: null, rows: -1, desks: [], hub: null, packets: [], tex: {}, v: new THREE.Vector3(), down: null }
   officeColors()
   new MutationObserver(() => { officeColors(); officeRender() }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
   new ResizeObserver(officeResize).observe(hero.stage)
@@ -1042,8 +1002,8 @@ function officeLayout(projects) {
   }
   const n = Math.max(1, projects.length), step = ROOM.d + ROOM.gap
   const roomsEnd = -7.6 + n * step - ROOM.gap
-  const loungeZ = Math.max(roomsEnd, 2.4) + 2.6, front = loungeZ + 4.5, depth = front + 7.6, cz = (front - 7.6) / 2
-  o.geo = { loungeZ, entry: loungeZ + 0.9, cz, depth }
+  const front = Math.max(roomsEnd, 2.4) + 2.4, depth = front + 7.6, cz = (front - 7.6) / 2   // 라운지 없음: 방 앞 통로까지만
+  o.geo = { cz, depth }
   plane(22, depth, o.M.floor, 0, cz, 0)
   box(22, 2.4, 0.2, o.M.wall, 0, 1.2, -7.6, g, false)
   box(0.2, 2.4, depth + 0.2, o.M.wall, -11.1, 1.2, cz, g, false)
@@ -1093,9 +1053,13 @@ function officeLayout(projects) {
     box(ROOM.x1 - ROOM.x0, 0.55, 0.12, o.M.wall, (ROOM.x0 + ROOM.x1) / 2, 0.27, z1)          // 방 앞벽
     box(0.12, 1.05, ROOM.d - 1.5, o.M.wall, ROOM.booth, 0.52, z0 + (ROOM.d - 1.5) / 2)       // 칸막이: Coordinator | Worker
     floorText(p.name, ROOM.x1 - 1.4, z1 + 0.35, 0, 0, 'room')
-    if (i === 0) { floorText('Coordinator', (ROOM.x0 + ROOM.booth) / 2, z1 + 0.35); floorText('Workers', (ROOM.booth + ROOM.x1) / 2 - 1.2, z1 + 0.35) }   // 구역 표지판: 첫 방 앞벽 바깥(사람·이름표와 겹치지 않게)
+    if (i === 0) {   // 구역 표지판: 첫 방 뒷벽(사무실 뒷벽)에 붙인 명판. 바닥이 아니라 모니터 위 높이에 둔다
+      floorText('Coordinator', (ROOM.x0 + ROOM.booth) / 2, z0 + 0.12); floorText('Workers', (ROOM.booth + ROOM.x1) / 2, z0 + 0.12)
+      for (const sg of o.signs.slice(-2)) sg.pos.y = 2.05
+    }
     const out = seat => [[seat.x, walk], [ROOM.x0 + 0.5, walk], [ROOM.x0 + 0.5, door], [ROOM.corridorX, door]]
-    const room = { key: p.key, name: p.name, coords: [], workers: [] }
+    const room = { key: p.key, name: p.name, coords: [], workers: [],   // stand: 책상이 모자랄 때 방 앞 통로에 서는 자리
+      stand: Array.from({ length: 9 }, (_, k) => ({ x: 2.2 + k * 1.0, z: walk, y: 0, rot: Math.PI, taken: null })) }
     for (const dz of [1.35, 3.1]) {   // 칸막이 안 책상 둘: 둘째는 같은 프로젝트에 Coordinator 가 또 생겼을 때만 쓴다(규칙 위반 표시)
       const cd = desk(-0.7, z0 + dz, false, dz > 2 ? o.M.seat : o.M.hubSeat)
       cd.room = i; cd.kind = 'coord'; cd.out = out(cd.seat); o.desks.push(cd); room.coords.push(o.desks.length - 1)
@@ -1106,17 +1070,6 @@ function officeLayout(projects) {
     }
     o.rooms.push(room)
   })
-  // 라운지: 일을 마친 Worker 가 쉬는 곳
-  const rug = plane(7, 4.4, o.M.rug, 6, loungeZ + 1.4, 0.01)
-  box(3.0, 0.4, 0.9, o.M.sofa, 5.6, 0.2, loungeZ); box(3.0, 0.62, 0.22, o.M.sofa, 5.6, 0.6, loungeZ - 0.42)
-  box(0.22, 0.58, 0.9, o.M.sofa, 4.0, 0.29, loungeZ); box(0.22, 0.58, 0.9, o.M.sofa, 7.2, 0.29, loungeZ)
-  box(1.6, 0.06, 0.7, o.M.desk, 5.6, 0.42, loungeZ + 1.6)
-  const beans = [[3.6, loungeZ + 2.5], [7.7, loungeZ + 2.5], [8.7, loungeZ + 1.1]]
-  beans.forEach(([x, z]) => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), o.M.bean); b.scale.set(1, 0.5, 1); b.position.set(x, 0.2, z); b.castShadow = b.receiveShadow = true; g.add(b) })
-  const seats = [{ x: 4.8, z: loungeZ + 0.1, y: 0.2, rot: 0 }, { x: 5.6, z: loungeZ + 0.1, y: 0.2, rot: 0 }, { x: 6.4, z: loungeZ + 0.1, y: 0.2, rot: 0 },
-    ...beans.map(([x, z]) => ({ x, z, y: 0.22, rot: Math.atan2(5.6 - x, loungeZ + 1.6 - z) }))]
-  for (let i = 0; seats.length < 40; i++) seats.push({ x: 2.6 + (i % 7) * 1.0, z: loungeZ + 3.4 + Math.floor(i / 7) * 0.9, y: 0, rot: Math.PI * 0.75 })
-  o.lounge = seats.map(s => ({ ...s, taken: null }))
   Object.assign(o.sun.shadow.camera, { left: -15, right: 15, top: depth / 2 + 2, bottom: -depth / 2 - 2, near: 1, far: 60 }); o.sun.shadow.camera.updateProjectionMatrix()
   o.sun.position.set(-6, 16, cz + 10); o.sun.target.position.set(0, 0, cz)
   o.controls.target.set(0, 1.2, cz); o.camera.position.set(16, 16.2, cz + 16); o.controls.update()
@@ -1176,22 +1129,17 @@ function setPath(f, wp, rest) {
   if (calm() || !wp.length) { const [x, z] = wp.length ? wp[wp.length - 1] : [f.g.position.x, f.g.position.z]; f.g.position.set(x, rest.y, z); f.g.rotation.y = rest.rot; f.path = []; return }
   f.path = wp.map(([x, z]) => new THREE.Vector3(x, 0, z))
 }
-function toLoungeWaypoints(f, s) {
-  const o = hero.o, d = o.desks[f.desk]
-  return [...d.out, [ROOM.corridorX, o.geo.entry], [s.x, o.geo.entry]]
+// 쉬는 사람도 자기 책상에 그대로 앉아 있다(모니터 꺼짐, 머리 위 zzz). 책상이 모자라면 그 방 앞 통로에 선다
+function standAt(f, room) {
+  if (f.spot) f.spot.taken = null
+  const s = room.stand.find(x => !x.taken) || room.stand[room.stand.length - 1]
+  s.taken = f; f.spot = s; f.loc = 'stand'
+  f.g.position.set(s.x, s.y, s.z); f.g.rotation.y = s.rot; f.path = []; f.rest = { y: s.y, rot: s.rot }
 }
-function goLounge(f, walk) {
-  const o = hero.o, s = o.lounge.find(x => !x.taken) || o.lounge[0]
-  s.taken = f; f.spot = s; f.loc = 'lounge'
-  if (!walk || f.desk < 0) { f.g.position.set(s.x, s.y, s.z); f.g.rotation.y = s.rot; f.path = []; f.rest = { y: s.y, rot: s.rot }; return }
-  setPath(f, toLoungeWaypoints(f, s).concat([[s.x, s.z]]), { y: s.y, rot: s.rot })
-}
-function goDesk(f, walk) {
-  const o = hero.o, seat = o.desks[f.desk].seat, s = f.spot
-  if (s) { s.taken = null; f.spot = null }
-  f.loc = 'desk'
-  if (!walk) { f.g.position.set(seat.x, 0.18, seat.z); f.g.rotation.y = Math.PI; f.path = []; f.rest = { y: 0.18, rot: Math.PI }; return }
-  setPath(f, (s ? toLoungeWaypoints(f, s).reverse() : []).concat([[seat.x, seat.z]]), { y: 0.18, rot: Math.PI })
+function goDesk(f) {
+  const seat = hero.o.desks[f.desk].seat
+  if (f.spot) { f.spot.taken = null; f.spot = null }
+  f.loc = 'desk'; f.g.position.set(seat.x, 0.18, seat.z); f.g.rotation.y = Math.PI; f.path = []; f.rest = { y: 0.18, rot: Math.PI }
 }
 function flySheet(from, to, kind) {
   if (calm()) return
@@ -1234,19 +1182,19 @@ function roomControls() {
   if (!ps.length) return null
   const pins = pinnedRooms()
   const when = t => t ? new Date(t).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'
-  const toggle = k => () => { const x = pinnedRooms(); x.has(k) ? x.delete(k) : x.add(k); store.set('pinnedProjects', [...x]); updateHero() }
+  const toggle = k => () => { const x = pinnedRooms(); x.has(k) ? x.delete(k) : x.add(k); store.set('pinnedProjects', [...x]); updateHero(); renderFlowTab() }
   return h('div', { class: 'hrooms', role: 'group', 'aria-label': '방 표시' },
     h('span', { class: 'hsub' }, '항상 보이기'),
     ps.map(p => h('label', { class: 'hroom' + (p.active ? ' on' : ''),
       title: p.active ? '일이 있어 체크와 상관없이 보임: ' + (p.why || []).join(', ') : '일 없음 · 마지막 활동 ' + when(p.last_at) },
       h('input', { type: 'checkbox', checked: pins.has(p.key), onchange: toggle(p.key) }),
-      p.name, h('small', {}, p.active ? '일 있음' : 'PM ' + ({ working: '작업 중', waiting: '대기', resting: '쉬는 중' }[p.pm_state] || '꺼짐')))),
+      p.name, h('small', {}, p.active ? '진행 중' : 'PM ' + ({ working: '작업 중', waiting: '대기', resting: '쉬는 중' }[p.pm_state] || '꺼짐')))),
     h('label', { class: 'hroom' },
       h('input', { type: 'checkbox', checked: showOffSessions(), onchange() { store.set('showOffSessions', !showOffSessions()); updateHero() } }),
       '꺼진 세션 보기'))
 }
 function officeSync() {
-  const o = hero.o, agents = shownAgents(), hubA = agents.find(a => a.lane === 'HUB')
+  const o = hero.o, agents = shownAgents(), hubA = agents.find(a => a.lane === 'HUB' && a.primary) || agents.find(a => a.lane === 'HUB')
   const projects = shownProjects()
   const grew = officeLayout(projects)
   for (const [sid, f] of hero.figs) if (sid !== BOSS_SID && !agents.some(a => a.sessionId === sid)) { dropFigure(f); hero.figs.delete(sid) }
@@ -1261,11 +1209,11 @@ function officeSync() {
     let f = hero.figs.get(hubA.sessionId)
     if (!f || !f.hub) { if (f) dropFigure(f); f = makeFigure(hubA.sessionId, true); hero.figs.set(hubA.sessionId, f) }
     if (!f.placed) { seatAt(f, o.hubDesk); f.placed = true }
-    f.loc = 'hub'; f.state = sceneOf(hubA); nameTag(f, hubA.name || 'JARVIS')
+    f.loc = 'hub'; f.state = sceneOf(hubA); nameTag(f, 'JARVIS'); f.tag.title = hubA.title ? 'JARVIS · ' + hubA.title : 'JARVIS'   // 이름표는 늘 JARVIS, 창 제목은 마우스를 올리면
   }
   const roomOf = a => Math.max(0, o.rooms.findIndex(r => r.key === a.lane))
   const used = new Set([...hero.figs.values()].filter(f => !f.hub && !f.boss && f.desk >= 0).map(f => f.desk))
-  const rest = agents.filter(a => a !== hubA)
+  const rest = agents.filter(a => a.lane !== 'HUB')   // JARVIS 창이 여럿이어도 비서 자리는 대표 하나
   const coordsIn = new Map()   // 방마다 Coordinator 수: 먼저 있던(오래 활동한) 쪽이 첫 책상
   const coordAgents = rest.filter(a => a.group === 'resident').sort((x, y) => (x.startedAt || 0) - (y.startedAt || 0))
   for (const a of coordAgents) {   // Coordinator: 방의 팀장 책상
@@ -1278,21 +1226,22 @@ function officeSync() {
     f.coord = true; nameTag(f, (a.name || a.sessionId.slice(0, 8)) + (k > 0 ? ' · 중복' : ''))
     f.tag.classList.toggle('dup', k > 0); f.state = sceneOf(a)
   }
-  for (const a of rest.filter(a => a.group !== 'resident')) {   // Worker: 그 방 작업 공간
+  for (const a of rest.filter(a => a.group !== 'resident')) {   // Worker: 그 방 작업 공간. 교체된 옛 PM 은 칸막이 안 둘째 책상
     let f = hero.figs.get(a.sessionId), fresh = false
     if (!f || f.hub) { if (f) dropFigure(f); f = makeFigure(a.sessionId, false); hero.figs.set(a.sessionId, f); fresh = true }
-    const room = o.rooms[roomOf(a)]
-    if (f.desk < 0 || !room.workers.includes(f.desk)) {
-      used.delete(f.desk); f.desk = room.workers.find(k => !used.has(k)) ?? -1
+    const room = o.rooms[roomOf(a)], prev = a.role === 'pm_prev'
+    const mine = prev ? [...room.coords.slice(1), ...room.workers] : room.workers
+    if (f.desk < 0 || !mine.includes(f.desk)) {
+      used.delete(f.desk); f.desk = mine.find(k => !used.has(k)) ?? -1
       if (f.desk >= 0) used.add(f.desk)
       fresh = true
     }
+    f.tag.classList.toggle('prev', prev)
     const label = /W-\d{8}-/.test(a.name || '') ? shortTask(a.task) : a.name   // 새 제목은 'wf3-쿼리확인', 옛 제목은 작업 번호
     nameTag(f, label || a.sessionId.slice(0, 8), a.task && a.task !== a.name ? a.name + ' · ' + a.task : a.name)
-    const s = sceneOf(a), was = f.state
-    f.state = s
-    if (f.desk < 0 || (s === 'rest' && (fresh || was !== 'rest'))) goLounge(f, !fresh)
-    else if (s !== 'rest' && (fresh || was === 'rest' || f.loc !== 'desk')) goDesk(f, !fresh)
+    f.state = sceneOf(a)
+    if (f.desk < 0) { if (fresh || f.loc !== 'stand') standAt(f, room) }
+    else if (fresh || f.loc !== 'desk') goDesk(f)
   }
   for (const f of hero.figs.values()) f.ringMat.color.set(o.col[f.state] || o.col.rest)
   officeMessages()
@@ -1351,14 +1300,14 @@ function officeStep(dt, t) {
     const working = atDesk && f.state === 'working' && !still
     f.body.rotation.z = working ? Math.sin(t * 3 + i) * 0.06 : 0
     f.head.position.y = 0.98 + (working ? Math.abs(Math.sin(t * 6 + i)) * 0.03 : 0)
-    f.body.scale.y = settled && f.loc === 'lounge' && !still ? 1 + Math.sin(t * 1.7 + i) * 0.03 : 1
+    f.body.scale.y = settled && f.state === 'rest' && !f.boss && !still ? 1 + Math.sin(t * 1.7 + i) * 0.03 : 1   // 쉬는 숨
     f.ring.position.set(p.x, 0.02, p.z)
     const sp = f.sprite
     let map = null, y = 2.08
     if (settled) {
       if (f.state === 'waiting') { map = o.tex.bang; y += still ? 0 : Math.abs(Math.sin(t * 4)) * 0.18 }
       else if (f.state === 'working' && atDesk) map = o.tex.dots[still ? 0 : Math.floor(t * 3 + i) % 3]
-      else if (f.state === 'rest' && (f.loc === 'lounge' || f.coord)) { map = o.tex.zzz; y += still ? 0 : (t * 0.6 + i * 0.3) % 1 * 0.25 }
+      else if (f.state === 'rest' && !f.boss) { map = o.tex.zzz; y += still ? 0 : (t * 0.6 + i * 0.3) % 1 * 0.25 }
     }
     sp.visible = !!map
     if (map && sp.material.map !== map) { sp.material.map = map; sp.material.needsUpdate = true }
@@ -1426,77 +1375,10 @@ function heroLoop() {
   hero.raf = requestAnimationFrame(step)
 }
 
-/* session canvas: the hub in the middle, sessions at work on one side, the rest on the other, a line to each;
-   a solid line means they messaged in the last 24 hours, the number on it how many */
+/* 세션 칸: 흐름도(JARVIS -> 프로젝트 PM -> Worker 카드 트리와 메시지, 아래 flow 절) 또는 구역별 목록 */
 let agentView = store.get('agentView', 'canvas') === 'list' ? 'list' : 'canvas'
 let msgs24 = null
-const WIDE_CANVAS = 760   // px; matches the container query that sets the three columns
-function nodeCard(a, hub) {
-  const s = status(a), tag = a.engine === 'codex' ? 'codex' : a.group === 'task' ? a.task : a.lane
-  const decs = (dec?.now || []).filter(d => !d.live && d.source && d.source === a.name).length
-  const run = (a.subagents || []).filter(x => x.state === 'busy').length
-  return h('a', { class: `node ${s.key} g-${a.group || 'other'}${hub ? ' hub' : ''}`, href: '#/s/' + a.sessionId, 'data-sid': a.sessionId },
-    tag ? h('span', { class: 'ntag' + (a.group === 'task' || a.engine === 'codex' ? ' mono' : '') }, tag) : null,
-    h('span', { class: 'nhead' }, h('span', { class: 'name' }, a.name || a.sessionId.slice(0, 8)), stateEl(s)),
-    h('span', { class: 'ndesc' }, a.detail || (hub ? '허브' : '하는 일 기록 없음')),
-    h('span', { class: 'nmeta' }, h('span', {}, '활동 ', h('b', {}, ago(a.lastActivity))),
-      a.tokens ? h('span', { title: tokTip(a.tokens) }, '토큰 ', h('b', {}, tok(a.tokens.total))) : null,
-      run ? h('span', {}, '서브에이전트 ', h('b', {}, run)) : null),
-    s.key === 'blocked' ? h('span', { class: 'nflag ask' }, a.needs || '대기 중')
-      : decs ? h('span', { class: 'nflag' }, `결정 대기 ${decs}`) : null)
-}
-function canvasEl() {
-  const hubName = msgs24?.hub
-  const hubA = agents.find(a => a.lane === 'HUB') || agents.find(a => hubName && a.name === hubName)
-  const rest = agents.filter(a => a !== hubA)
-  const svg = sv('svg', { class: 'links', 'aria-hidden': 'true' })
-  const box = h('div', { class: 'canvas' + (hubA ? '' : ' nohub') }, svg,
-    h('div', { class: 'ccol left' }, rest.filter(a => a.section === 'busy').map(a => nodeCard(a))),
-    hubA ? h('div', { class: 'ccol mid' }, nodeCard(hubA, true)) : null,
-    h('div', { class: 'ccol right' }, rest.filter(a => a.section !== 'busy').map(a => nodeCard(a))))
-  const hubKey = hubA?.name
-  const count = name => {
-    const e = msgs24?.edges || [], c = (f, t) => e.find(x => x.from === f && x.to === t)?.count || 0
-    return { out: c(hubKey, name), back: c(name, hubKey) }
-  }
-  box.drawLinks = () => {
-    if (!hubA || !box.isConnected) return
-    const B = box.getBoundingClientRect(), wide = B.width >= WIDE_CANVAS
-    const hubEl = box.querySelector('.node.hub'), H = hubEl.getBoundingClientRect()
-    const r = e => { const q = e.getBoundingClientRect(); return { l: q.left - B.left, r: q.right - B.left, t: q.top - B.top, b: q.bottom - B.top, w: q.width, h: q.height } }
-    const hb = r(hubEl), f1 = v => v.toFixed(1)
-    svg.setAttribute('viewBox', `0 0 ${f1(B.width)} ${f1(B.height)}`)
-    svg.setAttribute('width', f1(B.width)); svg.setAttribute('height', f1(B.height))
-    const parts = []
-    for (const el of box.querySelectorAll('.ccol:not(.mid) .node')) {
-      const a = agents.find(x => x.sessionId === el.dataset.sid), q = r(el), left = el.closest('.left')
-      const { out, back } = count(a.name), n = out + back, y = q.t + q.h / 2
-      let d, lx, ly
-      if (wide) {   // side to side: hub edge to the card's inner edge
-        const x0 = left ? hb.l : hb.r, y0 = hb.t + hb.h / 2, x1 = left ? q.r : q.l, mx = (x0 + x1) / 2
-        d = `M${f1(x0)},${f1(y0)} C${f1(mx)},${f1(y0)} ${f1(mx)},${f1(y)} ${f1(x1)},${f1(y)}`; lx = x1 + (left ? 8 : -8); ly = y - 6
-      } else {      // a spine down the middle gutter from the hub, a branch to each card
-        const cx = hb.l + hb.w / 2, x1 = left ? q.r : q.l, k = Math.min(10, Math.abs(cx - x1))
-        d = `M${f1(cx)},${f1(hb.b)} V${f1(y - k)} Q${f1(cx)},${f1(y)} ${f1(cx + (left ? -k : k))},${f1(y)} H${f1(x1)}`; lx = x1 + (left ? 4 : -4); ly = y - 6
-      }
-      parts.push(sv('path', { class: 'link' + (n ? ' on' : '') + (status(a).key === 'blocked' ? ' ask' : ''), d }))
-      if (n) parts.push(sv('text', { class: 'lnum', x: f1(lx), y: f1(ly), 'text-anchor': left ? 'start' : 'end' },
-        sv('title', {}, `허브에서 ${out}건, 허브로 ${back}건(24시간)`), n + '건'))
-    }
-    put(svg, parts)
-  }
-  return box
-}
-let canvasObs = null
-function canvasBlock() {
-  let box
-  try { box = canvasEl() } catch (e) { return null }   // the list view stays one click away
-  canvasObs?.disconnect()
-  canvasObs = new ResizeObserver(() => box.drawLinks())
-  canvasObs.observe(box)
-  requestAnimationFrame(() => box.drawLinks())
-  return h('div', { class: 'canvas-wrap' }, box)   // the container the column query measures
-}
+const flowHost = h('div', { class: 'flowhost' })   // the flow content lives here; renderList keeps the same element
 
 // the server already sorts: section, then task / resident / other, then latest activity
 function renderList() {
@@ -1504,9 +1386,9 @@ function renderList() {
   const [top, heroSlot, rest] = scroll.children
   const viewSeg = h('div', { class: 'seg flat', role: 'group', 'aria-label': '세션 보기' }, [['canvas', '흐름도'], ['list', '목록']].map(([v, label]) => h('button', {
     class: 'segb', 'aria-pressed': String(agentView === v),
-    onclick() { if (agentView !== v) { agentView = v; store.set('agentView', v); renderList() } }
+    onclick() { if (agentView !== v) { agentView = v; store.set('agentView', v); renderList(); if (v === 'canvas') { renderFlowTab(); pollMessages() } } }
   }, label)))
-  const canvas = agents.length && agentView === 'canvas' ? canvasBlock() : null
+  const canvas = agents.length && agentView === 'canvas'
   put(top,
     error ? h('div', { class: 'banner' }, `서버에 연결하지 못했습니다(${error}). 폴더에서 ./run.sh 로 다시 띄우세요.`) : null,
     !error && !agents.length ? h('div', { class: 'empty' }, '떠 있는 세션이 없습니다.') : null)
@@ -1516,8 +1398,8 @@ function renderList() {
   }
   put(rest,
     agents.length ? h('div', { class: 'vhead' }, h('h2', {}, '세션'),
-      h('span', { class: 'hint' }, agentView === 'canvas' ? '허브와 지난 24시간 메시지가 오간 세션은 실선, 숫자는 건수' : '구역별 목록'), viewSeg) : null,
-    canvas,
+      h('span', { class: 'hint' }, agentView === 'canvas' ? 'JARVIS → 프로젝트 PM → Worker. 선 위 이름표는 오간 배정·보고 건수' : '구역별 목록'), viewSeg) : null,
+    canvas ? flowHost : null,
     agents.length && !canvas ? SECTIONS.map(([key, title]) => {
       const list = agents.filter(a => (a.section || 'wait') === key)
       const fold = key === 'done', open = !fold || doneOpen
@@ -1531,6 +1413,7 @@ function renderList() {
         open ? (list.length ? list.map(agentCard) : h('div', { class: 'sec-empty' }, '없음')) : null)
     }) : null)
   if (!scroll.isConnected) put(view, scroll)
+  if (canvas) { if (!flowHost.firstChild) renderFlowTab(); else put(tokBox, tokenBars()) }   // the graph redraws on new messages, not every agent poll
 }
 
 /* ---------- decisions ---------- */
@@ -2206,7 +2089,8 @@ function cardGraph(f, W) {
   // cards
   const cardEl = (nd, b) => {
     const s = nd.listed ? status(nd) : { key: 'done', label: '닫힘' }, m = last.get(nd.name), t = lastAt.get(nd.name)
-    const role = nd === hub ? 'JARVIS' : ROLE_LABEL[nd.role] || (nd.group === 'codex' ? 'codex' : '세션')
+    const wins = agents.filter(x => x.lane === 'HUB' && x.activity !== 'off').length   // JARVIS 는 창이 여럿이어도 한 카드
+    const role = nd === hub ? (wins > 1 ? `비서 · 창 ${wins}개` : '비서') : ROLE_LABEL[nd.role] || (nd.group === 'codex' ? 'codex' : '세션')
     const on = !!sel && (sel.node === nd.name || (sel.pair && sel.pair.includes(nd.name)))
     const pick = ev => { ev.stopPropagation(); select({ node: nd.name }) }
     const title = nd.role === 'worker' && nd.task ? nd.name.replace('-' + nd.task, '').replace(/-w$/, '') || nd.name : nd.name
@@ -2257,6 +2141,7 @@ function flowPanel(f) {
         n.parent ? [h('dt', {}, '위'), h('dd', {}, n.parent)] : null,
         h('dt', {}, '메시지'), h('dd', {}, `보냄 ${n.sent} · 받음 ${n.got}`)),
       h('div', { class: 'fp-act' }, n.sessionId ? h('a', { class: 'golink', href: '#/s/' + n.sessionId }, '대화 보기') : null,
+        paseoBtn(agents.find(x => x.sessionId === n.sessionId)?.paseoId),
         h('button', { class: 'more', onclick: () => select(null) }, '선택 풀기')),
       h('div', { class: 'fp-sub' }, '최근 메시지'), list)
   }
@@ -2290,10 +2175,23 @@ function msgEl(m) {
     open ? h('div', { class: 'txt' }, m.text) : null)
 }
 
-function renderFlowTab() {
-  const scroll = view.querySelector('.scroll.flow') || h('div', { class: 'scroll flow' })
-  if (!scroll.isConnected) put(view, scroll)
-  const f = flow, sel = flowSel
+// 흐름도도 오피스와 같은 방만: 진행 중인 프로젝트(active)와 '항상 보이기' 로 체크한 프로젝트. JARVIS 와 프로젝트 없는 세션은 늘 보인다
+function flowShown(f) {
+  if (!f?.nodes || !(officeInfo.projects || []).length) return f   // 방 정보를 아직 못 받았으면 거르지 않는다
+  const keys = new Set(shownProjects().map(p => p.key))
+  const hide = new Set(f.nodes.filter(n => n.name !== f.hub && n.lane && n.lane !== 'HUB' && !keys.has(n.lane)).map(n => n.name))
+  if (!hide.size) return f
+  const ok = m => !hide.has(m.from) && !hide.has(m.to)
+  const messages = f.messages.filter(ok)
+  return { ...f, nodes: f.nodes.filter(n => !hide.has(n.name)), edges: f.edges.filter(ok), messages,
+    total: f.total - (f.messages.length - messages.length) }
+}
+const MSG_TOP = 20   // 에이전트 탭 아래가 너무 길어지지 않게 메시지는 이만큼만 먼저
+let msgAll = false
+function renderFlowTab() {   // into the 세션 칸 of the agents page when it shows 흐름도
+  const scroll = flowHost
+  if (cur || page !== 'agents' || agentView !== 'canvas' || !scroll.isConnected) return
+  const f = flowShown(flow), sel = flowSel
   const list = f?.messages ? f.messages.filter(m => related(m, sel)) : []
   const seg = h('div', { class: 'seg flat', role: 'group', 'aria-label': '시간 범위' }, WINDOWS.map(([hrs, label]) => h('button', {
     class: 'segb', 'aria-pressed': String(flowHours === hrs),
@@ -2332,7 +2230,8 @@ function renderFlowTab() {
         h('section', { class: 'sec' },
           h('div', { class: 'sec-h' }, h('h2', {}, '메시지'), h('span', { class: 'num' }, list.length),
             f.total > f.messages.length ? h('span', { class: 'hint' }, `최근 ${f.messages.length}건만 목록에 보입니다`) : null),
-          list.length ? list.map(msgEl) : h('div', { class: 'sec-empty' }, '없음'))])
+          list.length ? list.slice(0, msgAll ? list.length : MSG_TOP).map(msgEl) : h('div', { class: 'sec-empty' }, '없음'),
+          list.length > MSG_TOP ? h('button', { class: 'more', onclick() { msgAll = !msgAll; renderFlowTab() } }, msgAll ? '접기' : `${list.length - MSG_TOP}건 더 보기`) : null)])
 }
 
 let tokAll = false
@@ -2357,7 +2256,7 @@ function tokenBars() {
 // every 5 s on the flow tab; elsewhere every 15 s, only for the report count and alerts
 let msgAt = 0
 async function pollMessages() {
-  const onFlow = !cur && page === 'flow' && !document.hidden
+  const onFlow = !cur && page === 'agents' && agentView === 'canvas' && !document.hidden
   if (!onFlow && Date.now() - msgAt < 15000) return
   const hours = onFlow ? flowHours : 24
   msgAt = Date.now()
@@ -2370,13 +2269,12 @@ async function pollMessages() {
     checkReports(d)
     if (hours === 24) {
       msgs24 = d
-      if (!cur && page === 'agents' && agentView === 'canvas') view.querySelector('.canvas')?.drawLinks?.()
       if (hero?.ok) try { officeMessages() } catch (e) {}   // a sheet per new [배정] or [보고]
     }
     if (hours !== flowHours) return   // a background read, or the window changed meanwhile
     flowKey = text; flow = d
   } catch (err) { if (!flow && onFlow) flow = { error: err.message } }
-  if (!cur && page === 'flow') renderFlowTab()
+  renderFlowTab()
 }
 
 /* ---------- detail ---------- */
@@ -2395,6 +2293,20 @@ function copyRow(cmd) {
   return h('div', { class: 'cmd' }, code, btn)
 }
 
+// Paseo 앱에서 그 에이전트 열기: 서버가 앱을 딥링크로 실행한다(Windows 에는 paseo:// 가 등록돼 있지 않음)
+async function paseoOpen(btn, paseoId) {
+  const was = btn.textContent
+  btn.disabled = true; btn.textContent = '여는 중…'
+  try {
+    const res = await fetch('/api/paseo/open', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Jarvis': '1' }, body: JSON.stringify({ agent: paseoId }) })
+    const d = await res.json()
+    if (!res.ok) throw new Error(d.error || res.status)
+    btn.textContent = 'Paseo 에 열었음'
+  } catch (err) { btn.textContent = '열지 못함: ' + err.message }
+  setTimeout(() => { btn.disabled = false; btn.textContent = was }, 2500)
+}
+const paseoBtn = paseoId => paseoId ? h('button', { class: 'more', title: 'Paseo 앱에서 이 에이전트 화면으로 갑니다', onclick(ev) { ev.preventDefault(); ev.stopPropagation(); paseoOpen(this, paseoId) } }, 'Paseo 에서 열기') : null
+
 function renderDetailHead() {
   const a = cur.agent
   const head = cur.head
@@ -2407,7 +2319,7 @@ function renderDetailHead() {
   head.className = 'dhead ' + s.key
   put(head, 
     h('div', { class: 'dtitle' }, h('h2', {}, a.name || a.sessionId.slice(0, 8)), badge(a), stateEl(s)),
-    h('div', { class: 'dcwd' }, home(a.cwd)),
+    h('div', { class: 'dcwd' }, home(a.cwd), ' ', paseoBtn(a.paseoId)),
     a.detail ? h('div', { class: 'why' }, a.detail) : null,
     s.key === 'blocked' && a.needs ? h('div', { class: 'needs' }, a.needs) : null,
     h('div', { class: 'meta' },
@@ -2696,28 +2608,28 @@ function route() {
   const m = location.hash.match(/^#\/s\/([\w-]+)(\/logs)?/)
   if (m) return showDetail(m[1], m[2] ? 'logs' : 'chat')
   cur = null
-  page = { '#/decisions': 'decisions', '#/status': 'status', '#/flow': 'flow', '#/todo': 'todo', '#/routine': 'routine' }[location.hash] || 'agents'
+  if (location.hash === '#/flow') { agentView = 'canvas'; store.set('agentView', 'canvas'); return location.replace('#/') }   // 흐름 탭은 에이전트 탭의 흐름도로 옮겼다
+  page = { '#/decisions': 'decisions', '#/status': 'status', '#/todo': 'todo', '#/routine': 'routine' }[location.hash] || 'agents'
   renderTop(); renderPage()
 }
 function renderPage() {
   if (page === 'decisions') renderDecisions()
   else if (page === 'status') { renderStatus(); pollStatus() }
-  else if (page === 'flow') { renderFlowTab(); pollMessages() }
   else if (page === 'todo') renderTodo()
   else if (page === 'routine') renderRoutine()
-  else renderList()
+  else { renderList(); pollMessages() }
 }
 
 async function pollAgents() {
   try { const r = await getJSON('/api/agents'); agents = r.agents; officeInfo = r.office || officeInfo; error = ''; checkBlocked(); renderUsage() }   // usage bar carries the token total
   catch (err) { error = err.message }
   if (cur) { cur.agent = agents.find(a => a.sessionId === cur.sid); renderTop(); renderDetailHead() }
-  else { renderTop(); if (page === 'agents') renderList(); else if (page === 'flow') put(tokBox, tokenBars()) }
+  else { renderTop(); if (page === 'agents') renderList() }
 }
 
 window.addEventListener('hashchange', route)
 document.addEventListener('visibilitychange', () => { seen(); pollMessages(); heroLoop() })
-window.addEventListener('resize', () => { if (cur?.term) fitTerm(cur); else if (!cur && page === 'flow' && flow) renderFlowTab() })
+window.addEventListener('resize', () => { if (cur?.term) fitTerm(cur); else if (flow) renderFlowTab() })
 Promise.all([pollAgents(), pollDecisions(), pollTodo()]).then(() => { route(); pollMessages() })
 pollUsage(); pollDev()
 setInterval(pollAgents, 3000)

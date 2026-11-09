@@ -14,6 +14,7 @@
 - Worker(부모가 Coordinator) -> group task, lane 프로젝트 키, task 작업 ID(제목의 W-…)
 """
 import glob
+import html
 import json
 import os
 import re
@@ -30,6 +31,8 @@ BOSS = os.environ.get('JARVIS_BOSS') or '사장'   # 사장실 명패: JARVIS �
 TAGS = ('배정', '보고', '질문', '진행', '승인요청', '점유', '해제', '완료')
 TAG_RE = re.compile(r'^\[(' + '|'.join(TAGS) + r')\]', re.M)
 TASK_RE = re.compile(r'W-\d{8}-\d+')
+PASEO_WRAP_RE = re.compile(r'</?paseo-system\b[^>]*>')
+SRC_RE = re.compile(r'<paseo-system\b[^>]*\bsource-agent-id="([0-9a-f-]+)"')
 TASK_LABEL = 'jarvis.task'   # Worker 의 작업 번호 라벨. 제목은 '<영역>-<한국어 작업 이름>'
 TASK_LABEL_RE = re.compile(r'W-\d{8}-\d+(?:-[A-Za-z0-9]+)?')   # 이름표: 한 작업을 나눈 Worker(-B, -C)까지
 WORKER_DONE_S = 30 * 60   # 끝난 Worker 를 '끝남' 구역에 두는 시간. 넘으면 목록에서 뺀다
@@ -126,12 +129,12 @@ def roles(recs, reg, home=None, rep=None):
     by_id = {r['id']: r for r in recs}
     parent = {r['id']: (r.get('labels') or {}).get('paseo.parent-agent-id') for r in recs}
     live = [r for r in recs if r.get('lastStatus') != 'closed' and not r.get('archivedAt')]
-    jarvis = [r for r in live if (r.get('title') or '') == JARVIS_NAME]
-    if not jarvis and home:
-        jarvis = [r for r in live if not parent.get(r['id']) and norm(r.get('cwd')) == norm(home)]
+    # JARVIS 창은 여러 개일 수 있다(CLAUDE.md). 살아 있는 창은 모두 jarvis, 그중 대표(jid)가 오피스 비서 자리에 앉는다
+    jarvis = [r for r in live if is_jarvis_window(r, home)]
     jarvis.sort(key=lambda r: r.get('lastActivityAt') or '', reverse=True)
+    jids = {r['id'] for r in jarvis}
     jid = jarvis[0]['id'] if jarvis else None
-    if rep and any(r['id'] == rep for r in live):
+    if rep and rep in jids:
         jid = rep
     coord_of = {v.get('coordinator'): k for k, v in reg.items() if v.get('coordinator')}
     roots = {}
@@ -153,11 +156,11 @@ def roles(recs, reg, home=None, rep=None):
     for r in recs:
         i = r['id']
         proj = title_proj(r) or root_of.get(norm(r.get('cwd')))
-        if i == jid:
+        if i in jids:
             out[i] = ('jarvis', '')
         elif i in coord_of:
             out[i] = ('coordinator', coord_of[i])
-        elif jid and parent.get(i) == jid:
+        elif parent.get(i) in jids:
             out[i] = ('coordinator', proj or '')
         elif is_prev_pm(r, reg, parent.get(i), title_proj):
             lb = r.get('labels') or {}
@@ -171,6 +174,39 @@ def roles(recs, reg, home=None, rep=None):
             out[i] = ('worker', p[1] or title_proj(r) or root_of.get(norm(r.get('cwd'))) or '') \
                 if p and p[0] in ('coordinator', 'pm_prev') else ('other', '')
     return out, jid, by_id
+
+
+def is_jarvis_window(r, home):
+    """JARVIS 대화창: 제목이 JARVIS 이거나, JARVIS 폴더(home)에서 부모 없이 뜬 것.
+    Paseo 가 첫 메시지로 제목을 바꾸므로 제목만으로는 못 찾는다. 역할 라벨(검토용 등)이 붙은 것은 뺀다."""
+    lb = r.get('labels') or {}
+    if lb.get('jarvis.role') or lb.get('paseo.parent-agent-id'):
+        return False
+    return (r.get('title') or '') == JARVIS_NAME or bool(home and norm(r.get('cwd')) == norm(home))
+
+
+def jarvis_sessions(jarvis, root=PASEO):
+    """archive·닫힌 것까지 JARVIS 창: [{paseoId, sessionId, cwd, lastAt}]. 흐름의 배정·보고를 창이 바뀌어도 이어 세는 데 쓴다."""
+    out = []
+    for r in paseo_records(root, archived=True):
+        if is_jarvis_window(r, jarvis):
+            rt = r.get('runtimeInfo') or (r.get('persistence') or {})
+            out.append({'paseoId': r['id'], 'sessionId': rt.get('sessionId') or r['id'], 'cwd': r.get('cwd') or '',
+                        'lastAt': iso_ms(r.get('lastActivityAt') or r.get('updatedAt')) or 0})
+    return out
+
+
+def senders(jarvis, root=PASEO):
+    """archive 된 것까지 Paseo 에이전트 ID -> (역할, 프로젝트, 제목). 흐름에서 지금 목록에 없는 보낸 쪽을 찾는 데 쓴다."""
+    recs = paseo_records(root, archived=True)
+    rl, _, by_id = roles(recs, registry(jarvis), jarvis, registry_jarvis(jarvis))
+    out = {}
+    for i, (role, proj) in rl.items():
+        r = by_id[i]
+        rt = r.get('runtimeInfo') or (r.get('persistence') or {})
+        out[i] = {'role': role, 'project': proj, 'title': r.get('title') or i[:8], 'sessionId': rt.get('sessionId') or i,
+                  'cwd': r.get('cwd') or '', 'lastAt': iso_ms(r.get('lastActivityAt') or r.get('updatedAt')) or 0}
+    return out
 
 
 def is_prev_pm(r, reg, parent, title_proj):
@@ -214,8 +250,8 @@ def row_of(r, role, proj, now_ms):
         row.update(status='idle', state='done')
     else:
         row.update(status='idle', state='idle')
-    if role == 'jarvis':
-        row.update(group='resident', lane='HUB', task='')
+    if role == 'jarvis':   # 이름은 늘 JARVIS(창이 여러 개여도 흐름에서 한 노드), 창 제목은 title 에
+        row.update(group='resident', lane='HUB', task='', name=JARVIS_NAME, title=title)
     elif role == 'coordinator':
         row.update(group='resident', lane=proj or '프로젝트', task='')
     elif role == 'pm_prev':
@@ -241,19 +277,39 @@ def agent_rows(jarvis, root=PASEO, now_ms=None):
         if role == 'other' or r.get('archivedAt'):
             continue
         row = row_of(r, role, proj, now_ms)
-        last = iso_ms(r.get('lastActivityAt') or r.get('updatedAt'))
+        if role == 'jarvis':
+            row['primary'] = r['id'] == jid   # 오피스 비서 자리에 앉는 대표 창
+        last =iso_ms(r.get('lastActivityAt') or r.get('updatedAt'))
         if role == 'worker' and row['state'] == 'done' and last and now_ms - last > WORKER_DONE_S * 1000:
             continue
         rows.append(row)
         names[row['name']] = {'group': row['group'], 'lane': row['lane'], 'task': row['task'], 'order': len(names)}
-    hub = (by_id[jid].get('title') or JARVIS_NAME) if jid else None
-    return rows, names, hub
+    return rows, names, JARVIS_NAME if jid else None
 
 
 # ---------- 메시지(배정·보고 등) ----------
 
+_read_cache = {}   # (함수, 경로) -> ((mtime, size), 결과): 흐름은 5초마다 읽는데 대부분의 기록은 그대로다
+
+
+def by_file(fn):
+    def wrap(path):
+        try:
+            st = os.stat(path)
+        except OSError:
+            return []
+        key, c = (st.st_mtime_ns, st.st_size), _read_cache.get((fn.__name__, path))
+        if not c or c[0] != key:
+            c = _read_cache[(fn.__name__, path)] = (key, fn(path))
+        return c[1]
+    wrap.__name__, wrap.__doc__ = fn.__name__, fn.__doc__
+    return wrap
+
+
+@by_file
 def tagged_prompts(path):
-    """대화 기록에서 사용자 차례로 들어온 머리말 메시지만: [(ms, tag, text)]."""
+    """대화 기록에서 사용자 차례로 들어온 머리말 메시지만: [(ms, tag, text, 보낸 Paseo 에이전트 ID 또는 '')].
+    Paseo 가 다른 에이전트의 글을 <paseo-system … source-agent-id="…"> 로 감싸 넣으므로 보낸 쪽을 정확히 안다."""
     out = []
     try:
         with open(path, encoding='utf-8', errors='replace') as f:
@@ -271,7 +327,9 @@ def tagged_prompts(path):
                     x.get('text', '') for x in c or [] if isinstance(x, dict) and x.get('type') == 'text')
                 m = TAG_RE.search(text or '')
                 if m:
-                    out.append((iso_ms(d.get('timestamp')) or 0, m.group(1), text[m.start():].strip()))
+                    src = SRC_RE.findall(text[:m.start()])
+                    body = html.unescape(PASEO_WRAP_RE.sub('', text[m.start():])).strip()   # 한 차례에 묶여 온 여러 글의 포장·&lt; 풀기
+                    out.append((iso_ms(d.get('timestamp')) or 0, m.group(1), body, src[-1] if src else ''))
     except OSError:
         pass
     return out
@@ -282,6 +340,7 @@ KIND = {'배정': 'assign', '보고': 'report', '완료': 'report', '질문': 'n
 NOTICE_MARKS = ('<agent-response>', '[Message received]', 'Server: srv_')   # Paseo 가 넣는 알림: 사람 채팅이 아님
 
 
+@by_file
 def conversation(path):
     """대화 기록에서 머리말 없는 사람 메시지와 차례를 끝낸 답: [(ms, 'chat'|'answer'|'first', text)].
     'first' 는 첫 사용자 메시지(머리말이 있든 없든)로, Worker 가 받은 첫 지시를 찾는 데 쓴다."""
@@ -302,7 +361,7 @@ def conversation(path):
                         continue
                     text = c if isinstance(c, str) else ' '.join(
                         x.get('text', '') for x in c or [] if isinstance(x, dict) and x.get('type') == 'text')
-                    text = (text or '').strip()
+                    text = PASEO_WRAP_RE.sub('', text or '').strip()   # 다른 에이전트가 보낸 글의 Paseo 포장 떼기
                     if not text:
                         continue
                     t = iso_ms(d.get('timestamp')) or 0
@@ -320,17 +379,43 @@ def conversation(path):
     return out
 
 
-def messages(rows, transcript_path, hours=24, now=None, max_messages=300, boss=None):
-    """받은 쪽 대화 기록의 머리말 메시지로 흐름을 만든다. 보낸 쪽: 배정은 부모, 그 밖은 작업 ID 의 Coordinator 나 자식."""
+def messages(rows, transcript_path, hours=24, now=None, max_messages=300, boss=None, hub_windows=(), sent_by=None):
+    """받은 쪽 대화 기록의 머리말 메시지로 흐름을 만든다. 보낸 쪽은 Paseo 가 붙인 source-agent-id 로 정하고,
+    그게 없으면 배정은 부모, 그 밖은 작업 ID 의 Coordinator 나 자식으로 짐작한다.
+    hub_windows(jarvis_sessions): 닫히거나 archive 된 JARVIS 창도 읽어 JARVIS 한 노드로 모은다.
+    sent_by(senders): 목록에 없는 보낸 쪽. 교체로 archive 된 옛 PM 은 그 프로젝트의 지금 PM 노드로 모은다
+    (PM 은 프로젝트로 계속 있고 세션만 바뀐다, docs/02)."""
     BOSS = boss or globals()['BOSS']
     now = time.time() if now is None else now
     since = int((now - hours * 3600) * 1000) if hours > 0 else 0
     by_paseo = {r['paseoId']: r for r in rows}
+    jarvis_ids = {r['paseoId'] for r in rows if r['role'] == 'jarvis'} | {w['paseoId'] for w in hub_windows}
+    hub_name = JARVIS_NAME if jarvis_ids else None
+    seen_sid = {r['sessionId'] for r in rows}
+    readers = list(rows) + [dict(w, role='jarvis', name=JARVIS_NAME) for w in hub_windows
+                            if w['sessionId'] not in seen_sid and (not since or w['lastAt'] >= since)]
+    coord_of = {r['project']: r['name'] for r in rows if r['role'] == 'coordinator' and r.get('project')}
+    sent_by = {i: s for i, s in (sent_by or {}).items() if i not in by_paseo and i not in jarvis_ids}
+
+    old_meta = {}   # 목록에 없는 노드의 역할·프로젝트·위: 흐름도에서 그 프로젝트 PM 아래(끝난 Worker)로 접힌다
+
+    def old_name(s):   # 목록에 없는 세션의 노드 이름: 옛 PM 은 지금 PM 으로, 나머지는 제목
+        if s['role'] in ('coordinator', 'pm_prev') and coord_of.get(s['project']):
+            return coord_of[s['project']]
+        n = s['title'] + (' (이전)' if s['role'] == 'pm_prev' else '')
+        task = TASK_LABEL_RE.search(s['title'])
+        old_meta.setdefault(n, {'role': 'worker' if s['role'] == 'worker' else s['role'], 'lane': s['project'] or '',
+                                'parent': coord_of.get(s['project']) or '', 'task': task.group(0) if task else ''})
+        return n
+    # archive 된 옛 PM·Worker 의 대화 기록도 받은 쪽으로 읽는다(받은 배정·보고, Worker 의 첫 지시)
+    readers += [dict(s, paseoId=i, name=old_name(s)) for i, s in sent_by.items()
+                if s['role'] in ('coordinator', 'pm_prev', 'worker') and s['sessionId'] not in seen_sid
+                and coord_of.get(s['project']) and (not since or s['lastAt'] >= since)]
     parent_of, kids = {}, {}
     for r in rows:
         p = None
         if r['role'] == 'coordinator':
-            p = next((x['name'] for x in rows if x['role'] == 'jarvis'), None)
+            p = hub_name
         elif r['role'] == 'worker':
             p = next((x['name'] for x in rows if x['role'] == 'coordinator' and x['project'] == r['project']), None)
         parent_of[r['name']] = p
@@ -343,7 +428,7 @@ def messages(rows, transcript_path, hours=24, now=None, max_messages=300, boss=N
         msgs.append({'t': t, 'from': frm, 'to': to, 'kind': kind, 'sum': first[:200], 'text': text[:4000],
                      'id': f'{frm}>{to}:{t}:{kind}'})
 
-    for r in rows:
+    for r in readers:
         tp = transcript_path(r['sessionId'], r['cwd'])
         if not tp:
             continue
@@ -353,19 +438,27 @@ def messages(rows, transcript_path, hours=24, now=None, max_messages=300, boss=N
                     continue
                 if r['role'] == 'jarvis' and kind in ('chat', 'answer'):   # 사장 <-> JARVIS
                     add(t, BOSS, r['name'], 'chat', text) if kind == 'chat' else add(t, r['name'], BOSS, 'answer', text)
-                elif r['role'] == 'worker' and kind == 'first' and parent_of.get(r['name']):   # Coordinator 의 첫 지시
-                    add(t, parent_of[r['name']], r['name'], 'assign', text)
-        for t, tag, text in tagged_prompts(tp):
+                elif r['role'] == 'worker' and kind == 'first':   # Coordinator 의 첫 지시
+                    p = parent_of.get(r['name']) or (old_meta.get(r['name']) or {}).get('parent')
+                    if p:
+                        add(t, p, r['name'], 'assign', text)
+        for t, tag, text, src in tagged_prompts(tp):
             if t < since:
                 continue
-            if tag == '배정':
+            if src in jarvis_ids:
+                frm = hub_name
+            elif src in by_paseo:
+                frm = by_paseo[src]['name']
+            elif src and src in sent_by:
+                frm = old_name(sent_by[src])
+            elif tag == '배정':
                 frm = parent_of.get(r['name'])
-            else:   # 아래에서 올라온 것: 작업 ID 가 맞는 자식, 없으면 첫 자식
+            else:   # 보낸 쪽 표식이 없는 옛 기록: 작업 ID 가 맞는 자식, 없으면 첫 자식
                 m = TASK_RE.search(text)
                 ks = kids.get(r['name']) or []
-                hit = next((k for k in ks if m and (k['task'] == m.group(0) or k['role'] == 'coordinator')), None)
-                frm = (hit or (ks[0] if ks else None) or {}).get('name')
-            if not frm:
+                hit = next((k for k in ks if m and k['task'] == m.group(0)), None)
+                frm = (hit or (ks[0] if len(ks) == 1 else None) or {}).get('name')
+            if not frm or frm == r['name']:   # 모르는 쪽, 또는 JARVIS 창끼리(아침 정리 → JARVIS)
                 continue
             first = text.splitlines()[0] if text else ''
             msgs.append({'t': t, 'from': frm, 'to': r['name'], 'kind': KIND.get(tag, 'other'),
@@ -389,15 +482,14 @@ def messages(rows, transcript_path, hours=24, now=None, max_messages=300, boss=N
         for n in (p, r['name']):
             if n:
                 count.setdefault(n, {'sent': 0, 'got': 0})
-    first = {r['name']: r for r in rows}
+    first = {r['name']: r for r in sorted(rows, key=lambda r: bool(r.get('primary')))}   # JARVIS 창이 여럿이면 대표 창 상태로
     nodes = []
     for n, c in count.items():
-        a = first.get(n) or {}
-        nodes.append(dict(c, name=n, group=a.get('group', 'task'), lane=a.get('lane', ''), task=a.get('task', ''),
-                          listed=bool(a), parent=parent_of.get(n) or '', role=a.get('role', ''),
+        a, o = first.get(n) or {}, old_meta.get(n) or {}
+        nodes.append(dict(c, name=n, group=a.get('group', 'task'), lane=a.get('lane', o.get('lane', '')), task=a.get('task', o.get('task', '')),
+                          listed=bool(a), parent=parent_of.get(n) or o.get('parent', ''), role=a.get('role', o.get('role', '')),
                           **{k: a.get(k) for k in ('state', 'status', 'kind', 'engine', 'sessionId')}))
-    hub = next((r['name'] for r in rows if r['role'] == 'jarvis'), None)
-    return {'hours': hours, 'hub': hub, 'boss': BOSS, 'nodes': nodes, 'edges': sorted(edges.values(), key=lambda e: -e['count']),
+    return {'hours': hours, 'hub': hub_name, 'boss': BOSS, 'nodes': nodes, 'edges': sorted(edges.values(), key=lambda e: -e['count']),
             'total': len(msgs), 'messages': msgs[:max_messages], 'bossMessages': boss[:50]}
 
 
@@ -406,7 +498,8 @@ def office(jarvis, rows):
 
     방마다 active(일이 있어 항상 보일 방인가)와 그 이유, PM 상태, 마지막 활동 시각을 붙인다. 보드는
     active 이거나 사용자가 '항상 보이기' 를 체크한 방만 그린다(체크는 브라우저에 저장).
-    active 기준: 실행·대기 중인 세션, 진행 중 작업, 정할 결정, PM 교체 중(lock), 최근 활동(ACTIVE_S 안)."""
+    active 기준: 실행·대기 중인 세션, 진행 중 작업, 정할 결정, PM 교체 중(lock). 쉬는 PM 만 있는 방은 체크해야 보인다
+    (PM 은 메시지 하나만 받아도 활동이 잡혀 '최근 활동' 을 넣으면 모든 방이 늘 보였다). 흐름도도 같은 기준을 쓴다."""
     reg = registry(jarvis)
     projects = [{'key': k, 'name': v.get('name') or k} for k, v in reg.items()]
     seen = {p['key'] for p in projects}
@@ -433,8 +526,6 @@ def office(jarvis, rows):
             why.append('정할 결정 %d' % n_dec)
         if os.path.exists(os.path.join(jarvis, 'state', 'handoff', k, 'rotating.lock')):
             why.append('PM 교체 중')
-        if any(r.get('activity') == 'resting' for r in mine):
-            why.append('최근 활동')
         pm_id = (reg.get(k) or {}).get('coordinator')
         pm = next((r for r in mine if r.get('paseoId') == pm_id), None)
         p.update(active=bool(why), why=why, pm_state=(pm or {}).get('activity') or 'none',
