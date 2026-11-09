@@ -7,32 +7,36 @@
 
 ## 요약
 
-**목적.** JARVIS 와 프로젝트 PM 은 오래 유지되는 역할이지만, 그 역할을 수행하는 Claude 세션은 컨텍스트가 커지거나 닫히면 바뀌어야 한다. 이 문서는 세션을 **만들고(Provisioning), 맥락을 복원하고(Bootstrap), 교체·종료·복구하는(Lifecycle)** 절차를 정한다.
+### 목적
 
-**핵심 원칙**
+JARVIS 와 프로젝트 PM 은 오래 유지되는 역할이지만, 그 역할을 수행하는 Claude 세션은 컨텍스트가 커지거나 닫히면 바뀌어야 한다. 이 문서는 세션을 만들고(Provisioning), 맥락을 복원하고(Bootstrap), 교체·종료·복구하는(Lifecycle) 절차를 정한다.
 
-1. **역할은 영구, 세션은 교체 가능.** 프로젝트 키(`nipa`)가 PM 의 정체성이고, Paseo 에이전트 ID 는 바뀌는 실행 인스턴스다.
-2. **판단은 JARVIS, 전환은 코드.** 언제 바꿀지는 JARVIS(LLM)가 정하고, lock·registry 전환·기록은 `jarvisctl` 이 원자적으로 한다.
-3. **모든 세션은 같은 절차로 만든다.** 새 프로젝트·장애 복구·교체가 하나의 Provisioning 절차를 쓰고, `[준비]` 검증을 통과해야 registry 에 연결된다.
-4. **일하는 중에는 바꾸지 않는다.** 컨텍스트 때문에 하는 일반 교체(`context`·`manual`)는 진행 중 작업이나 열린 Worker 가 있으면 하지 않는다. PM 이 이미 닫힌 장애 복구(`crash`)와 새 프로젝트(`new`)는 예외다(5.2).
-5. **훅은 막고 기록할 뿐 결정하지 않는다.** 훅은 규칙을 어기는 도구 호출을 막고 사건을 남기며, 새 PM 을 만들거나 registry 를 바꾸지 않는다.
+### 핵심 원칙
 
-**다루는 것과 다루지 않는 것.** 이 문서는 세션의 생성·교체·복구와 그것을 지키는 훅을 다룬다. 상태 파일의 형식과 쓰기 권한은 [01](01_State_Memory_Management.md), 작업·기능의 흐름과 완료 기준은 [03](03_Work_Lifecycle_Management.md) 이 정한다.
+1. 역할은 영구, 세션은 교체 가능. 프로젝트 키(`nipa`)가 PM 의 정체성이고, Paseo 에이전트 ID 는 바뀌는 실행 인스턴스다.
+2. 판단은 JARVIS, 전환은 코드. 언제 바꿀지는 JARVIS(LLM)가 정하고, lock·registry 전환·기록은 `jarvisctl` 이 원자적으로 한다.
+3. 모든 세션은 같은 절차로 만든다. 새 프로젝트·장애 복구·교체가 하나의 Provisioning 절차를 쓰고, `[준비]` 검증을 통과해야 registry 에 연결된다.
+4. 일하는 중에는 바꾸지 않는다. 컨텍스트 때문에 하는 일반 교체(`context`·`manual`)는 진행 중 작업이나 열린 Worker 가 있으면 하지 않는다. PM 이 이미 닫힌 장애 복구(`crash`)와 새 프로젝트(`new`)는 예외다(5.2).
+5. 훅은 규칙을 어기는 도구 호출을 막고 사건을 남긴다. 새 PM 을 만들거나 registry 를 바꾸는 일은 JARVIS 와 `jarvisctl` 이 한다.
+
+### 범위
+
+이 문서는 세션의 생성·교체·복구와 그것을 지키는 훅을 다룬다. 상태 파일의 형식과 쓰기 권한은 [01](01_State_Memory_Management.md), 작업·기능의 흐름과 완료 기준은 [03](03_Work_Lifecycle_Management.md) 이 정한다.
 
 ## 1. 논리적 Agent 와 실행 세션
 
-**논리적 Agent** 는 오래 유지되는 역할이다. JARVIS(Manager) 하나와 프로젝트마다 PM(Coordinator) 하나가 있다. 이 역할은 세션이 바뀌어도 그대로다.
+논리적 Agent 는 오래 유지되는 역할이다. JARVIS(Manager) 하나와 프로젝트마다 PM(Coordinator) 하나가 있다. 이 역할은 세션이 바뀌어도 그대로다.
 
-**실행 세션** 은 그 역할을 실제로 수행하는 Paseo 에이전트(Claude Code 세션)다. 컨텍스트가 커지거나, 장애가 나거나, 사용자가 닫으면 바뀐다.
+실행 세션 은 그 역할을 실제로 수행하는 Paseo 에이전트(Claude Code 세션)다. 컨텍스트가 커지거나, 장애가 나거나, 사용자가 닫으면 바뀐다.
 
 이 둘을 나누기 위해 네 가지 개념을 구분한다.
 
 | 개념 | 뜻 | 어디에 있나 |
 |---|---|---|
-| **Agent Definition** | 역할의 영구 정의: 프로젝트 키, 작업 폴더, PM 제목, 규칙 | registry 프로젝트 항목(name, root, pm_title, linear_project), `rules/coordinator.md`, 프로젝트 CLAUDE.md |
-| **Session Provisioning** | 새 세션을 만들고, 검증하고, registry 에 연결하는 절차 | `CLAUDE.md` "PM 띄우기", `jarvisctl lock`·`switch` (3절) |
-| **Session Bootstrap** | 새 세션에 역할 규칙과 영구 상태를 넣어 맥락을 복원하는 단계 | SessionStart 훅 `session_context.py` (3절) |
-| **Session Lifecycle** | 언제 바꾸나, 인계, 교체, 종료, 복구 | `CLAUDE.md` "PM 세션 교체", `jarvisctl can-rotate` (4·5절) |
+| Agent Definition | 역할의 영구 정의: 프로젝트 키, 작업 폴더, PM 제목, 규칙 | registry 프로젝트 항목(name, root, pm_title, linear_project), `rules/coordinator.md`, 프로젝트 CLAUDE.md |
+| Session Provisioning | 새 세션을 만들고, 검증하고, registry 에 연결하는 절차 | `CLAUDE.md` "PM 띄우기", `jarvisctl lock`·`switch` (3절) |
+| Session Bootstrap | 새 세션에 역할 규칙과 영구 상태를 넣어 맥락을 복원하는 단계 | SessionStart 훅 `session_context.py` (3절) |
+| Session Lifecycle | 언제 바꾸나, 인계, 교체, 종료, 복구 | `CLAUDE.md` "PM 세션 교체", `jarvisctl can-rotate` (4·5절) |
 
 Definition 을 바꾸는 주체는 사용자와 JARVIS(`jarvisctl register`·`set`)다. Provisioning·Bootstrap·Lifecycle 은 JARVIS 가 훅과 `jarvisctl` 의 도움을 받아 진행한다. 새 프로젝트(`new`)·닫힌 PM 재생성(`crash`)·교체(`rotation`)가 모두 같은 Provisioning 을 쓰며, Provisioning 없이 registry 를 바꾸는 길은 없다(`jarvisctl switch` 가 lock 과 후보를 요구).
 
@@ -69,9 +73,13 @@ flowchart TD
 
 논리적 JARVIS 하나는 여러 대화창으로 동시에 쓸 수 있다. 프로젝트 PM 은 활성 세션 하나와, 교체 뒤 정리 전까지 남는 이전 세션을 가질 수 있다. registry 는 어느 세션이 지금 그 역할을 맡는지를 가리킨다.
 
-**부모 관계.** 에이전트가 `create_agent` 로 만든 에이전트는 Paseo 에서 그 에이전트의 subagent(부모 라벨)가 된다(확인함). JARVIS 가 만든 PM 이 JARVIS 의 자식이면 JARVIS 를 닫을 때 영향을 받을 수 있으므로, PM 은 만든 직후 PostToolUse 훅이 `paseo agent detach <PM ID>` 로 떼어 낸다(시험: 부모 라벨만 빠지고 세션은 그대로). PM 이 만든 Worker 는 부모 라벨을 유지한다. 이 라벨이 PM 이 Worker 결과를 받는 경로이자 Worker 를 찾는 근거다.
+### 부모 관계
 
-**역할 판정.** 훅과 `jarvisctl` 은 세션 환경변수 `PASEO_AGENT_ID` 로 역할을 정한다(`hooks/jarvis_state.py` `role_of`).
+에이전트가 `create_agent` 로 만든 에이전트는 Paseo 에서 그 에이전트의 subagent(부모 라벨)가 된다(확인함). JARVIS 가 만든 PM 이 JARVIS 의 자식이면 JARVIS 를 닫을 때 영향을 받을 수 있으므로, PM 은 만든 직후 PostToolUse 훅이 `paseo agent detach <PM ID>` 로 떼어 낸다(시험: 부모 라벨만 빠지고 세션은 그대로). PM 이 만든 Worker 는 부모 라벨을 유지한다. 이 라벨이 PM 이 Worker 결과를 받는 경로이자 Worker 를 찾는 근거다.
+
+### 역할 판정
+
+훅과 `jarvisctl` 은 세션 환경변수 `PASEO_AGENT_ID` 로 역할을 정한다(`hooks/jarvis_state.py` `role_of`).
 
 | 역할 | 조건 |
 |---|---|
@@ -115,23 +123,31 @@ sequenceDiagram
     end
 ```
 
-요약하면, JARVIS 가 lock 을 잡고 후보 세션을 만들면 훅이 그 세션에 맥락을 넣고(Bootstrap) JARVIS 에게서 떼어 낸다. 후보가 `[준비]` 로 답하면 JARVIS 가 검증하고, 통과하면 `switch` 가 registry 를 후보로 바꾸고 lock 을 푼다.
+JARVIS 가 lock 을 잡고 후보 세션을 만들면 훅이 그 세션에 맥락을 넣고(Bootstrap) JARVIS 에게서 떼어 낸다. 후보가 `[준비]` 로 답하면 JARVIS 가 검증하고, 통과하면 `switch` 가 registry 를 후보로 바꾸고 lock 을 푼다.
 
-**맥락을 넣는 두 경로.** 세션에 들어가는 정보는 두 곳으로 나뉜다.
+### 맥락을 넣는 두 경로
 
-- **initialPrompt**(이번 세션의 목적): 프로젝트 키, root, 보고받을 JARVIS ID, `mode`, "`[준비]` 를 보내라", 훅이 안 돌 때를 대비한 `rules/coordinator.md` 경로 한 줄.
-- **SessionStart 훅**(항상 같은 규칙과 현재 상태): `rules/coordinator.md` 전문, 인계 노트(`state/handoff/<프로젝트>/latest.md`, 80줄까지), 열린 작업, `open`·`waiting` 결정 경로, Linear Project, lock 이 있으면 교체 중 경고와 이전 PM ID. `startup`·`resume`·`compact`·`clear` 모두에서 넣으므로 대화가 압축되거나 다시 열려도 복원된다.
+세션에 들어가는 정보는 두 곳으로 나뉜다.
 
-**`[준비]` 검증.** JARVIS 는 네 가지를 본다.
+- initialPrompt(이번 세션의 목적): 프로젝트 키, root, 보고받을 JARVIS ID, `mode`, "`[준비]` 를 보내라", 훅이 안 돌 때를 대비한 `rules/coordinator.md` 경로 한 줄.
+- SessionStart 훅(항상 같은 규칙과 현재 상태): `rules/coordinator.md` 전문, 인계 노트(`state/handoff/<프로젝트>/latest.md`, 80줄까지), 열린 작업, `open`·`waiting` 결정 경로, Linear Project, lock 이 있으면 교체 중 경고와 이전 PM ID. `startup`·`resume`·`compact`·`clear` 모두에서 넣으므로 대화가 압축되거나 다시 열려도 복원된다.
 
-1. `맥락: jarvis-hooks v1#<nonce>` 표식이 `jarvisctl hook-check <ID>` 와 같은가. 훅은 세션마다 새 nonce 를 `state/sessions/<ID>.hook.json` 에 남기고, 이 값은 규칙 파일에 없어 모델이 지어낼 수 없다. 표식은 SessionStart 훅이 돌았다는 증거일 뿐, 생성·닫기 가드가 정상이라는 증명은 아니다(가드는 10절의 설치 시험으로 확인).
+### `[준비]` 검증
+
+JARVIS 는 네 가지를 본다.
+
+1. `맥락: jarvis-hooks v1#<nonce>` 표식이 `jarvisctl hook-check <ID>` 와 같은가. 훅은 세션마다 새 nonce 를 `state/sessions/<ID>.hook.json` 에 남기고, 이 값은 규칙 파일에 없어 모델이 지어낼 수 없다. 표식으로 알 수 있는 것은 SessionStart 훅이 돌았다는 사실까지다. 생성·닫기 가드는 10절의 설치 시험으로 따로 확인한다.
 2. 프로젝트 키와 작업 폴더가 맞는가.
 3. 열린 작업을 빠짐없이 짚는가.
 4. Worker 를 띄우거나 파일을 고치지 않았는가.
 
-**`[준비]` 전달.** detach 하면 PM 의 끝남 알림은 JARVIS 에게 가지 않는다(nipa 교체 시험에서 확인). 그래서 PM 이 `send_agent_prompt` 로 `[준비]` 를 직접 보내고, 안 오면 JARVIS 가 `get_agent_activity` 로 마지막 답을 본다. 다른 보고도 자동 알림에 기대지 않는다(`rules/coordinator.md`).
+### `[준비]` 전달
 
-**후보 PM 의 권한.** registry 에 연결되기 전의 PM 은 Worker 를 만들 수 없다(훅). `[배정]` 은 `switch` 뒤에만 보낸다.
+detach 하면 PM 의 끝남 알림은 JARVIS 에게 가지 않는다(nipa 교체 시험에서 확인). 그래서 PM 이 `send_agent_prompt` 로 `[준비]` 를 직접 보내고, 안 오면 JARVIS 가 `get_agent_activity` 로 마지막 답을 본다. 다른 보고도 자동 알림에 기대지 않는다(`rules/coordinator.md`).
+
+### 후보 PM 의 권한
+
+registry 에 연결되기 전의 PM 은 Worker 를 만들 수 없다(훅). `[배정]` 은 `switch` 뒤에만 보낸다.
 
 ## 4. Session Lifecycle 정책
 
@@ -160,7 +176,7 @@ lock 은 `switch` 에서 풀린다. 옛 PM 정리(Retired)는 lock 과 무관한
 
 JARVIS 는 `[보고]` 를 받을 때마다 `jarvisctl can-rotate <프로젝트>` 를 본다. 아래가 모두 맞을 때만 교체한다.
 
-1. 컨텍스트 > **200,000** 토큰 (`JARVIS_ROTATE_TOKENS` 로 바꿀 수 있음)
+1. 컨텍스트 > 200,000 토큰 (`JARVIS_ROTATE_TOKENS` 로 바꿀 수 있음)
 2. PM 이 idle, 그 프로젝트 작업 중 `assigned`·`working`·`question` 없음
 3. 부모가 그 PM 인 Worker 가 모두 닫힘(archive 또는 closed). PM 은 결과를 확인한 Worker 를 archive 한다(`rules/coordinator.md`)
 4. `state/handoff/<프로젝트>/rotating.lock` 없음
@@ -234,8 +250,8 @@ JARVIS 가 교체 도중 새로 뜨면 `jarvisctl lock show <프로젝트>` 의 
 
 ## 6. Manager 다중 창과 기본 수신자
 
-- 논리적 JARVIS 는 하나지만 **대화창은 동시에 여러 개** 열 수 있다(2026-11-09 사용자 결정). 모든 창이 상태를 고치고, 겹치는 쓰기는 `jarvisctl` 이 잠금으로 막는다(01 6절).
-- registry `jarvis:` 는 **기본 수신자**다. 아침 할일 정리 보고, 맡긴 창이 닫힌 PM 보고, PM 이 보낼 곳을 모를 때 받는다. 쓰기 권한과는 상관없다.
+- 논리적 JARVIS 는 하나지만 대화창은 동시에 여러 개 열 수 있다(2026-11-09 사용자 결정). 모든 창이 상태를 고치고, 겹치는 쓰기는 `jarvisctl` 이 잠금으로 막는다(01 6절).
+- registry `jarvis:` 는 기본 수신자다. 아침 할일 정리 보고, 맡긴 창이 닫힌 PM 보고, PM 이 보낼 곳을 모를 때 받는다. 쓰기 권한과는 상관없다.
 - 기본 수신자는 `jarvisctl claim-jarvis <새 ID>` 로만 바꾼다. 허용 조건은 기본 수신자가 없음, 그 창이 닫힘(archive·closed·missing), 그 창이 `transfer-jarvis --to <새 ID|next>` 로 넘김 중 하나다. 자기 자신만, JARVIS 창만 올릴 수 있다.
 - 기본 수신자 창은 닫기 가드가 막는다. 다른 창이 먼저 claim 하거나 사용자가 Paseo 화면에서 닫으면 그 뒤 claim 이 허용된다.
 - 긴 대화를 정리하고 새 창으로 옮길 때: 옛 창이 `state/handoff/manager/latest.md` 작성(`jarvisctl handoff manager`) → 기본 수신자면 `transfer-jarvis --to next` → 새 창이 `claim-jarvis` → PM 들에게 `[인계]` → 사용자 승인 후 옛 창 archive.
@@ -258,9 +274,9 @@ JARVIS 가 교체 도중 새로 뜨면 `jarvisctl lock show <프로젝트>` 의 
 | PreToolUse (Bash) | `git-message-style.py` | 모두 | 커밋 문구 검사(기존) | 구현 |
 | Paseo `agent.archive.after` | — | Paseo 데몬 | 사용자 archive 즉시 기록 | 미구현(결정 대기) |
 
-**실패할 때의 방향.** 관측용 훅(SessionStart·Stop·SessionEnd·PreCompact·UserPromptSubmit)은 예외가 나면 조용히 통과한다(세션을 막지 않음). 보호 훅 `agent_guard` 의 PreToolUse 는 Paseo 관리 세션에서 예외가 나면 막는다(고장 난 가드가 통과시키지 않게). `jarvis_only_write` 는 판단이 끝난 차단만 exit 2 로 막는다.
+훅이 예외로 실패할 때의 처리는 종류마다 다르다. 관측용 훅(SessionStart·Stop·SessionEnd·PreCompact·UserPromptSubmit)은 예외가 나면 조용히 통과한다(세션을 막지 않음). 보호 훅 `agent_guard` 의 PreToolUse 는 Paseo 관리 세션에서 예외가 나면 막는다(고장 난 가드가 통과시키지 않게). `jarvis_only_write` 는 판단이 끝난 차단만 exit 2 로 막는다.
 
-**Codex.** PM 은 Claude 로만 띄우므로 Codex 훅은 범위 밖이다. Codex Worker 에는 훅이 걸리지 않고, Worker 규칙은 첫 지시로 전달한다.
+PM 은 Claude 로만 띄우므로 Codex 훅은 범위 밖이다. Codex Worker 에는 훅이 걸리지 않고, Worker 규칙은 첫 지시로 전달한다.
 
 ## 8. 오류와 예외 처리
 
@@ -304,7 +320,7 @@ JARVIS 가 교체 도중 새로 뜨면 `jarvisctl lock show <프로젝트>` 의 
 | `usage <에이전트 ID>` | 컨텍스트 토큰 |
 | `transfer-jarvis --to <ID·next>`, `claim-jarvis <새 ID>` | 기본 수신자 넘기기·맡기 |
 
-**컨텍스트 값.** Paseo `lastUsage.contextWindowUsedTokens` → Stop Snapshot(6시간 안) → transcript 마지막 usage(`input + cache_read + cache_creation + output`) 순으로 찾는다.
+컨텍스트 값은 Paseo `lastUsage.contextWindowUsedTokens` → Stop Snapshot(6시간 안) → transcript 마지막 usage(`input + cache_read + cache_creation + output`) 순으로 찾는다.
 
 ### 9.3 `switch` 가 확인하는 것
 
