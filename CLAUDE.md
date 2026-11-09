@@ -154,6 +154,14 @@ state/handoff/
 - 결정은 이유와 함께 남긴다. Coordinator·Worker 는 기록하지 않는다.
 - 할 일(Notion 할일 DB) 추가·조회·정리는 JARVIS 가 `notion-todo` 스킬로 직접 한다. Coordinator 에게 넘기지 않는다.
 - 상태가 바뀌면 그 자리에서 아래 `state/` 파일에 쓴다. 대화 기억에만 두지 않는다. 대시보드와 Obsidian 기록이 이 파일을 읽는다.
+- 지식은 종류마다 한 곳에 둔다(2026-11-09 사용자 결정). 지금 상태는 JARVIS 보드에서 보고, Obsidian 에 상태 사본을 두지 않는다.
+
+  | 지식 | 자리 | 쓰는 쪽 |
+  |---|---|---|
+  | 판단 기준(사용자가 "기준으로 남겨"라고 한 것) | `criteria.md` | JARVIS |
+  | 프로젝트 기술 지식(구조, 도구 사용법, 주의점) | 프로젝트 저장소 `docs/`·`CLAUDE.md` | PM·Worker (그 저장소 규칙대로) |
+  | 진행 상황(작업, 결정, 인계) | `state/` | JARVIS·훅·`jarvisctl` |
+  | 결정 배경, 회고, 하루 기록 | Obsidian(`projects/worklog/`) | JARVIS(작업일지·위키 정리) |
 
 ## 상태 파일 (`state/`, git 에 올리지 않음)
 
