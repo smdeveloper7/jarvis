@@ -33,6 +33,7 @@ TASK_RE = re.compile(r'W-\d{8}-\d+')
 TASK_LABEL = 'jarvis.task'   # Worker 의 작업 번호 라벨. 제목은 '<영역>-<한국어 작업 이름>'
 TASK_LABEL_RE = re.compile(r'W-\d{8}-\d+(?:-[A-Za-z0-9]+)?')   # 이름표: 한 작업을 나눈 Worker(-B, -C)까지
 WORKER_DONE_S = 30 * 60   # 끝난 Worker 를 '끝남' 구역에 두는 시간. 넘으면 목록에서 뺀다
+ACTIVE_S = float(os.environ.get('JARVIS_ACTIVE_HOURS') or 2) * 3600   # 이 시간 안에 활동이 없으면 세션을 '꺼짐'으로
 
 
 def iso_ms(s):
@@ -195,6 +196,16 @@ def row_of(r, role, proj, now_ms):
         'startedAt': iso_ms(r.get('createdAt')), 'role': role, 'project': proj,
         'model': (r.get('config') or {}).get('model') or rt.get('model') or '',
     }
+    last = iso_ms(r.get('lastActivityAt') or r.get('updatedAt'))
+    if st == 'running':
+        activity = 'working'
+    elif attention:
+        activity = 'waiting'
+    elif st == 'closed' or not last or now_ms - last > ACTIVE_S * 1000:
+        activity = 'off'          # 프로세스가 닫혔거나 오래 활동이 없음: 보드에서 기본은 숨김
+    else:
+        activity = 'resting'
+    row.update(activity=activity, lastAt=last)
     if st == 'running':
         row.update(status='busy', state='working')
     elif attention:
@@ -391,7 +402,11 @@ def messages(rows, transcript_path, hours=24, now=None, max_messages=300, boss=N
 
 
 def office(jarvis, rows):
-    """오피스 장면에 필요한 것: 사장 이름, 프로젝트 방 목록(registry 순서 + 줄에만 있는 레인), 결정 대기 수."""
+    """오피스 장면에 필요한 것: 사장 이름, 프로젝트 방 목록(registry 순서 + 줄에만 있는 레인), 결정 대기 수.
+
+    방마다 active(일이 있어 항상 보일 방인가)와 그 이유, PM 상태, 마지막 활동 시각을 붙인다. 보드는
+    active 이거나 사용자가 '항상 보이기' 를 체크한 방만 그린다(체크는 브라우저에 저장).
+    active 기준: 실행·대기 중인 세션, 진행 중 작업, 정할 결정, PM 교체 중(lock), 최근 활동(ACTIVE_S 안)."""
     reg = registry(jarvis)
     projects = [{'key': k, 'name': v.get('name') or k} for k, v in reg.items()]
     seen = {p['key'] for p in projects}
@@ -399,7 +414,32 @@ def office(jarvis, rows):
         if r.get('role') in ('coordinator', 'worker') and r.get('lane') and r['lane'] not in seen:
             seen.add(r['lane'])
             projects.append({'key': r['lane'], 'name': r['lane']})
-    pending = sum(1 for d in decisions(jarvis) if d['status'] not in ('waiting', 'decided', 'dropped', 'stale'))
+    decs = decisions(jarvis)
+    busy_tasks = {}
+    for path in glob.glob(os.path.join(jarvis, 'state', 'tasks', '*.md')):
+        m, _ = frontmatter(path)
+        if m.get('status') in ('assigned', 'working', 'question'):
+            busy_tasks[m.get('project')] = busy_tasks.get(m.get('project'), 0) + 1
+    for p in projects:
+        k = p['key']
+        mine = [r for r in rows if r.get('lane') == k]
+        why = []
+        if any(r.get('activity') in ('working', 'waiting') for r in mine):
+            why.append('세션 작업·대기 중')
+        if busy_tasks.get(k):
+            why.append('진행 중 작업 %d' % busy_tasks[k])
+        n_dec = sum(1 for d in decs if d['source'] == k and d['status'] == 'open')
+        if n_dec:
+            why.append('정할 결정 %d' % n_dec)
+        if os.path.exists(os.path.join(jarvis, 'state', 'handoff', k, 'rotating.lock')):
+            why.append('PM 교체 중')
+        if any(r.get('activity') == 'resting' for r in mine):
+            why.append('최근 활동')
+        pm_id = (reg.get(k) or {}).get('coordinator')
+        pm = next((r for r in mine if r.get('paseoId') == pm_id), None)
+        p.update(active=bool(why), why=why, pm_state=(pm or {}).get('activity') or 'none',
+                 last_at=max([r.get('lastAt') or 0 for r in mine] or [0]) or None)
+    pending = sum(1 for d in decs if d['status'] not in ('waiting', 'decided', 'dropped', 'stale'))
     pending += sum(1 for r in rows if r.get('state') == 'blocked')
     return {'boss': boss_name(jarvis), 'projects': projects, 'pending': pending}
 

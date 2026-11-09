@@ -38,6 +38,20 @@ try:
     assert hub == 'JARVIS' and set(by) == {'JARVIS', 'nipa-coord', 'nipa-w-W-20261106-02'}, by.keys()
     assert by['JARVIS']['lane'] == 'HUB' and by['JARVIS']['group'] == 'resident'
     assert by['nipa-coord']['lane'] == 'nipa' and by['nipa-coord']['state'] == 'working'
+    # 활동 기준: 실행 중 working, 권한 대기 waiting, 닫힘·오래 활동 없음 off
+    assert by['nipa-coord']['activity'] == 'working' and by['nipa-w-W-20261106-02']['activity'] == 'waiting'
+    old = jd.row_of({'id': 'z', 'lastStatus': 'idle', 'lastActivityAt': '2020-01-01T00:00:00Z'}, 'coordinator', 'nipa',
+                    jd.iso_ms('2026-11-09T00:00:00Z'))
+    closed = jd.row_of({'id': 'y', 'lastStatus': 'closed', 'lastActivityAt': '2026-11-09T00:00:00Z'}, 'coordinator',
+                       'nipa', jd.iso_ms('2026-11-09T00:10:00Z'))
+    fresh = jd.row_of({'id': 'v', 'lastStatus': 'idle', 'lastActivityAt': '2026-11-09T00:00:00Z'}, 'coordinator',
+                      'nipa', jd.iso_ms('2026-11-09T00:10:00Z'))
+    assert (old['activity'], closed['activity'], fresh['activity']) == ('off', 'off', 'resting')
+    # 방: 세션이 일하거나 진행 중 작업·정할 결정·교체 중·최근 활동이 있으면 active, PM 상태와 이유를 붙인다
+    of = {p['key']: p for p in jd.office(J, rows)['projects']}
+    assert of['nipa']['active'] and '세션 작업·대기 중' in of['nipa']['why'], of
+    quiet = [dict(r, activity='off') for r in rows]
+    assert not {p['key']: p for p in jd.office(J, quiet)['projects']}['nipa']['active']
     w = by['nipa-w-W-20261106-02']
     assert w['group'] == 'task' and w['task'] == 'W-20261106-02' and w['lane'] == 'nipa'
     assert w['state'] == 'blocked' and w['needs'] == 'permission'
