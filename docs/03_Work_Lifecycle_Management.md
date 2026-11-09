@@ -100,6 +100,30 @@ Feature ID(`nipa:board`)는 "무엇을 만드는가"를, Linear Issue ID(`PRO-10
 
 외부 도구 쓰기를 JARVIS 하나로 모으면 중복 생성과 권한 분산을 막을 수 있다. PM 이 나눈 작업 안은 `[계획]` 으로 받는다. `[계획]` 은 구현 전 분해안이고, `[보고]` 는 맡긴 일이 끝났다는 신호라 서로 구분한다. 나중에 PM 에게 Linear 쓰기를 열지는 운영해 보고 정한다.
 
+### 메시지 규약
+
+JARVIS·PM·Worker 는 머리말을 붙인 글로 일을 주고받는다. 글은 Paseo `send_agent_prompt` 로 오간다(전달 원리는 [02 2절 "실행 기반: Paseo"](02_Agent_Lifecycle_Management.md#실행-기반-paseo)). 머리말은 대시보드 흐름 탭과 SessionStart 맥락이 종류를 나누는 데도 쓴다.
+
+| 머리말 | 보내는 쪽 → 받는 쪽 | 뜻 |
+|---|---|---|
+| `[배정] W-…` | JARVIS → PM | 요청 원문, 필요하면 완료 조건, `Linear: PRO-n` |
+| `[계획] W-…` | PM → JARVIS | "작업 분해안만" 에 대한 답. 구현 전 분해안 |
+| `[진행] W-…` | PM → JARVIS | 아직 하는 중. 사용자에게 알리지 않음 |
+| `[질문] W-…` | PM → JARVIS, Worker → PM | 기준으로 정하지 못한 판단. 선택지와 추천을 붙임 |
+| `[승인요청]` | PM → JARVIS | Worker·PM 의 도구 권한 대기(agentId·requestId·도구·내용) |
+| `[완료]` | Worker → PM | 바뀐 것·확인한 것·남은 것 |
+| `[보고] W-…` | PM → JARVIS | 맡긴 일이 끝남. 형식은 아래 |
+| `[점유]` / `[해제]` | PM → JARVIS | 공유 자원을 쓰려 함 / 다 씀 |
+| `[점유허가]` / `[점유대기]` | JARVIS → PM | `jarvisctl occupy` 결과 |
+| `[인계요청]` / `[인계노트]` | JARVIS → PM / PM → JARVIS | PM 세션 교체(02 5절) |
+| `[준비]` | 새 PM → JARVIS | 맥락을 읽고 받은 상태 요약(02 3절) |
+| `[인계]` | JARVIS → PM | 기본 수신 JARVIS 가 바뀜 |
+| `[알림]` | 훅 → JARVIS | PM 이 닫힘 등 사건 |
+
+- `[보고]` 형식: `[보고] W-… / 바뀐 것 / 확인한 것 / 보고만 받은 것 / 기준으로 정한 것 / 이슈 완료 조건(충족·남음·해당 없음) / Worker / 운영 반영 대기 / 남은 것` (`rules/coordinator.md`).
+- 받는 곳: PM 은 그 `[배정]` 을 보낸 JARVIS 창에 보낸다. 모르면 `state/tasks/<W-ID>.md` 의 `jarvis:`, 그 창이 닫혔으면 `registry.yaml` 의 `jarvis:`(기본 수신자)다.
+- 자동 끝남 알림은 보조 신호다. JARVIS 는 `[보고]` 가 아니면 끝난 것으로 보지 않고, PM 은 Worker 를 기다리며 차례를 끝낼 때 `[진행]` 을 쓴다.
+
 ## 5. 상태 전이와 완료 기준
 
 ### 5.1 기능·작업의 단계

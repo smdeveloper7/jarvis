@@ -2,7 +2,7 @@
 
 > **핵심 질문:** 논리적 Agent 와 실제 실행 세션을 어떻게 생성·교체·복구하는가?
 > **버전:** v0.4 · 2026-11-09 · 구조 재정리(정책·구현 변경 없음)
-> **관련:** [01 State & Memory](01_State_Memory_Management.md) · [03 Work Lifecycle](03_Work_Lifecycle_Management.md) · 상세 근거 [JARVIS_Agent_Lifecycle_Persistence_Policy.md](JARVIS_Agent_Lifecycle_Persistence_Policy.md)
+> **관련:** [01 State & Memory](01_State_Memory_Management.md) · [03 Work Lifecycle](03_Work_Lifecycle_Management.md)
 > **구현:** `hooks/`(Claude 훅), `scripts/jarvisctl.py`(상태 전환), 실행 지침 `CLAUDE.md` "PM 띄우기"·"PM 세션 교체", `rules/coordinator.md`
 
 ## 요약
@@ -61,6 +61,50 @@ flowchart TB
 ```
 
 논리적 JARVIS 하나는 여러 대화창으로 동시에 쓸 수 있다. 프로젝트 PM 은 활성 세션 하나와, 교체 뒤 정리 전까지 남는 이전 세션을 가질 수 있다. registry 는 어느 세션이 지금 그 역할을 맡는지를 가리킨다.
+
+### 실행 기반: Paseo
+
+JARVIS·PM·Worker 는 모두 Paseo 데몬이 실행하는 Claude Code 세션이다. `create_agent`·`send_agent_prompt` 같은 도구는 Claude Code 기본 기능이 아니라 데몬이 MCP 서버로 내주는 도구(`mcp__paseo__*`)다. 데몬은 화면 없이 뒤에서 도는 프로그램으로, 세션을 자식 프로세스로 띄워 입력과 출력을 쥐고 있다. 이 PC 에서 확인한 구성(2026-11-09):
+
+| 구성 | 이 PC 에서 본 것 | 하는 일 |
+|---|---|---|
+| Paseo 앱 | `C:\Program Files\Paseo\Paseo.exe` (Electron 앱: 화면·GPU·네트워크 프로세스) | 사용자가 보는 창. 데몬을 자식 프로세스로 띄운다 |
+| 데몬 | 같은 `Paseo.exe` 가 `resources\app.asar\dist\daemon\node-entrypoint-runner.js` 를 Node 스크립트로 실행(PID 24416) | 세션 실행·메시지 전달·끝남 알림·예약 실행. `127.0.0.1:6767`, `127.0.0.1:55912` 에서 대기 |
+| 에이전트 세션 | 데몬의 자식 `claude.exe` 들. `--input-format stream-json --output-format stream-json`, `--permission-prompt-tool stdio`, `--resume=<세션 ID>` 로 실행 | JARVIS·PM·Worker 하나하나. 데몬이 표준 입출력으로 지시를 넣고 답과 권한 요청을 받는다 |
+| 터미널 워커 | `~/.paseo/terminal-worker/…/terminal-worker.mjs` | 데몬이 여는 터미널 |
+| 데이터 폴더 | `~/.paseo/`: `agents/`, `schedules/`, `finish-subscriptions.json`, `daemon.log`, `server-id`, `paseo.pid`, `config.json` | 에이전트 기록(제목·부모·라벨·Claude 세션 ID), 예약, 끝남 알림 구독, 로그 |
+
+- 대시보드의 에이전트·흐름 탭은 `~/.paseo/agents/` 기록을 읽는다(`dashboard/jarvis_data.py`).
+- 확인하지 않은 것: 두 포트 중 어느 쪽이 MCP 인지, Paseo 앱을 완전히 끄면 데몬과 세션이 함께 내려가는지(데몬의 부모가 앱 프로세스라 그럴 가능성이 높다).
+
+#### 메시지가 전달되는 원리
+
+한 에이전트가 `send_agent_prompt` 를 부르면 데몬이 받는 세션의 입력에 그 글을 새 차례로 넣는다. 받는 쪽에는 `<paseo-system kind="agent-message" source-agent-id=…>` 로 감싼 메시지로 보인다. 부모 세션은 자식이 차례를 끝낼 때 끝남 알림도 같은 방식으로 받는다. 머리말과 보고 형식 같은 메시지 규약은 [03 4절 "메시지 규약"](03_Work_Lifecycle_Management.md#메시지-규약) 이 정한다.
+
+![Paseo 가 PM 을 띄우고, 준비·배정·보고 메시지와 끝남 알림을 나르는 7단계](images/paseo-flow.png)
+
+1. JARVIS 가 `create_agent` 로 PM 을 만든다(라벨 `jarvis.role: pm`). 훅이 PM 을 JARVIS 의 자식에서 떼어 낸다(`agent detach`, 아래 "부모 관계").
+2. 데몬이 PM 세션을 띄우고, SessionStart 훅이 규칙·인계 노트·열린 작업을 넣는다(3절).
+3. PM 이 `send_agent_prompt` 로 `[준비]` 를 보낸다. detach 된 PM 의 끝남 알림은 JARVIS 에게 가지 않으므로 직접 보낸다.
+4. JARVIS 가 확인 뒤 `[배정] W-…` 를 보낸다.
+5. PM 이 Worker 를 띄우고 지시한다. Worker 는 PM 의 자식으로 남는다.
+6. Worker 가 차례를 끝내면 데몬이 부모인 PM 에게 끝남 알림을 보낸다.
+7. PM 이 결과를 확인하고 `[보고]` 를 `send_agent_prompt` 로 보낸다. JARVIS 가 받는 자동 알림은 보조 신호이고, `[보고]` 가 아니면 끝난 것으로 보지 않는다.
+
+Paseo 는 Claude 만이 아니라 여러 에이전트 CLI 를 감싸 같은 도구로 다룬다. 이 PC 에서 켜진 제공자는 Claude 와 Codex 다(2026-11-09 `list_providers`. Copilot·OpenCode·Pi·Oh My Pi·Antigravity·Muse Code 는 목록에 있으나 꺼짐). 그래서 Claude PM 이 `create_agent` 의 `provider` 에 `codex` 를 주어 Codex Worker 를 띄우고 메시지를 주고받을 수 있다. JARVIS 는 아직 Claude 만 쓴다. 권한 모드는 제공자마다 다르다(Claude: plan·default·acceptEdits·auto·bypassPermissions, Codex: auto·auto-review·full-access). Claude Code 자체의 세션 간 메시지(`SendMessage`)는 Claude 세션끼리만 되고 JARVIS 규칙에서는 쓰지 않는다.
+
+#### Paseo 도구
+
+| 묶음 | 도구 | JARVIS 에서 쓰는 곳 |
+|---|---|---|
+| 에이전트 만들기·정리 | `create_agent`, `archive_agent`, `kill_agent`, `update_agent` | PM·Worker 띄우기, 교체 뒤 옛 PM 정리(`kill_agent` 는 훅이 막음) |
+| 지시·상태 | `send_agent_prompt`, `get_agent_status`, `get_agent_activity`, `list_agents`, `cancel_agent`, `set_agent_mode` | `[배정]` 보내기, 살아 있는지 확인, 마지막 답 보기 |
+| 권한 | `list_pending_permissions`, `respond_to_permission` | PM·Worker 의 `[승인요청]` 허용 |
+| 예약 실행 | `create_schedule`, `run_schedule_once`, `pause`·`resume`·`delete_schedule`, `schedule_logs`, `create_heartbeat` | 07:20 아침 할일 정리 |
+| 워크스페이스 | `list_workspaces`, `create_workspace`, `archive_workspace`, `rename_workspace` | PM 작업 폴더 연결 |
+| 터미널·스크립트 | `create_terminal`, `send_terminal_keys`, `capture_terminal`, `start`·`stop_workspace_script` | 아직 안 씀 |
+| 조회 | `list_providers`, `list_models`, `list_profiles`, `list_hosts`, `inspect_provider` | 모델 고를 때 |
+
 
 ### 부모 관계
 

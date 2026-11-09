@@ -12,4 +12,6 @@ JARVIS는 요청을 작업으로 나누어 PM에게 맡기고, 세션이 바뀌�
 
 01~03 문서는 기존 내용과 목차를 유지하며, 개념·정책·명령어·파일 형식·훅·예외를 한 문서에서 확인할 수 있다. 본문 그림은 핵심 관계와 흐름이 드러나도록 단순화했다. 구현·검증 현황은 2026-11-09 원문 기록 기준이다.
 
-`JARVIS_Agent_Lifecycle_Persistence_Policy.md`는 기존 설계 근거다. `diagrams/architecture.html`, `flow.html`, `layers.html`은 이전 상세 그림으로 보존했다.
+`diagrams/architecture.html`, `flow.html`, `layers.html`은 이전 상세 그림으로 보존했다.
+
+`reference/` 는 정책이 아닌 참고 자료다. 지금은 [lanekeeper 와 JARVIS 비교](reference/lanekeeper_comparison.md) 가 있다. 세션 실행 바탕(Paseo)은 02 2절, 에이전트 사이 메시지 규약은 03 4절에 있다.
