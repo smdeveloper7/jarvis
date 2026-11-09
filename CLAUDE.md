@@ -154,7 +154,6 @@ state/handoff/
 - 결정은 이유와 함께 남긴다. Coordinator·Worker 는 기록하지 않는다.
 - 할 일(Notion 할일 DB) 추가·조회·정리는 JARVIS 가 `notion-todo` 스킬로 직접 한다. Coordinator 에게 넘기지 않는다.
 - 상태가 바뀌면 그 자리에서 아래 `state/` 파일에 쓴다. 대화 기억에만 두지 않는다. 대시보드와 Obsidian 기록이 이 파일을 읽는다.
-- Obsidian 의 `wiki/jarvis/현황.md`·`결정.md` 는 JARVIS 창이 답을 마칠 때 Stop 훅(`obsidian_sync.py`)이 state 가 바뀌었으면 자동으로 갱신한다. 따로 돌릴 필요 없다(바로 보고 싶으면 `python scripts/obsidian_export.py`). 읽기 전용 사본이라 그 노트를 고치지 않는다(`docs/01` 5절).
 
 ## 상태 파일 (`state/`, git 에 올리지 않음)
 

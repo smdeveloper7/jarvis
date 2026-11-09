@@ -416,23 +416,6 @@ try:
     assert ctl('claim-jarvis', JV, agent=JV)[0] == 0 and registry(J)['jarvis'] == JV
     assert not os.path.exists(os.path.join(J, 'state', 'handoff', 'manager', 'transfer.json'))
 
-    # ---- Obsidian 현황 노트: JARVIS 창이 답을 마칠 때 state 가 바뀌었으면만 다시 만듦 ----
-    import time as _t2
-    os.environ['JARVIS_WORKLOG'] = os.path.join(TMP, 'worklog')
-    note = os.path.join(TMP, 'worklog', 'wiki', 'jarvis', '현황.md')
-    run('obsidian_sync.py', {'hook_event_name': 'Stop'}, PM3)                              # PM 에서는 안 돎
-    assert not os.path.exists(note)
-    run('obsidian_sync.py', {'hook_event_name': 'Stop'}, JV, cwd=J)
-    assert os.path.exists(note) and '자동 생성' in open(note, encoding='utf-8').read()
-    dec = open(os.path.join(TMP, 'worklog', 'wiki', 'jarvis', '결정.md'), encoding='utf-8').read()
-    assert '열린 결정' in dec
-    m1 = os.path.getmtime(note)
-    _t2.sleep(1.1)
-    run('obsidian_sync.py', {'hook_event_name': 'Stop'}, JV, cwd=J)
-    assert os.path.getmtime(note) == m1                                                     # 바뀐 것 없으면 안 씀
-    code, nt2 = ctl('new-task', 'nipa', '--title', '노트 갱신 시험')
-    run('obsidian_sync.py', {'hook_event_name': 'Stop'}, JV, cwd=J)
-    assert os.path.getmtime(note) > m1 and '노트 갱신 시험' in open(note, encoding='utf-8').read()
     print('ok')
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
