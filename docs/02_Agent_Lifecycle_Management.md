@@ -241,7 +241,12 @@ sequenceDiagram
 
 ### 5.2 PM 이 갑자기 닫혔을 때 (장애 복구)
 
-사용자가 Paseo 화면에서 PM 을 닫거나 프로세스가 죽으면 인계 노트를 받을 수 없다. JARVIS 는 닫힘 알림을 받은 뒤, 다음 `[배정]` 때 `lock acquire --reason crash` 로 Provisioning 을 시작한다. 새 PM 은 마지막 `latest.md` 와 작업 파일로 맥락을 복원하고, SessionStart 맥락의 "이전 PM" 으로 옛 PM 의 Worker 를 찾아 `[완료]` 를 먼저 확인한다. 실제 파일·브랜치를 보고 이미 된 일을 중복하지 않는다. 장애 복구 PM 은 같은 프로젝트 이전 PM 이 남긴 Worker 를 닫을 수 있다.
+닫힘은 두 가지로 나눈다. 다음 `[배정]` 전에 `jarvisctl pm-check <프로젝트>` 가 어느 쪽인지 알려 준다.
+
+- **프로세스만 닫힘**(archive 아님, `pm_state: closed`): 새로 띄우지 않고 이어 띄운다(2026-11-09 사용자 결정, lanekeeper 의 `claude respawn` 과 같은 생각). 닫힌 에이전트에 `send_agent_prompt` 를 보내면 Paseo 가 저장된 세션으로 다시 연다. 대화 맥락이 그대로 남고, SessionStart 훅(resume)이 규칙·인계 노트·열린 작업을 다시 넣는다. 컨텍스트가 기준(20만)을 넘었으면(`action: resume-rotate`) `[배정]` 대신 `[인계요청]` 을 보내 이어 띄우고 5.1 교체로 간다.
+- **archive·삭제**(`archived`·`missing`): 사용자나 교체 절차가 일부러 닫은 것이라 이어 띄우지 않는다. 아래처럼 새로 띄운다.
+
+새로 띄울 때 JARVIS 는 다음 `[배정]` 때 `lock acquire --reason crash` 로 Provisioning 을 시작한다. 새 PM 은 마지막 `latest.md` 와 작업 파일로 맥락을 복원하고, SessionStart 맥락의 "이전 PM" 으로 옛 PM 의 Worker 를 찾아 `[완료]` 를 먼저 확인한다. 실제 파일·브랜치를 보고 이미 된 일을 중복하지 않는다. 장애 복구 PM 은 같은 프로젝트 이전 PM 이 남긴 Worker 를 닫을 수 있다.
 
 ### 5.3 교체 도중 끊겼을 때
 
@@ -253,7 +258,8 @@ JARVIS 가 교체 도중 새로 뜨면 `jarvisctl lock show <프로젝트>` 의 
 - registry `jarvis:` 는 기본 수신자다. 아침 할일 정리 보고, 맡긴 창이 닫힌 PM 보고, PM 이 보낼 곳을 모를 때 받는다. 쓰기 권한과는 상관없다.
 - 기본 수신자는 `jarvisctl claim-jarvis <새 ID>` 로만 바꾼다. 허용 조건은 기본 수신자가 없음, 그 창이 닫힘(archive·closed·missing), 그 창이 `transfer-jarvis --to <새 ID|next>` 로 넘김 중 하나다. 자기 자신만, JARVIS 창만 올릴 수 있다.
 - 기본 수신자 창은 닫기 가드가 막는다. 다른 창이 먼저 claim 하거나 사용자가 Paseo 화면에서 닫으면 그 뒤 claim 이 허용된다.
-- 긴 대화를 정리하고 새 창으로 옮길 때: 옛 창이 `state/handoff/manager/latest.md` 작성(`jarvisctl handoff manager`) → 기본 수신자면 `transfer-jarvis --to next` → 새 창이 `claim-jarvis` → PM 들에게 `[인계]` → 사용자 승인 후 옛 창 archive.
+- 창을 닫을 때(2026-11-09 사용자 결정): 영구 지식은 사용자가 그 창에 "세션 종료"라고 할 때만 남긴다. 순서는 작업일지 raw → Manager 인계 노트(`jarvisctl handoff manager`, 기존 `latest.md` 의 유효 항목 옮김) → `criteria.md` → 닫기. 닫기는 기본 수신자가 아니면 그 창이 `archive_agent` 로 자기 보관, 기본 수신자면 `transfer-jarvis --to next` 뒤 사용자가 보관 버튼을 누르고 새 창이 `claim-jarvis` → PM 들에게 `[인계]`. 세부 절차는 `CLAUDE.md` "세션 종료".
+- 사용자가 "세션 종료" 없이 Paseo 보관 버튼으로 닫으면 아무것도 남기지 않는다. Paseo 플러그인 훅은 `agent.archive.after`(보관 뒤, 기다리지 않음)만 있고 보관 전 이벤트가 없어서, 닫히는 창이 스스로 정리할 기회가 없다. 대화 원문은 `~/.claude/projects/` 에 남지만 Claude 기본 설정으로 30일 뒤 지워진다.
 - JARVIS 교체 기준은 PM 의 200,000 을 따르지 않는다. 사용자가 정할 때 바꾼다.
 - JARVIS 창이 모두 멈추면 스스로 복구하지 못한다. 사용자가 새로 띄운다.
 
@@ -289,6 +295,7 @@ PM 은 Claude 로만 띄우므로 Codex 훅은 범위 밖이다. Codex Worker �
 | 교체 도중 JARVIS 새로 뜸 | lock 있음 | `lock show` 의 stage·candidate 로 이어 할지 사용자에게 |
 | 다른 JARVIS 창이 교체 진행 중 | lock `owner` 가 다른 창 | 이어 하지 않음. 그 창이 닫혔으면 넘겨받고, 열려 있으면 사용자에게 묻고 `--takeover` |
 | 사용자가 PM archive | 대조 | 기록·알림, 다음 [배정] 때 crash 띄우기 |
+| PM 프로세스만 닫힘(archive 아님) | 대조(`closed`) | 기록·알림, 다음 [배정] 을 그대로 보내 이어 띄움. 컨텍스트가 기준을 넘었으면 `[인계요청]` 으로 이어 띄워 교체(`pm-check`) |
 | PM 중복 | create 가드 | 생성 차단. 이미 있으면 registry 쪽만 활성, 나머지는 대시보드 "이전 PM" |
 | Paseo 재시작으로 사용량 없음 | `lastUsage` 없음 | Snapshot → transcript |
 | 훅 미실행 | `[준비]` 표식 없음 | 규칙 파일 직접 읽게 함 |

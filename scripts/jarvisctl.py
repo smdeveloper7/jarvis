@@ -3,7 +3,10 @@
 원자적으로 한다. JARVIS 대화창은 여러 개일 수 있으므로, 겹치면 안 되는 일(번호 발급, registry, PM 교체)은 모두 여기서
 잠금 안에서 한다.
 
-  new-task <프로젝트> --title T [--request R]   W-YYYYMMDD-NN 작업 파일을 잠금 안에서 발급
+  new-task <프로젝트> --title T [--request R]   W-YYYYMMDD-NN 작업 파일을 잠금 안에서 발급(JARVIS 자기 일은 프로젝트 jarvis)
+  task <W-ID> [--status working|question|done|cancelled] [--note …] [--report …] [--verified …] [--release …]
+       [--worklog --result … [--check …] [--next …] [--reason …] [--decision D-…]]
+                                     작업 상태·경과를 잠금 안에서 바꾼다. done·cancelled 면 작업일지 한 건(docs/04 4.3)
   new-decision <프로젝트> --question Q [--task W-…] [--option …] [--recommended ①] [--force]
                                     D-YYYYMMDD-NN 결정 파일 발급(같은 작업의 열린 결정이 있으면 그것을 돌려줌)
   register <프로젝트> --root <폴더> [--name 이름] [--pm-title 제목] [--linear-project 이름]   프로젝트 등록
@@ -15,6 +18,7 @@
   vacate <자원> [--task W]           점유 해제
 
   usage <에이전트ID>                 컨텍스트 토큰 (Paseo 기록 → Stop Snapshot → transcript)
+  pm-check <프로젝트>                 [배정] 전 PM 깨우는 법: send | resume(닫힘→이어 띄움) | resume-rotate | rotate | new | wait
   can-rotate <프로젝트>               교체 조건 점검(JSON)
   lock acquire <프로젝트> [--reason context|crash|manual|new]
   lock show <프로젝트>
@@ -22,7 +26,8 @@
   lock candidate <프로젝트> <후보 ID>  훅이 후보를 못 적었을 때 손으로
   lock release <프로젝트> [--result failed:<단계>]
   switch <프로젝트> <새 PM ID>        검증 후 registry coordinator 를 CAS 로 바꾸고 lock 해제(다시 실행해도 안전)
-  handoff <프로젝트|manager> <파일>   인계 노트를 latest.md 로 (이전 것은 이력으로)
+  handoff <프로젝트|manager> <파일>   인계 노트를 latest.md 로 (이전 것은 이력으로). 노트의 W·D 중 끝난 것과
+                                     옛 노트에만 있던 열린 W·D 를 알려 준다(여러 창 합치기, docs/04 6.2)
   hook-check <에이전트ID>             SessionStart 훅이 그 세션에 넣은 표식(nonce)
   transfer-jarvis --to <ID|next>      기본 수신자(registry jarvis:)가 넘길 대상 지정
   claim-jarvis <새 JARVIS ID>         기본 수신자 전환(CAS)
@@ -118,11 +123,14 @@ def create_exclusive(path, text):
         f.write(text)
 
 
+SELF_PROJECT = 'jarvis'   # JARVIS 자기 일(문서·보드·규칙). registry 에 없고 PM 도 없다(docs/04 3.1)
+
+
 def cmd_new_task(a):
     require_jarvis()
     reg = registry(JDIR)
-    if a.project not in reg['projects']:
-        raise Refuse('registry 에 없는 프로젝트 %s' % a.project)
+    if a.project not in reg['projects'] and a.project != SELF_PROJECT:
+        raise Refuse('registry 에 없는 프로젝트 %s (JARVIS 자기 일은 %s)' % (a.project, SELF_PROJECT))
     folder = st('tasks')
     with FileLock(os.path.join(folder, '_alloc')):
         tid = next_id(folder, 'W')
@@ -131,10 +139,97 @@ def cmd_new_task(a):
                 'linear:\nfeature:\nassigned_at: %s\nupdated_at: %s\ndone_at:\nverified: none\nrelease: none\n---\n'
                 '## 요청\n%s\n\n## 보고\n\n## 경과\n- %s 배정\n'
                 % (tid, a.project, a.title.replace('\n', ' '), caller() or 'user',
-                   reg['projects'][a.project].get('coordinator') or '', now, now, a.request or a.title,
+                   reg['projects'].get(a.project, {}).get('coordinator') or '', now, now, a.request or a.title,
                    now[11:16]))
         create_exclusive(os.path.join(folder, tid + '.md'), body)
     return out({'ok': True, 'id': tid, 'path': os.path.join(folder, tid + '.md')})
+
+
+TASK_NEXT = {'assigned': {'working', 'question', 'done', 'cancelled'},
+             'working': {'working', 'question', 'done', 'cancelled'},
+             'question': {'working', 'question', 'done', 'cancelled'},
+             'done': set(), 'cancelled': set()}
+TASK_LABEL = {'working': '진행', 'question': '질문', 'done': '보고', 'cancelled': '취소'}
+WORKLOG = os.environ.get('JARVIS_WORKLOG') or 'C:/Users/SMDEVELOPER/projects/worklog/scripts/worklog.ps1'
+NO_WORKLOG = {'ask'}   # 단순 질의응답은 W 를 만들어도 작업일지를 남기지 않는다
+
+
+def replace_section(text, title, body):
+    """'## <title>' 절의 본문을 바꾼다(다음 '## ' 앞까지)."""
+    m = re.search(r'(^## %s\n)(.*?)(?=^## |\Z)' % re.escape(title), text, re.S | re.M)
+    if not m:
+        return text.rstrip('\n') + '\n\n## %s\n%s\n' % (title, body.strip())
+    return text[:m.start(2)] + body.strip() + '\n\n' + text[m.end(2):]
+
+
+def cmd_task(a):
+    """작업 파일의 status·updated_at·done_at·경과(·보고)를 잠금 안에서 바꾼다. done·cancelled 가 되면 작업일지로 이어진다."""
+    require_jarvis()
+    from jarvis_state import front
+    path = st('tasks', a.id + '.md')
+    if not os.path.exists(path):
+        raise Refuse('작업 파일 없음: %s' % a.id)
+    with FileLock(path):
+        m = front(path)
+        cur = m.get('status') or 'assigned'
+        if a.status and a.status != cur and a.status not in TASK_NEXT.get(cur, set()):
+            raise Refuse('%s 는 이미 %s 다. %s 로 바꿀 수 없다' % (a.id, cur, a.status))
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+        now = now_iso()
+        kw = {'updated_at': now}
+        if a.status:
+            kw['status'] = a.status
+            if a.status in ('done', 'cancelled') and not m.get('done_at'):
+                kw['done_at'] = now
+        if a.verified:
+            kw['verified'] = a.verified
+        if a.release:
+            kw['release'] = a.release
+        text = set_front(text, **kw)
+        if a.report:
+            text = replace_section(text, '보고', a.report)
+        note = a.note or (TASK_LABEL.get(a.status, '') if a.status and a.status != cur else '')
+        if note:
+            text = text.rstrip('\n') + '\n- %s %s\n' % (now[11:16], note.replace('\n', ' '))
+        with open(path + '.tmp', 'w', encoding='utf-8') as f:
+            f.write(text)
+        os.replace(path + '.tmp', path)
+    res = {'ok': True, 'id': a.id, 'status': a.status or cur}
+    final = (a.status or cur) in ('done', 'cancelled')
+    proj = m.get('project') or ''
+    if final and proj not in NO_WORKLOG:
+        entry = {'agent': a.agent, 'project': 'JARVIS' if proj == SELF_PROJECT else proj,
+                 'status': '완료' if (a.status or cur) == 'done' else '보류', 'title': m.get('title') or a.id,
+                 'result': a.result or '', 'check': a.check or '', 'next': a.next or '', 'reason': a.reason or '',
+                 'task': a.id, 'decision': a.decision or ''}
+        if a.worklog:
+            if not a.result:
+                raise Refuse('--worklog 에는 --result 가 필요하다(상태는 이미 바뀜. --result 를 더해 다시 실행)')
+            res['worklog'] = write_worklog(entry)
+        elif a.status and a.status != cur:
+            res['worklog_todo'] = ('작업일지 한 건을 남긴다: jarvisctl task %s --worklog --result "…" --check "…" '
+                                   '--next "…" [--reason "…"] [--decision D-…]' % a.id)
+    return out(res)
+
+
+def write_worklog(entry):
+    """공통 worklog.ps1 을 UTF-8 JSON 파일로 부른다(한글 인자가 깨지지 않게). 같은 내용이면 스크립트가 건너뛴다."""
+    import subprocess
+    import tempfile
+    fd, tmp = tempfile.mkstemp(suffix='.json')
+    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        json.dump({k: v for k, v in entry.items() if v}, f, ensure_ascii=False)
+    try:
+        cmd = ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', WORKLOG, '-JsonFile', tmp]
+        if os.environ.get('JARVIS_WORKLOG_RAWDIR'):   # 시험용: 실제 raw 대신 다른 폴더에
+            cmd += ['-RawDir', os.environ['JARVIS_WORKLOG_RAWDIR']]
+        r = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=60)
+    finally:
+        os.remove(tmp)
+    if r.returncode != 0:
+        raise Refuse('작업일지 기록 실패: %s' % (r.stderr or r.stdout).strip()[:300])
+    return r.stdout.strip()
 
 
 def cmd_new_decision(a):
@@ -401,6 +496,34 @@ def busy_tasks(proj):
     return [x.get('id') for x in open_tasks(JDIR, proj) if x.get('status') in ('assigned', 'working', 'question')]
 
 
+def cmd_pm_check(a):
+    """[배정] 전에 PM 을 어떻게 깨울지 정한다(docs/02 3.1). 닫힌(archive 아님) PM 은 새로 띄우지 않고 이어 띄운다.
+    Paseo 는 닫힌 에이전트에 send_agent_prompt 를 보내면 저장된 세션으로 다시 연다(맥락 유지, SessionStart:resume).
+    archive 는 사용자·교체 절차가 일부러 닫은 것이라 이어 띄우지 않는다."""
+    p = registry(JDIR)['projects'].get(a.project)
+    if not p:
+        return out({'ok': False, 'why': 'registry 에 없는 프로젝트'}, 1)
+    aid = p.get('coordinator')
+    lock = read_json(lock_file(a.project))
+    state = closed_state(aid) if aid else 'none'
+    t, src, _ = usage(aid) if aid and state in ('open', 'closed') else (None, None, None)
+    over = t is not None and t > THRESHOLD
+    if lock:
+        action, why = 'wait', 'PM 교체 중(rotating.lock). 교체가 끝난 뒤 새 PM 에 보낸다'
+    elif state == 'open':
+        action, why = ('send', '열려 있다. 그대로 [배정]') if not over else \
+            ('rotate', '열려 있지만 컨텍스트가 기준을 넘었다. 지금 일을 보내기 전에 PM 세션 교체')
+    elif state == 'closed':
+        action, why = ('resume', '프로세스만 닫혔다. 새로 띄우지 말고 send_agent_prompt 로 [배정] 을 보내 이어 띄운다'
+                       + ('' if t is not None else '(컨텍스트 크기 모름: 이어 띄운 뒤 jarvisctl usage 로 확인)')) \
+            if not over else ('resume-rotate', '닫혔고 컨텍스트가 기준을 넘었다. [인계요청] 을 보내 이어 띄우고 PM 세션 교체 절차로')
+    else:   # archived, missing, error, none
+        action, why = 'new', 'PM 이 %s. "PM 띄우기"(mode crash, 인계 노트 state/handoff/%s/latest.md)' % (state, a.project)
+    return out({'ok': True, 'project': a.project, 'agent_id': aid, 'pm_state': state, 'context_tokens': t,
+                'source': src, 'threshold': THRESHOLD, 'action': action, 'why': why,
+                'open_tasks': [x.get('id') for x in open_tasks(JDIR, a.project)]})
+
+
 def cmd_can_rotate(a):
     p = registry(JDIR)['projects'].get(a.project)
     if not p:
@@ -624,6 +747,7 @@ def cmd_handoff(a):
     d = st('handoff', a.role)
     os.makedirs(d, exist_ok=True)
     latest = os.path.join(d, 'latest.md')
+    check = handoff_check(latest, a.file)
     with FileLock(latest):
         if os.path.exists(latest):
             stamp = datetime.fromtimestamp(os.path.getmtime(latest)).strftime('%Y%m%d-%H%M%S')
@@ -634,7 +758,40 @@ def cmd_handoff(a):
             shutil.move(latest, dst)
         shutil.copyfile(a.file, latest + '.tmp')
         os.replace(latest + '.tmp', latest)
-    return out({'ok': True, 'latest': latest})
+    return out(dict({'ok': True, 'latest': latest}, **check))
+
+
+REF_RE = re.compile(r'\b([WD]-\d{8}-\d+)\b')
+CLOSED = ('done', 'cancelled', 'decided', 'dropped')
+OPEN = ('assigned', 'working', 'question', 'open', 'waiting')
+
+
+def ref_status(ref):
+    from jarvis_state import front
+    path = st('tasks' if ref.startswith('W-') else 'decisions', ref + '.md')
+    return front(path).get('status') if os.path.exists(path) else 'missing'
+
+
+def handoff_check(old_path, new_path):
+    """새 노트에 적힌 W·D 중 이미 끝난 것(빼야 할 항목), 옛 노트에만 있고 아직 열린 W·D(옮겨야 할 항목).
+    여러 JARVIS 창이 같은 latest.md 를 쓰므로 덮어쓸 때 다른 창의 열린 일을 잃지 않게 한다(docs/04 6.2)."""
+    def refs(path):
+        try:
+            with open(path, encoding='utf-8') as f:
+                return set(REF_RE.findall(f.read()))
+        except OSError:
+            return set()
+    new, old = refs(new_path), refs(old_path)
+    res = {}
+    stale = sorted(r for r in new if ref_status(r) in CLOSED)
+    dropped = sorted(r for r in old - new if ref_status(r) in OPEN)
+    if stale:
+        res['stale'] = stale
+        res['stale_why'] = '새 노트에 적혔지만 이미 끝난 작업·결정이다. 다음 행동에 필요한 게 아니면 뺀다'
+    if dropped:
+        res['dropped_open'] = dropped
+        res['dropped_why'] = '옛 노트에는 있었는데 새 노트에서 빠진 열린 작업·결정이다. 다른 창의 일이면 옮겨 적는다'
+    return res
 
 
 def cmd_hook_check(a):
@@ -712,6 +869,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog='jarvisctl')
     sub = ap.add_subparsers(dest='cmd', required=True)
     p = sub.add_parser('usage'); p.add_argument('agent'); p.set_defaults(fn=cmd_usage)
+    p = sub.add_parser('pm-check'); p.add_argument('project'); p.set_defaults(fn=cmd_pm_check)
     p = sub.add_parser('can-rotate'); p.add_argument('project'); p.set_defaults(fn=cmd_can_rotate)
     p = sub.add_parser('lock'); p.add_argument('op', choices=['acquire', 'show', 'stage', 'candidate', 'release'])
     p.add_argument('project'); p.add_argument('value', nargs='?')
@@ -723,6 +881,14 @@ def main(argv=None):
     p = sub.add_parser('hook-check'); p.add_argument('agent'); p.set_defaults(fn=cmd_hook_check)
     p = sub.add_parser('transfer-jarvis'); p.add_argument('--to', required=True); p.set_defaults(fn=cmd_transfer)
     p = sub.add_parser('claim-jarvis'); p.add_argument('new'); p.set_defaults(fn=cmd_claim)
+    p = sub.add_parser('task'); p.add_argument('id')
+    p.add_argument('--status', choices=['working', 'question', 'done', 'cancelled'])
+    p.add_argument('--note'); p.add_argument('--report')
+    p.add_argument('--verified', choices=['confirmed', 'reported', 'none'])
+    p.add_argument('--release', choices=['none', 'dev_only', 'released'])
+    p.add_argument('--worklog', action='store_true'); p.add_argument('--agent', default='Claude')
+    p.add_argument('--result'); p.add_argument('--check'); p.add_argument('--next'); p.add_argument('--reason')
+    p.add_argument('--decision'); p.set_defaults(fn=cmd_task)
     p = sub.add_parser('new-task'); p.add_argument('project'); p.add_argument('--title', required=True)
     p.add_argument('--request'); p.set_defaults(fn=cmd_new_task)
     p = sub.add_parser('new-decision'); p.add_argument('project'); p.add_argument('--question', required=True)

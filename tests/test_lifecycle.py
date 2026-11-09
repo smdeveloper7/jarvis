@@ -416,6 +416,54 @@ try:
     assert ctl('claim-jarvis', JV, agent=JV)[0] == 0 and registry(J)['jarvis'] == JV
     assert not os.path.exists(os.path.join(J, 'state', 'handoff', 'manager', 'transfer.json'))
 
+    # 작업 단위 = W (docs/04 4.3): JARVIS 자기 일은 jarvis, task 로 상태를 바꾸고 닫히면 작업일지
+    code, res = ctl('new-task', 'jarvis', '--title', '자기 일')
+    assert code == 0, res
+    jt = res['id']
+    assert ctl('new-task', 'zzz', '--title', 'x')[0] == 1                                  # 등록 안 된 프로젝트는 거절
+    assert ctl('task', jt, '--status', 'working', '--note', '하는 중')[0] == 0
+    code, res = ctl('task', jt, '--status', 'done', '--report', '끝')
+    assert code == 0 and 'worklog_todo' in res, res                                        # 닫히면 일지 안내
+    assert ctl('task', jt, '--status', 'working')[0] == 1                                  # 끝난 W 는 다시 못 엶
+    assert ctl('task', jt, '--status', 'done', agent=PM)[0] == 1                           # PM 은 못 씀
+    with open(os.path.join(J, 'state', 'tasks', jt + '.md'), encoding='utf-8') as f:
+        body = f.read()
+    assert 'status: done' in body and 'done_at: 20' in body and '## 보고\n끝' in body and '하는 중' in body, body
+    raw = os.path.join(TMP, 'raw')
+    os.environ['JARVIS_WORKLOG_RAWDIR'] = raw
+    try:
+        code, res = ctl('task', jt, '--worklog', '--result', '끝냄', '--decision', 'D-20261109-01')
+        assert code == 0 and '기록함' in res['worklog'], res
+        assert '이미 있음' in ctl('task', jt, '--worklog', '--result', '끝냄', '--decision', 'D-20261109-01')[1]['worklog']
+        text = open(os.path.join(raw, [f for f in os.listdir(raw) if f.endswith(".md")][0]), encoding="utf-8").read()
+        assert '| JARVIS | 완료 | 자기 일 (%s)' % jt in text and 'refs:%s,D-20261109-01' % jt in text, text
+    finally:
+        del os.environ['JARVIS_WORKLOG_RAWDIR']
+    # 인계 노트 합치기 점검(docs/04 6.2): 끝난 W 를 적으면 stale, 옛 노트의 열린 W 를 빼면 dropped_open
+    n1, n2 = os.path.join(TMP, 'n1.md'), os.path.join(TMP, 'n2.md')
+    ot = ctl('new-task', 'jarvis', '--title', '열린 자기 일')[1]['id']
+    w(n1, '- %s 진행 중\n- %s 끝남\n' % (ot, jt))
+    code, res = ctl('handoff', 'manager', n1)
+    assert code == 0 and res.get('stale') == [jt] and 'dropped_open' not in res, res
+    w(n2, '- 없음\n')
+    code, res = ctl('handoff', 'manager', n2)
+    assert code == 0 and res.get('dropped_open') == [ot], res
+
+    # [배정] 전 PM 깨우는 법(docs/02 5.2): 열림 send, 프로세스만 닫힘 resume(이어 띄움), archive new, 교체 중 wait
+    cur = registry(J)['projects']['nipa']['coordinator']
+    pm_labels = {'jarvis.role': 'pm', 'jarvis.project': 'nipa'}
+    rec(cur, PROJ, status='idle', labels=pm_labels)
+    assert ctl('pm-check', 'nipa')[1]['action'] == 'send'
+    rec(cur, PROJ, status='closed', labels=pm_labels)
+    assert ctl('pm-check', 'nipa')[1]['action'] == 'resume'
+    rec(cur, PROJ, status='closed', labels=pm_labels, archived='2026-11-09T00:00:00Z')
+    assert ctl('pm-check', 'nipa')[1]['action'] == 'new'
+    rec(cur, PROJ, status='idle', labels=pm_labels)
+    w(os.path.join(J, 'state', 'handoff', 'nipa', 'rotating.lock'), '{"reason": "context"}')
+    assert ctl('pm-check', 'nipa')[1]['action'] == 'wait'
+    os.remove(os.path.join(J, 'state', 'handoff', 'nipa', 'rotating.lock'))
+    assert ctl('pm-check', 'zzz')[0] == 1
+
     print('ok')
 finally:
     shutil.rmtree(TMP, ignore_errors=True)

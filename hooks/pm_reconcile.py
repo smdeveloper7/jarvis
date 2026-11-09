@@ -37,10 +37,12 @@ def reconcile(jdir, reg, home=None):
             'closed_by': 'unknown', 'archived_at': (rec or {}).get('archivedAt'),
             'how': how, 'source': 'reconcile'})
         what = {'archived': '닫혔다(archive)', 'missing': '사라졌다(삭제)',
-                'closed': '프로세스가 닫혔다(archive 아님, 다시 열 수 있을 수 있음)'}[how]
-        msgs.append('[알림] %s PM(%s) 이 Paseo 에서 %s. 열린 작업 %d건. registry 는 그대로다. '
-                    '다음 [배정] 때 "PM 띄우기"(mode crash, state/handoff/%s/latest.md)로 새로 띄운다.'
-                    % (k, aid[:8], what, n, k))
+                'closed': '프로세스가 닫혔다(archive 아님)'}[how]
+        nxt = ('다음 [배정] 은 새로 띄우지 말고 send_agent_prompt 로 보내 이어 띄운다(맥락 유지). '
+               '먼저 jarvisctl pm-check %s 로 컨텍스트 기준을 본다' % k) if how == 'closed' else \
+              ('다음 [배정] 때 "PM 띄우기"(mode crash, state/handoff/%s/latest.md)로 새로 띄운다' % k)
+        msgs.append('[알림] %s PM(%s) 이 Paseo 에서 %s. 열린 작업 %d건. registry 는 그대로다. %s.'
+                    % (k, aid[:8], what, n, nxt))
     if changed:
         write_json(seen_path, seen)
     return msgs

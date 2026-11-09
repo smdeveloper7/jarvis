@@ -33,7 +33,15 @@ JARVIS 대화창은 동시에 여러 개 열 수 있다. 모든 창이 같은 �
 2. 기본 수신자가 닫혀 있으면(훅 맥락에 나옴) 이 창이 맡는다: `python scripts/jarvisctl.py claim-jarvis <내 에이전트 ID>`. 그리고 살아 있는 PM 마다 `send_agent_prompt` 로 `[인계] 기본 수신 JARVIS 가 바뀜. 맡긴 창을 모를 때 보고·질문은 <내 에이전트 ID> 로` 를 보낸다.
 3. 사용자에게 진행 중인 작업, 열린 결정, 운영 반영 대기를 다섯 줄 안으로 알린다.
 
-긴 대화를 끝내고 새 창으로 옮길 때(사용자가 바꾸자고 할 때)는 옛 창이 `state/handoff/manager/latest.md` 를 쓰고(`jarvisctl handoff manager <파일>`, 형식은 `docs/01` 8.4), 옛 창이 기본 수신자면 `jarvisctl transfer-jarvis --to next` 를 한다. 새 창이 `claim-jarvis` 한다.
+## 세션 종료
+
+영구 지식(작업일지·인계 노트·기준)은 사용자가 이 창에 "세션 종료"(또는 "창 닫자", "마무리하고 닫아")라고 할 때만 남긴다(2026-11-09 사용자 결정). 사용자가 Paseo 에서 보관 버튼으로 바로 닫는 창은 아무것도 남기지 않는다. 보관 버튼은 세션을 즉시 멈추고 Paseo 에는 보관 전 이벤트가 없으므로(`agent.archive.after` 만 있음) 정리는 반드시 보관보다 먼저 한다.
+
+1. 작업일지: 이 창의 W 를 점검한다. 끝난 W 는 `jarvisctl task <W> --status done --worklog --result …` 로 닫고(일지 한 건), 이어 갈 W 는 인계 노트로 넘긴다. 정한 것과 이유, 사용자가 "기억해" 라고 한 것은 일지에 한 줄 남긴다(`worklog.ps1 -Decision D-…`).
+2. 인계 노트: 열린 일만 쓴다. 답을 기다리는 질문, 미룬 결정, 진행 중인 W 의 다음 행동, 운영 반영 대기, 커밋 안 한 변경, 주의할 점. 끝난 일은 쓰지 않되 다음 행동에 필요한 판단·경로는 남긴다. 60줄 이하, 형식은 `docs/04` 6.2. 지금 `latest.md` 의 유효한 항목은 옮겨 적는다. `jarvisctl handoff manager <파일>` 이 끝난 W·D(`stale`)와 빠진 열린 W·D(`dropped_open`)를 알려 주면 고쳐서 다시 둔다.
+3. 기준: 사용자가 기준으로 남기자고 했는데 `criteria.md` 에 없는 것을 더한다.
+4. 사용자에게 남긴 것을 세 줄로 알린다.
+5. 닫기: 기본 수신자가 아니면 `archive_agent` 로 이 창을 보관한다. 기본 수신자면 훅이 자기 보관을 막으므로 `jarvisctl transfer-jarvis --to next` 를 하고 "Paseo 에서 보관을 누르세요" 라고 안내한다(다음 창이 `claim-jarvis` 한다).
 
 ## 하지 않는 일
 
@@ -45,7 +53,12 @@ JARVIS 대화창은 동시에 여러 개 열 수 있다. 모든 창이 같은 �
 
 1. `registry.yaml` 에서 프로젝트의 `root`, `coordinator`(현재 PM), `linear_project` 를 본다. 없는 프로젝트면 사용자에게 확인하고 `jarvisctl register <키> --root <폴더> [--linear-project …]`.
 2. 작업 파일을 `jarvisctl new-task` 로 만든다. `coordinator` 가 열려 있으면(`get_agent_status`) `send_agent_prompt` 로 넘긴다.
-3. 없거나 닫혔으면 아래 "PM 띄우기"(mode `new` 또는 `crash`)로 만든 뒤 넘긴다. `[준비]` 를 확인하기 전에는 `[배정]` 을 보내지 않는다.
+3. 보내기 전에 `jarvisctl pm-check <프로젝트>` 의 `action` 을 따른다.
+   - `send`: 그대로 보낸다.
+   - `resume`: 프로세스만 닫힌 PM 이다. 새로 띄우지 않고 그대로 `send_agent_prompt` 로 보낸다. Paseo 가 저장된 세션으로 다시 열어 맥락이 이어진다.
+   - `resume-rotate`·`rotate`: 컨텍스트가 기준을 넘었다. 일을 보내기 전에 "PM 세션 교체" 를 한다(닫혀 있으면 `[인계요청]` 이 이어 띄운다). 들어온 요청은 교체 뒤에 넘긴다고 사용자에게 알린다.
+   - `new`: PM 이 없거나 archive·삭제됐다. 아래 "PM 띄우기"(mode `new` 또는 `crash`)로 만든 뒤 넘긴다. `[준비]` 를 확인하기 전에는 `[배정]` 을 보내지 않는다.
+   - `wait`: 교체 중이다. 교체가 끝난 뒤 보낸다.
 4. 넘기는 글 형식: `[배정] W-YYYYMMDD-NN` 다음 줄에 사용자 요청 원문, 필요하면 완료 조건 한 줄, Linear 이슈가 있으면 `Linear: PRO-n`.
    Worker 를 쓸지, 어떻게 나눌지 같은 방법은 적지 않는다. PM 이 정한다.
 5. `[보고]` 를 받으면 아래 "PM 세션 교체 / 언제" 를 본다.
@@ -64,7 +77,7 @@ JARVIS 대화창은 동시에 여러 개 열 수 있다. 모든 창이 같은 �
 | `[인계노트]` | 옛 PM 이 `[인계요청]` 에 답한 인계 내용 | 아래 "PM 세션 교체" 3 |
 | `[준비]` | 새 PM 이 맥락을 읽고 받은 상태 요약 | 아래 "PM 띄우기" 4 |
 
-PM 이 차례를 끝낼 때 오는 자동 알림은 `[보고]` 가 아니면 끝난 것으로 보지 않는다. PM 이 Paseo 에서 닫히면 훅이 `[알림] … PM 이 … 닫혔다` 를 넣어 준다. registry 는 그대로 두고, 다음 `[배정]` 때 "PM 띄우기"(mode `crash`)로 새로 띄운다.
+PM 이 차례를 끝낼 때 오는 자동 알림은 `[보고]` 가 아니면 끝난 것으로 보지 않는다. PM 이 Paseo 에서 닫히면 훅이 `[알림] … PM 이 … 닫혔다` 를 넣어 준다. registry 는 그대로 둔다. 다음 `[배정]` 때 `jarvisctl pm-check` 를 본다: 프로세스만 닫혔으면 그대로 보내 이어 띄우고(맥락 유지), archive·삭제됐으면 "PM 띄우기"(mode `crash`)로 새로 띄운다.
 
 ## PM 띄우기
 
@@ -150,18 +163,28 @@ state/handoff/
 
 ## 기록
 
-- 작업일지는 의미 있는 작업 단위가 끝났을 때만 남긴다(`projects/AGENTS.md` "작업일지"). 단순 확인·질의응답은 남기지 않는다.
+- 작업 단위는 W 하나다(`docs/04` 4.3). PM 에게 맡기는 일뿐 아니라 JARVIS 가 직접 하는 일(문서, 보드, 규칙)도 시작할 때 `jarvisctl new-task jarvis …` 로 W 를 연다. 대화 중에 일이 덧붙으면 같은 W 의 경과로, 성격이 다른 일이면 새 W 로.
+- W 의 상태는 `jarvisctl task <W> --status … --note …` 로 바꾼다. done·cancelled 가 되면 `--worklog --result … --check … --next …` 로 작업일지 한 건(머리말에 W, 결정이 있으면 `--decision D-…`). 질문(`ask`)은 일지를 남기지 않는다. 단순 확인·질의응답은 W 를 만들지 않는다.
 - 결정은 이유와 함께 남긴다. Coordinator·Worker 는 기록하지 않는다.
 - 할 일(Notion 할일 DB) 추가·조회·정리는 JARVIS 가 `notion-todo` 스킬로 직접 한다. Coordinator 에게 넘기지 않는다.
 - 상태가 바뀌면 그 자리에서 아래 `state/` 파일에 쓴다. 대화 기억에만 두지 않는다. 대시보드와 Obsidian 기록이 이 파일을 읽는다.
-- 지식은 종류마다 한 곳에 둔다(2026-11-09 사용자 결정). 지금 상태는 JARVIS 보드에서 보고, Obsidian 에 상태 사본을 두지 않는다.
+- 기억은 4단계, 규칙은 따로 둔다(2026-11-09 사용자 결정, D-20261109-11, 원본 `docs/04`). 기록은 앞에서 뒤로만 간다. 지금 상태는 JARVIS 보드에서 보고, Obsidian 에 상태 사본을 두지 않는다.
 
-  | 지식 | 자리 | 쓰는 쪽 |
+  | 단계 | 자리 | 쓰는 쪽 | 다음으로 가는 계기 |
+  |---|---|---|---|
+  | 1 원문 | `~/.claude`·`~/.codex`·`~/.paseo` | 자동 | 훅·`jarvisctl` 이 사건을 상태로 |
+  | 2 상태(W·D·인계·세션 이벤트) | `state/`, `registry.yaml` | JARVIS·훅·`jarvisctl` | W 가 닫힐 때, 세션 종료 |
+  | 3 일지 | `projects/worklog/raw/` | `jarvisctl task --worklog`, `worklog.ps1` | 매일 정리 |
+  | 4 지식(프로젝트별 개요·결정·해결법) | `projects/worklog/wiki/` | 정리 작업(`wiki-curator`) | 규칙 층에 제안만 |
+
+  | 규칙 층 | 자리 | 쓰는 쪽 |
   |---|---|---|
-  | 판단 기준(사용자가 "기준으로 남겨"라고 한 것) | `criteria.md` | JARVIS |
-  | 프로젝트 기술 지식(구조, 도구 사용법, 주의점) | 프로젝트 저장소 `docs/`·`CLAUDE.md` | PM·Worker (그 저장소 규칙대로) |
-  | 진행 상황(작업, 결정, 인계) | `state/` | JARVIS·훅·`jarvisctl` |
-  | 결정 배경, 회고, 하루 기록 | Obsidian(`projects/worklog/`) | JARVIS(작업일지·위키 정리) |
+  | 판단 기준 | `criteria.md` | JARVIS(사용자 승인 뒤) |
+  | JARVIS 운영·기억 흐름 규칙 | `CLAUDE.md`, `rules/`, `docs/` | JARVIS(사용자와 설계 뒤) |
+  | 프로젝트 전체 규칙 | 프로젝트 저장소 `CLAUDE.md` | PM(JARVIS 가 `[배정]`) |
+  | 그 폴더에서 일하는 방식 | Claude 자동 메모리(`feedback`·`reference` 만) | 그 폴더 세션 |
+
+- 정리 작업이 규칙 후보를 제안하면 "기준으로 남길까요?" 를 묻고, 승인된 것만 반영한 뒤 일지에 `규칙 추가: … (근거 …)` 를 남긴다. 지식은 규칙을 직접 바꾸지 않는다.
 
 ## 상태 파일 (`state/`, git 에 올리지 않음)
 
