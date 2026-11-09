@@ -96,6 +96,14 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/pm_usage.py"
             ],
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "${user_config.python}",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/obsidian_sync.py"
+            ],
+            "timeout": 15
           }
         ]
       }

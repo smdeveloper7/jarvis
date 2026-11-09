@@ -1,4 +1,4 @@
-# 01. State & Memory Management
+# 01. State & Memory Management (상태·기억 관리)
 
 > **핵심 질문:** 무엇을 영구적으로 보존하고, 세션이 바뀌어도 어떻게 기억을 이어 가는가?
 > **버전:** v0.4 · 2026-11-09 · 구조 재정리(정책·구현 변경 없음)
@@ -15,7 +15,7 @@ JARVIS·PM·Worker 의 세션은 언제든 바뀐다. 이 문서는 세션이 �
 
 1. 상태는 세션 밖에 둔다. 진행 상황은 `registry.yaml`·`state/`·worklog 에 남기고, 대화 원문으로 복원하지 않는다.
 2. 정보마다 원본은 하나다. 같은 정보를 두 곳에 원본으로 두지 않고, 다른 곳에는 요약과 링크만 둔다.
-3. 실행 상태의 원본은 JARVIS State, 장기 지식은 Obsidian 이다. 흐름은 State → Obsidian wiki 한 방향이다.
+3. 실행 상태의 원본은 JARVIS State(`JARVIS/state/`, `JARVIS/registry.yaml`)이고, 장기 지식은 Obsidian(`projects/worklog/`)이다. 정리는 State → Obsidian 한 방향이며, Obsidian 노트를 고쳐도 상태는 바뀌지 않는다.
 4. 논리적 JARVIS 는 하나, 대화창은 여러 개다. 모든 창이 같은 상태를 고치고, 겹치면 안 되는 쓰기만 `jarvisctl` 이 잠금 안에서 처리한다.
 5. 모르는 값은 추정하지 않는다. 확인 못 한 값은 `null` 로 두고, 인계 노트와 상태 파일이 다르면 상태 파일이 맞다.
 
@@ -34,7 +34,7 @@ JARVIS·PM·Worker 의 세션은 언제든 바뀐다. 이 문서는 세션이 �
 
 ## 1. 개념: State 와 Memory
 
-State(상태) 는 지금 무엇이 진행 중인지에 대한 구조화된 사실이다. 프로젝트별 현재 PM, 맡긴 작업, 사용자가 정한 결정, 세션 교체 이력이 여기에 속한다. 자동화(훅·`jarvisctl`·대시보드)가 이 값을 읽고 판단하므로 형식이 정해져 있다.
+State(상태) 는 지금 무엇이 진행 중인지에 대한 구조화된 사실이다. 실제 위치는 `C:/Users/SMDEVELOPER/JARVIS/state/` 와 같은 폴더의 `registry.yaml` 이고, 문서에서는 이 둘을 JARVIS State 라고 부른다. 프로젝트별 현재 PM, 맡긴 작업, 사용자가 정한 결정, 세션 교체 이력이 여기에 속한다. 자동화(훅·`jarvisctl`·대시보드)가 이 값을 읽고 판단하므로 형식이 정해져 있다.
 
 Memory(기억) 는 사람이 읽는 지식이다. 결정의 배경, 재사용할 해결법, 회고가 여기에 속한다. Obsidian 보관함(`projects/worklog`)에 두고, 필요할 때 검색한다. 자동 판단의 근거로 쓰지 않는다.
 
@@ -108,6 +108,7 @@ flowchart LR
 | 공유 자원 점유, 운영 반영 대기 | `state/occupancy.json`, `state/releases.json` | 대시보드 |
 | 하루 작업 기록 | `worklog/raw/YYYY-MM-DD.md` | wiki |
 | 프로젝트 지식, 결정 배경, 재사용할 해결법 | `worklog/wiki/` | — |
+| Obsidian 에서 보는 현황·열린 결정 | (사본) `worklog/wiki/jarvis/` | 원본은 JARVIS State, `obsidian_export.py` 가 생성 |
 | 할 일, 일정 | Notion 할일 DB | — |
 | 프로젝트 ↔ Linear Project 연결 | `registry.yaml` `linear_project` (프로젝트 단위 한 칸) | — |
 | 기능 정의 | Notion 기능 페이지 | Linear 상위 이슈 설명에 링크 |
@@ -147,6 +148,8 @@ flowchart LR
 ```
 
 작업 단위가 끝나면 JARVIS 가 작업일지 원본(`raw/`)을 스크립트로 추가한다. 사용자가 정리를 요청하면 JARVIS 가 raw 와 결정 파일을 근거로 wiki 를 갱신한다. 새 세션은 과거 맥락이 필요할 때만 wiki·raw 를 검색한다.
+
+Obsidian 에서 지금 상태를 보려면 `wiki/jarvis/` 의 자동 생성 노트를 본다. `scripts/obsidian_export.py` 가 JARVIS State 를 읽어 `현황.md`(프로젝트별 작업판, 운영 반영 대기, 공유 자원 점유)와 `결정.md`(열린 결정)를 만든다. 손으로 돌리지 않아도 된다. JARVIS 창이 답을 마칠 때마다 Stop 훅(`obsidian_sync.py`)이 state·registry 의 수정 시각을 노트와 비교해, 바뀐 것이 있을 때만 다시 만든다. 이 노트는 읽기 전용 사본이라 고쳐도 상태가 바뀌지 않고, 다음 갱신 때 덮어쓴다. `state/` 폴더를 보관함에 직접 연결하지 않는 이유는 둘이다. Obsidian 에서 고치면 `jarvisctl` 의 잠금 규칙을 우회하게 되고, 잠금·이력 파일이 자주 바뀌어 OneDrive 동기화와 부딪힐 수 있다(2026-11-09 사용자 결정).
 
 | 남긴다 | 필요하면 남긴다 | 남기지 않는다 |
 |---|---|---|
@@ -254,7 +257,8 @@ C:/Users/SMDEVELOPER/
         └── wiki/
             ├── index.md · log.md
             ├── projects/<프로젝트>.md
-            └── decisions/
+            ├── decisions/
+            └── jarvis/              # 현황.md·결정.md (obsidian_export.py 자동 생성, 읽기 전용)
 ```
 
 ### 8.2 `registry.yaml`

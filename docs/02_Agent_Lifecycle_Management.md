@@ -1,4 +1,4 @@
-# 02. Agent Lifecycle Management
+# 02. Agent Lifecycle Management (에이전트 수명주기 관리)
 
 > **핵심 질문:** 논리적 Agent 와 실제 실행 세션을 어떻게 생성·교체·복구하는가?
 > **버전:** v0.4 · 2026-11-09 · 구조 재정리(정책·구현 변경 없음)
@@ -267,6 +267,7 @@ JARVIS 가 교체 도중 새로 뜨면 `jarvisctl lock show <프로젝트>` 의 
 | SessionStart (startup·resume·compact·clear) | `session_context.py` | PM · JARVIS 창 | PM: 규칙·상태 주입 / JARVIS: 기본 수신자·PM 현황·닫힌 PM | 구현·실측(PM 2회, JARVIS 창 시작) |
 | UserPromptSubmit | `pm_reconcile.py` | JARVIS 창 | 닫힌 PM 대조·알림(처음 본 창 하나만) | 구현. 스크립트 직접 실행과 SessionStart 경로로 확인, UserPromptSubmit 경로는 실측 필요 |
 | Stop | `pm_usage.py` | PM | 사용량 Snapshot | 구현·실측(시험 PM, nipa-pm) |
+| Stop | `obsidian_sync.py` | JARVIS 창 | state 가 바뀌었으면 Obsidian 현황·결정 노트 갱신(01 5절) | 구현, 실측 필요 |
 | PreToolUse (paseo create·archive·kill) | `agent_guard.py` | JARVIS · PM | 중복 PM, 다른 창이 진행 중인 교체에 PM 생성, 후보·교체 중 Worker 생성, 활성 PM·기본 수신자 닫기, PM kill, 남의 Worker 닫기 차단. PM 의 Worker 는 `jarvis.task` 라벨과 작업 위주 제목 필수 | 구현, PM 생성 가드 실측 필요 |
 | PostToolUse (같은 matcher) | `agent_guard.py` | JARVIS · PM | PM detach, lock 후보 기록, 닫음 기록 | 구현, 자동 detach 실측 필요 |
 | PreCompact · SessionEnd | `session_event.py` | PM | 기록만 | 구현. SessionEnd 실측, PreCompact 실측 필요 |

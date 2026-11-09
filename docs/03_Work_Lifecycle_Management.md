@@ -1,4 +1,4 @@
-# 03. Work Lifecycle Management
+# 03. Work Lifecycle Management (업무 수명주기 관리)
 
 > **핵심 질문:** 프로젝트·기능·작업을 어떻게 만들고, 실행하고, 완료하는가?
 > **버전:** v0.4 · 2026-11-09 · 구조 재정리(정책·구현 변경 없음)
@@ -13,7 +13,7 @@
 
 ### 핵심 원칙
 
-1. 도구마다 원본이 다르다. Notion 은 프로젝트·기능 정의, Linear 는 개발 작업, JARVIS State 는 에이전트 위임과 결정, Obsidian 은 장기 지식이다.
+1. 도구마다 원본이 다르다. Notion 은 프로젝트·기능 정의, Linear 는 개발 작업, JARVIS State(`JARVIS/state/`)는 에이전트 위임과 결정, Obsidian(`projects/worklog/`)은 장기 지식이다.
 2. 같은 내용을 두 번 쓰지 않는다. 원본 하나에 쓰고 나머지에는 링크와 상태만 둔다. 이름이 같다고 자동으로 짝짓지 않는다.
 3. 외부 도구 쓰기는 JARVIS 하나로 모은다. PM·Worker 는 Notion·Linear 를 쓰지 않는다.
 4. 완료는 증거로 판단한다. 근거 없이 `done` 처리하지 않고, W 하나가 끝났다고 이슈를 닫지 않는다.
