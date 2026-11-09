@@ -102,6 +102,22 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 
 프로젝트와 관계없는 질문(일반 지식, 도구 비교, 글 다듬기)은 registry 의 `ask` 로 넘깁니다. 프로젝트 폴더 대신 빈 폴더 하나를 질문 방으로 씁니다.
 
+## JARVIS 세션
+
+JARVIS 대화창은 동시에 여러 개 열 수 있고, 모두 같은 상태 파일을 고칩니다. 창끼리 겹치면 안 되는 일(작업·결정 번호 발급, 결정 확정, 공유 자원 점유, registry 변경, PM 교체)은 `jarvisctl` 이 잠금 안에서 처리하고, 훅이 그 밖의 경로를 막습니다. 창끼리는 사용자와 나눈 대화를 모르므로, 지켜야 할 지시는 결정 파일이나 `criteria.md` 에 남깁니다.
+
+registry 의 `jarvis:` 는 쓰기 권한이 아니라 기본 수신자입니다. 아침 정리 보고, 맡긴 창이 닫힌 뒤 도착한 보고, PM 이 보낼 곳을 모르는 글을 이 창이 받습니다.
+
+대화가 길어지면 사용자가 새 창으로 옮기자고 말합니다. PM 과 달리 JARVIS 는 교체 시점을 스스로 판단하지 않습니다.
+
+```powershell
+python scripts\jarvisctl.py handoff manager note.md    # 옛 창: 인계 노트를 state/handoff/manager/latest.md 로 (이전 노트는 이력으로)
+python scripts\jarvisctl.py transfer-jarvis --to next  # 옛 창이 기본 수신자일 때만: 다음에 claim 하는 창에 넘김
+python scripts\jarvisctl.py claim-jarvis <새 ID>       # 새 창: 기본 수신자를 넘겨받음 (옛 창이 닫혔거나 넘겼을 때만)
+```
+
+새 창은 대화 기억이 없으므로 파일에서 이어받습니다. SessionStart 훅이 기본 수신자와 PM 현황을 먼저 넣어 주고, 새 창은 registry, `criteria.md`, 인계 노트, 진행 중인 작업, 열린 결정, 공유 자원 점유, 운영 반영 대기, Linear 쓰기 실패 목록을 읽습니다. 기본 수신자를 넘겨받으면 살아 있는 PM 마다 `[인계]` 를 보내 보고받을 곳을 알리고, 사용자에게 진행 중인 일을 다섯 줄 안으로 알립니다. 자세한 순서는 `CLAUDE.md` 의 "새로 떴을 때(인계)" 에 있습니다.
+
 ## PM 세션 교체
 
 PM 은 한 세션을 오래 쓰면 한 번 주고받을 때마다 큰 컨텍스트를 다시 읽습니다(예: 86만 토큰). JARVIS 는 `[보고]` 를 받을 때마다 교체 조건을 보고, 넘으면 인계 노트를 받아 새 세션으로 바꿉니다.
@@ -117,8 +133,6 @@ python scripts\jarvisctl.py switch nipa <새 ID>     # registry 를 CAS 로 바�
 ```
 
 새 프로젝트, 닫힌 PM 다시 만들기, 교체가 모두 같은 "PM 띄우기" 절차를 씁니다. 사용자가 Paseo 화면에서 PM 을 닫으면 JARVIS 가 다음 글을 받을 때 훅이 알아채 알려 주고, 다음 `[배정]` 때 새로 띄웁니다. 자세한 순서와 실패 처리는 [docs/02](docs/02_Agent_Lifecycle_Management.md) 와 `CLAUDE.md` 의 "PM 띄우기", "PM 세션 교체" 에 있습니다.
-
-JARVIS 대화창은 동시에 여러 개 열 수 있고, 모두 같은 상태 파일을 고칩니다. 창끼리 겹치면 안 되는 일(작업·결정 번호 발급, 결정 확정, 공유 자원 점유, registry 변경, PM 교체)은 `jarvisctl` 이 잠금 안에서 처리하고, 훅이 그 밖의 경로를 막습니다. 창끼리는 사용자와 나눈 대화를 모르므로, 지켜야 할 지시는 결정 파일이나 `criteria.md` 에 남깁니다. registry 의 `jarvis:` 는 쓰기 권한이 아니라 기본 수신자(아침 정리 보고와 맡긴 창이 닫힌 보고를 받는 창)이고, `jarvisctl claim-jarvis <자기 ID>` 로 바꿉니다(그 창이 닫혔거나 넘겼을 때만).
 
 ## Linear
 

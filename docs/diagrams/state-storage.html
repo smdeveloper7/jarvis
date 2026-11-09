@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="전체 저장 구조">
+<title>전체 저장 구조</title>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=block" rel="stylesheet">
+<link href="diagram.css" rel="stylesheet">
+</head>
+<body>
+<figure>
+<svg viewBox="0 0 1100 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
+<title id="t">전체 저장 구조</title>
+<desc id="d">쓰는 쪽은 JARVIS 와 훅, scripts 둘이다. 훅은 Paseo 와 Claude 실행 기록을 읽어 상태와 대조하고 세션 이력과 lock 을 JARVIS State 에 쓴다. JARVIS 는 작업, 결정, 인계를 JARVIS State 에, 작업 단위마다 작업일지를 Obsidian raw 에, 할 일과 이슈를 Notion 과 Linear 에 쓴다. raw 는 정리 요청 때 wiki 로 정리되고, JARVIS State 의 결정 이유는 wiki 에 요약된다.</desc>
+<defs>
+<marker id="hd" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-down"/></marker>
+<marker id="hu" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-up"/></marker>
+<marker id="hr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto-start-reverse"><polygon points="0 0, 9 3.5, 0 7" class="head-read"/></marker>
+</defs>
+<rect width="1100" height="500" class="ground"/>
+<rect x="24" y="40" width="170" height="76" class="box ext"/>
+<text x="109" y="73" class="box-name" text-anchor="middle">Paseo, Claude 기록</text><text x="109" y="96" class="box-sub" text-anchor="middle">실행 기록, 읽기만</text>
+<rect x="274" y="40" width="190" height="76" class="box "/>
+<text x="369" y="75" class="box-name" text-anchor="middle">훅, scripts/</text>
+<text x="369" y="97" class="box-sub" text-anchor="middle">정해진 경로에만 기록</text>
+<rect x="560" y="40" width="200" height="76" class="box hub"/>
+<text x="660" y="75" class="box-name hub-name" text-anchor="middle">JARVIS</text>
+<text x="660" y="97" class="box-sub hub-sub" text-anchor="middle">대화창, 여러 개 가능</text>
+<path d="M 194,78 H 271" class="flow read" marker-end="url(#hr)"/><text x="234" y="68" class="read-t" text-anchor="middle">상태 대조,</text><text x="234" y="98" class="read-t" text-anchor="middle">사용량</text>
+
+<rect x="24" y="196" width="420" height="284" class="zone focal"/>
+<path d="M 64,233 a 170,11 0 0 1 340,0 v 64 a 170,11 0 0 1 -340,0 Z" class="box db"/>
+<path d="M 64,233 a 170,11 0 0 0 340,0" class="tree"/>
+<text x="234" y="269" class="box-name" text-anchor="middle">registry.yaml</text>
+<text x="234" y="291" class="box-sub" text-anchor="middle">프로젝트, 현재 PM, 기본 수신자</text>
+<path d="M 64,337 a 170,11 0 0 1 340,0 v 64 a 170,11 0 0 1 -340,0 Z" class="box db"/>
+<path d="M 64,337 a 170,11 0 0 0 340,0" class="tree"/>
+<text x="234" y="373" class="box-name" text-anchor="middle">state/</text>
+<text x="234" y="395" class="box-sub" text-anchor="middle">작업, 결정, 인계, 세션 이력</text>
+<text x="44" y="462" class="zone-t">JARVIS State: 지금 진행 중인 일의 원본</text>
+
+<rect x="520" y="196" width="260" height="284" class="zone"/>
+<rect x="550" y="224" width="200" height="66" class="box "/>
+<text x="650" y="254" class="box-name" text-anchor="middle">raw</text>
+<text x="650" y="276" class="box-sub" text-anchor="middle">하루 작업일지</text>
+<rect x="550" y="336" width="200" height="66" class="box "/>
+<text x="650" y="366" class="box-name" text-anchor="middle">wiki</text>
+<text x="650" y="388" class="box-sub" text-anchor="middle">결정 배경, 해결법</text>
+<path d="M 650,290 V 333" class="flow up" marker-end="url(#hu)"/><text x="662" y="317" class="read-t">정리 요청 때</text>
+<text x="540" y="462" class="zone-t">Obsidian: 오래 남길 기록</text>
+
+<rect x="820" y="196" width="256" height="284" class="zone"/>
+<rect x="848" y="224" width="200" height="66" class="box ext"/>
+<text x="948" y="254" class="box-name" text-anchor="middle">Notion</text>
+<text x="948" y="276" class="box-sub" text-anchor="middle">기능 정의, 할 일</text>
+<rect x="848" y="314" width="200" height="66" class="box ext"/>
+<text x="948" y="344" class="box-name" text-anchor="middle">Linear</text>
+<text x="948" y="366" class="box-sub" text-anchor="middle">개발 작업, 진행 상태</text>
+<text x="840" y="462" class="zone-t">외부 도구: 기능과 개발 작업</text>
+
+<path d="M 330,116 V 193" class="flow up" marker-end="url(#hu)"/><text x="318" y="160" class="read-t" text-anchor="end">세션 이력, lock</text>
+<path d="M 590,116 V 156 H 400 V 193" class="flow up" marker-end="url(#hu)"/><text x="495" y="148" class="read-t" text-anchor="middle">작업, 결정, 인계</text>
+<path d="M 660,116 V 221" class="flow up" marker-end="url(#hu)"/><text x="672" y="176" class="read-t">작업 단위마다</text>
+<path d="M 740,116 V 156 H 948 V 221" class="flow up" marker-end="url(#hu)"/><text x="850" y="148" class="read-t" text-anchor="middle">할 일, 이슈</text>
+<path d="M 444,369 H 547" class="flow read" marker-end="url(#hr)"/><text x="482" y="359" class="read-t" text-anchor="middle">결정 이유</text><text x="482" y="389" class="read-t" text-anchor="middle">요약</text>
+</svg>
+</figure>
+</body>
+</html>

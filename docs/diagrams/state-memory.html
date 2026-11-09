@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="장기 기억과 지금 상태">
+<title>장기 기억과 지금 상태</title>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=block" rel="stylesheet">
+<link href="diagram.css" rel="stylesheet">
+</head>
+<body>
+<figure>
+<svg viewBox="0 0 1100 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
+<title id="t">장기 기억과 지금 상태</title>
+<desc id="d">작업 단위가 끝나면 스크립트로 Obsidian raw 에 작업일지를 추가한다. 사용자가 정리를 요청하면 raw 를 wiki 로 정리하고, JARVIS State 의 결정 파일은 배경을 정리해 wiki 에 남긴다. 다음 세션은 과거 맥락이 필요할 때 wiki 를 검색한다. 진행 중인 작업과 열린 결정 같은 지금 상태는 Obsidian 에 사본을 두지 않고 JARVIS 보드에서만 본다.</desc>
+<defs>
+<marker id="hd" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-down"/></marker>
+<marker id="hu" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-up"/></marker>
+<marker id="hr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto-start-reverse"><polygon points="0 0, 9 3.5, 0 7" class="head-read"/></marker>
+</defs>
+<rect width="1100" height="400" class="ground"/>
+<rect x="290" y="30" width="500" height="126" class="zone"/>
+<rect x="316" y="56" width="180" height="66" class="box "/>
+<text x="406" y="86" class="box-name" text-anchor="middle">raw</text>
+<text x="406" y="108" class="box-sub" text-anchor="middle">하루 작업일지</text>
+<rect x="586" y="56" width="180" height="66" class="box focal"/>
+<text x="676" y="86" class="box-name" text-anchor="middle">wiki</text>
+<text x="676" y="108" class="box-sub" text-anchor="middle">재사용할 지식</text>
+<text x="306" y="146" class="zone-t">Obsidian: 오래 남길 것</text>
+<path d="M 496,89 H 583" class="flow up" marker-end="url(#hu)"/><text x="540" y="80" class="read-t" text-anchor="middle">사용자가</text><text x="540" y="110" class="read-t" text-anchor="middle">정리 요청</text>
+
+<rect x="24" y="56" width="180" height="66" class="box "/>
+<text x="114" y="86" class="box-name" text-anchor="middle">작업 단위 완료</text>
+<text x="114" y="108" class="box-sub" text-anchor="middle">JARVIS 가 기록</text>
+<path d="M 204,89 H 313" class="flow up" marker-end="url(#hu)"/><text x="258" y="80" class="read-t" text-anchor="middle">스크립트로 추가</text>
+
+<rect x="876" y="56" width="200" height="66" class="box "/>
+<text x="976" y="86" class="box-name" text-anchor="middle">다음 세션</text>
+<text x="976" y="108" class="box-sub" text-anchor="middle">과거 맥락이 필요할 때</text>
+<path d="M 766,89 H 873" class="flow read" marker-end="url(#hr)"/><text x="820" y="80" class="read-t" text-anchor="middle">검색</text>
+
+<rect x="290" y="250" width="500" height="126" class="zone focal"/>
+<rect x="316" y="276" width="180" height="66" class="box "/>
+<text x="406" y="306" class="box-name" text-anchor="middle">진행 중인 일</text>
+<text x="406" y="328" class="box-sub" text-anchor="middle">작업, 열린 결정, 점유</text>
+<rect x="586" y="276" width="180" height="66" class="box "/>
+<text x="676" y="306" class="box-name" text-anchor="middle">결정 파일</text>
+<text x="676" y="328" class="box-sub" text-anchor="middle">D-…, 정한 이유</text>
+<text x="306" y="366" class="zone-t">JARVIS State: 지금 상태의 원본</text>
+<path d="M 676,276 V 125" class="flow up" marker-end="url(#hu)"/><text x="688" y="206" class="read-t">배경을 정리</text>
+
+<rect x="24" y="276" width="180" height="66" class="box "/>
+<text x="114" y="306" class="box-name" text-anchor="middle">JARVIS 보드</text>
+<text x="114" y="328" class="box-sub" text-anchor="middle">현황, 결정 탭</text>
+<path d="M 316,309 H 207" class="flow read" marker-end="url(#hr)"/><text x="260" y="300" class="read-t" text-anchor="middle">지금 상태는</text><text x="260" y="330" class="read-t" text-anchor="middle">여기서만 봄</text>
+</svg>
+</figure>
+</body>
+</html>

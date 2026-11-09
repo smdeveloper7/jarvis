@@ -46,31 +46,12 @@ Source of Truth(원본) 는 어떤 정보에 대해 "여기 적힌 값이 맞다
 
 ## 2. 전체 저장 구조
 
-```mermaid
-%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
-flowchart TB
-    subgraph RUNTIME["실행 기록 · 원문은 읽기만"]
-        R["Paseo · Claude<br/>실제 세션 상태와 대화 기록"]
-    end
-    subgraph STATE["JARVIS State · 지금 진행 중인 일"]
-        S["현재 담당 · 위임 · 결정 · 인계<br/>세션 이력과 사용량"]
-    end
-    subgraph MEMORY["Obsidian · 오래 남길 기록과 지식"]
-        RAW["raw · 하루 작업일지"]
-        WIKI["wiki · 결정 배경과 해결법"]
-        RAW -->|"정리"| WIKI
-    end
-    subgraph EXTERNAL["외부 도구 · 기능과 개발 작업"]
-        N["Notion<br/>기능 정의 · 할일"]
-        L["Linear<br/>개발 작업 · 진행 상태"]
-    end
-    R -.->|"상태 대조 · 사용량 반영"| S
-    S -.->|"필요한 내용 요약"| WIKI
-    class S focal
-    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/state-storage-dark.png">
+  <img alt="전체 저장 구조: 쓰는 쪽은 JARVIS 와 훅·scripts 둘이다. 훅은 Paseo, Claude 실행 기록을 읽어 상태와 대조하고 세션 이력과 lock 을 JARVIS State 에 쓴다. JARVIS 는 작업, 결정, 인계를 JARVIS State 에, 작업 단위마다 작업일지를 Obsidian raw 에, 할 일과 이슈를 Notion 과 Linear 에 쓴다. raw 는 정리 요청 때 wiki 로 가고, State 의 결정 이유는 wiki 에 요약된다" src="images/state-storage-light.png" width="800">
+</picture>
 
-실선은 쓰기, 점선은 읽어서 반영하는 방향이다. 저장소는 네 묶음이다.
+실선은 쓰기, 점선은 읽어서 반영하는 방향이다. 쓰는 쪽은 JARVIS 와 훅·스크립트 둘뿐이고, PM 과 Worker 는 메시지로 JARVIS 에게 넘긴다(4절). 저장소는 네 묶음이다.
 
 - JARVIS State(`registry.yaml`, `state/`): 실행 상태의 원본. 자동화가 읽고 판단한다.
 - Obsidian 보관함(`projects/worklog`): 작업일지 원본(`raw/`)과 정리된 지식(`wiki/`).
@@ -129,16 +110,10 @@ JARVIS 는 논리적으로 하나지만 대화창(Claude 세션)은 여러 개�
 
 Obsidian 은 장기 지식을 읽고 정리하는 데 쓴다. 실행 상태의 원본은 JARVIS State 이므로, Obsidian 노트만 보고 작업 상태를 판정하지 않는다.
 
-```mermaid
-%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
-flowchart LR
-    ENDWORK["작업 단위 완료"] --> RAW["작업일지에 기록<br/>raw"]
-    RAW -->|"사용자가 정리 요청"| WIKI["재사용할 지식으로 정리<br/>wiki"]
-    D["확정한 결정과 이유"] -->|"배경을 정리"| WIKI
-    WIKI -->|"필요할 때 검색"| NEXT["다음 세션에서 활용"]
-    class WIKI focal
-    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/state-memory-dark.png">
+  <img alt="장기 기억과 지금 상태: 작업 단위가 끝나면 스크립트로 raw 에 작업일지를 더하고, 사용자가 정리를 요청하면 raw 를 wiki 로 정리한다. 결정 파일은 배경을 정리해 wiki 에 남긴다. 다음 세션은 필요할 때 wiki 를 검색한다. 진행 중인 작업과 열린 결정은 Obsidian 에 사본 없이 JARVIS 보드에서만 본다" src="images/state-memory-light.png" width="800">
+</picture>
 
 작업 단위가 끝나면 JARVIS 가 작업일지 원본(`raw/`)을 스크립트로 추가한다. 사용자가 정리를 요청하면 JARVIS 가 raw 와 결정 파일을 근거로 wiki 를 갱신한다. 새 세션은 과거 맥락이 필요할 때만 wiki·raw 를 검색한다.
 

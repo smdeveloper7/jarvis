@@ -73,3 +73,5 @@ svg text { font-family: var(--f-text); }
 .up-t { fill: var(--c-up-t); }
 .read-t { font-size: 12.5px; fill: var(--c-muted); }
 .step { font-size: 12px; font-weight: 600; fill: var(--c-muted); }
+.zone.focal { stroke: var(--c-down); stroke-width: 1.4; }
+.box.focal { stroke: var(--c-down); stroke-width: 1.6; }
