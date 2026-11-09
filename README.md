@@ -244,7 +244,7 @@ JARVIS 는 상태가 바뀌는 즉시 `state/` 에 씁니다. 대화가 길어�
 - 확인함: 에이전트가 `create_agent` 로 만든 에이전트는 그 에이전트의 subagent 가 되므로, PM 은 만든 직후 `paseo agent detach` 로 떼어 냅니다. detach 한 PM 의 끝남 알림은 JARVIS 에게 오지 않아, PM 이 `[준비]`·`[보고]` 를 직접 보냅니다.
 - 고친 것: PM 이 Worker 를 기다리며 낸 이른 보고를 JARVIS 가 완료로 받던 문제. 하위 에이전트가 끝났다는 알림은 부모에게 처음 한 번만 가서, PM 이 모두 끝난 뒤 JARVIS 에게 `[보고]` 를 직접 보내게 바꿨습니다.
 - 실측 필요: 새로 뜬 JARVIS 창에서 PM 을 만들 때의 생성 가드와 자동 detach, UserPromptSubmit 대조, PreCompact 기록, JARVIS 폴더 쓰기 차단.
-- 남은 일: Paseo 플러그인 `agent.archive.after` 로 닫힘 즉시 감지(지금은 대조), state 백업, 설치를 맡을 setup 스킬, 규칙에 적힌 JARVIS 폴더 경로 걷어내기.
+- 남은 일: 설치를 맡을 setup 스킬, 규칙에 적힌 JARVIS 폴더 경로 걷어내기. Paseo 플러그인 `agent.archive.after` 는 보류(대조 훅으로 충분), `state/` 는 따로 백업하지 않기로 함(2026-11-09 결정).
 
 ## 라이선스와 참고
 
