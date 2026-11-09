@@ -26,26 +26,20 @@
 ## 1. 전체 업무 수명주기
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
 flowchart TD
-    U["사용자 요청 · 아이디어"] --> J["JARVIS"]
-    J --> N["Notion<br/>프로젝트 · 기능 정의<br/>(완료 조건)"]
-    N --> G{"작업으로 쪼갤 만큼<br/>정해졌나?"}
-    G -- 아니오 --> N
-    G -- 예 --> PL["PM 에게 분해안만 [배정]<br/>→ [계획]"]
-    PL --> L["JARVIS 가 Linear 에<br/>상위 이슈 Feature + 하위 이슈"]
-    L --> A["구현 [배정] W-…<br/>(state/tasks, linear: PRO-n)"]
-    A --> PM["프로젝트 PM"]
-    PM --> W["Worker<br/>Claude Code · Codex"]
-    W --> V{"검증<br/>테스트 · 리뷰 · 완료 조건"}
-    V -- 미흡 --> PM
-    V -- 통과 --> R["[보고] → W done<br/>이슈에 코멘트"]
-    R --> IC{"이슈 완료 조건 충족<br/>+ 그 이슈의 열린 W 없음?"}
-    IC -- 아니오 --> A
-    IC -- 예 --> LD["Linear 이슈 Done<br/>(하위가 다 끝나면 상위도)"]
-    R --> O["Obsidian<br/>raw 작업일지 → wiki"]
-    LD --> NF["Notion 기능 상태 갱신"]
-    R --> DEV{"dev 에만 반영?"}
-    DEV -- 예 --> REL["state/releases.json<br/>운영 반영 대기<br/>(운영 반영은 사용자)"]
+    DEFINE["① 기능과 완료 조건 합의<br/>Notion에 정의"] --> PLAN["② 개발 작업으로 분해<br/>PM 계획 → Linear 이슈"]
+    PLAN --> ASSIGN["③ W를 만들어 PM에게 배정"]
+    ASSIGN --> BUILD["④ Worker 구현·테스트"]
+    BUILD --> VERIFY{"PM 검증"}
+    VERIFY -->|"미흡 · 보완"| BUILD
+    VERIFY -->|"통과 · 보고"| REPORT["⑤ W 완료 · 결과 코멘트<br/>작업일지 기록"]
+    REPORT --> CHECK{"이슈 완료 조건 충족<br/>+ 열린 W 없음?"}
+    CHECK -->|"아니오 · 남은 범위 진행"| ASSIGN
+    CHECK -->|"예"| CLOSE["⑥ 이슈 완료<br/>하위가 모두 종료되면 기능도 완료"]
+    REPORT -->|"dev에만 반영"| RELEASE["운영 반영 대기<br/>실제 반영은 사용자"]
+    class CLOSE focal
+    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
 ```
 
 흐름은 다섯 단계다. 기능을 정의하고(Notion), PM 에게 분해안을 받아 작업을 만들고(Linear), 작업을 PM 에게 맡기고(JARVIS State), 결과를 검증해 이슈와 기능을 닫고, 배울 것을 Obsidian 에 남긴다. dev 에만 반영된 변경은 운영 반영 대기로 남는다.
@@ -67,14 +61,17 @@ Obsidian 노트만 보고 작업 상태를 판정하지 않는다. 상태의 원
 업무는 네 단계로 나뉜다. 위로 갈수록 오래 유지되고, 아래로 갈수록 잘게 나뉜다.
 
 ```mermaid
-flowchart LR
-    P["프로젝트 nipa<br/>registry 키<br/>= Linear Project KSM (팀 PRO)"] --> F["기능 · 게시판 만들기<br/>Notion 기능 행<br/>= Linear 상위 이슈 PRO-9 (Feature)"]
-    F --> I1["작업 · Create<br/>하위 이슈 PRO-10"]
-    F --> I2["작업 · Read<br/>하위 이슈 PRO-11"]
-    F --> I3["작업 · Update<br/>하위 이슈 PRO-12"]
-    I1 --> W1["위임 W-…-01"]
-    I1 --> W2["위임 W-…-02"]
-    W1 --> D1["결정 D-…"]
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
+flowchart TB
+    P["프로젝트 · NIPA"] --- F["기능 · 게시판 만들기"]
+    F --- CREATE["작업 · 등록"]
+    F --- READ["작업 · 조회"]
+    F --- UPDATE["작업 · 수정"]
+    CREATE --- W1["위임 1 · 구현 요청"]
+    CREATE --- W2["위임 2 · 보완 요청"]
+    W1 --- D["결정 · 진행 중 필요한 판단"]
+    class CREATE focal
+    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
 ```
 
 | 단위 | 식별자 | 원본 | Linear 에서 | 관계 |
@@ -108,18 +105,18 @@ Feature ID(`nipa:board`)는 "무엇을 만드는가"를, Linear Issue ID(`PRO-10
 ### 5.1 기능·작업의 단계
 
 ```mermaid
-stateDiagram-v2
-    [*] --> draft: 요청 · 아이디어
-    draft --> ready: 완료 조건 합의 (Notion)
-    ready --> in_progress: Linear 이슈 생성 · [배정]
-    in_progress --> in_review: Worker 결과 · PM 확인
-    in_review --> in_progress: 미흡
-    in_review --> done: 완료 조건 · 테스트 통과
-    done --> deployed: 운영 반영 (사용자)
-    in_progress --> cancelled
-    draft --> cancelled
-    done --> [*]
-    deployed --> [*]
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
+flowchart TB
+    DRAFT["초안 · draft"] -->|"완료 조건 합의"| READY["준비 · ready"]
+    READY -->|"이슈 생성 · 배정"| WORK["구현 · in_progress"]
+    WORK -->|"결과 제출"| REVIEW["검증 · in_review"]
+    REVIEW -->|"미흡 · 보완"| WORK
+    REVIEW -->|"완료 조건·테스트 통과"| DONE["개발 완료 · done"]
+    DONE -->|"사용자가 운영 반영"| DEPLOYED["운영 반영 · deployed"]
+    DRAFT -->|"취소"| CANCEL["취소 · cancelled"]
+    WORK -->|"취소"| CANCEL
+    class DONE focal
+    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
 ```
 
 새 상태 체계를 따로 만들지 않고, 지금 각 도구가 쓰는 값에 대응시킨다.

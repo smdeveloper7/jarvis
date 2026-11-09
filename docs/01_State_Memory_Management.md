@@ -47,36 +47,27 @@ Source of Truth(원본) 는 어떤 정보에 대해 "여기 적힌 값이 맞다
 ## 2. 전체 저장 구조
 
 ```mermaid
-flowchart LR
-    subgraph JARVIS["JARVIS 폴더 (state 는 git 제외)"]
-        REG["registry.yaml<br/>프로젝트 · 현재 PM ID · 기본 수신 JARVIS ID"]
-        TASK["state/tasks/<br/>W 작업"]
-        DEC["state/decisions/<br/>D 결정"]
-        HO["state/handoff/{역할}/<br/>인계 노트"]
-        SES["state/sessions.jsonl<br/>state/sessions/<br/>세션 이력 · 사용량"]
-        ETC["state/occupancy.json<br/>state/releases.json"]
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
+flowchart TB
+    subgraph RUNTIME["실행 기록 · 원문은 읽기만"]
+        R["Paseo · Claude<br/>실제 세션 상태와 대화 기록"]
     end
-
-    subgraph WL["projects/worklog = OneDrive (Obsidian Vault)"]
-        RAW["raw/YYYY-MM-DD.md<br/>작업일지 원본"]
-        WIKI["wiki/<br/>projects · decisions · index"]
+    subgraph STATE["JARVIS State · 지금 진행 중인 일"]
+        S["현재 담당 · 위임 · 결정 · 인계<br/>세션 이력과 사용량"]
     end
-
-    subgraph EXT["외부 도구"]
-        NOTION["Notion<br/>할일 DB · 기능 정의"]
-        LINEAR["Linear<br/>개발 작업"]
+    subgraph MEMORY["Obsidian · 오래 남길 기록과 지식"]
+        RAW["raw · 하루 작업일지"]
+        WIKI["wiki · 결정 배경과 해결법"]
+        RAW -->|"정리"| WIKI
     end
-
-    subgraph RT["실행 기록 (읽기만)"]
-        PASEO["~/.paseo/agents/<br/>에이전트 상태 · archivedAt"]
-        CC["~/.claude/projects/<br/>세션 transcript · usage"]
+    subgraph EXTERNAL["외부 도구 · 기능과 개발 작업"]
+        N["Notion<br/>기능 정의 · 할일"]
+        L["Linear<br/>개발 작업 · 진행 상태"]
     end
-
-    RAW -->|"JARVIS 가 정리"| WIKI
-    TASK -.->|"요약"| WIKI
-    DEC -.->|"요약"| WIKI
-    PASEO -.->|"대조"| REG
-    CC -.->|"Stop 훅"| SES
+    R -.->|"상태 대조 · 사용량 반영"| S
+    S -.->|"필요한 내용 요약"| WIKI
+    class S focal
+    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
 ```
 
 실선은 쓰기, 점선은 읽어서 반영하는 방향이다. 저장소는 네 묶음이다.
@@ -139,11 +130,14 @@ JARVIS 는 논리적으로 하나지만 대화창(Claude 세션)은 여러 개�
 Obsidian 은 장기 지식을 읽고 정리하는 데 쓴다. 실행 상태의 원본은 JARVIS State 이므로, Obsidian 노트만 보고 작업 상태를 판정하지 않는다.
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
 flowchart LR
-    E["작업 단위 끝남"] --> R["raw 작업일지<br/>(worklog.ps1)"]
-    R -->|"'작업 정리해줘'"| W["wiki<br/>projects · decisions · index"]
-    W -->|"새 세션이 필요할 때 검색"| S["PM · JARVIS 세션"]
-    D["state/decisions"] -->|"이유 정리"| W
+    ENDWORK["작업 단위 완료"] --> RAW["작업일지에 기록<br/>raw"]
+    RAW -->|"사용자가 정리 요청"| WIKI["재사용할 지식으로 정리<br/>wiki"]
+    D["확정한 결정과 이유"] -->|"배경을 정리"| WIKI
+    WIKI -->|"필요할 때 검색"| NEXT["다음 세션에서 활용"]
+    class WIKI focal
+    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
 ```
 
 작업 단위가 끝나면 JARVIS 가 작업일지 원본(`raw/`)을 스크립트로 추가한다. 사용자가 정리를 요청하면 JARVIS 가 raw 와 결정 파일을 근거로 wiki 를 갱신한다. 새 세션은 과거 맥락이 필요할 때만 wiki·raw 를 검색한다.

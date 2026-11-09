@@ -43,32 +43,21 @@ Definition 을 바꾸는 주체는 사용자와 JARVIS(`jarvisctl register`·`se
 ## 2. 세션 구조
 
 ```mermaid
-flowchart TD
-    subgraph L["논리적 역할 (영구)"]
-        M["JARVIS<br/>Manager 1개"]
-        P1["nipa PM"]
-        P2["ask PM"]
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
+flowchart TB
+    subgraph JARVIS["JARVIS 역할 하나 → 여러 대화창"]
+        J["JARVIS 역할"]
+        J --- A["창 A<br/>기본 수신자"]
+        J --- B["창 B<br/>같은 쓰기 권한"]
     end
-    subgraph S["Paseo 세션 (교체 가능)"]
-        MS1["JARVIS 창 A · 기본 수신자"]
-        MS2["JARVIS 창 B"]
-        PS0["nipa 세션 #1 · 이전"]
-        PS1["nipa 세션 #2 · 활성"]
-        AS1["ask 세션 · 활성"]
-        W1["Worker"]
-        W2["Worker"]
+    subgraph PM["프로젝트 PM 역할 하나 → 현재 담당 세션 하나"]
+        P["NIPA PM 역할"]
+        P -->|"registry가 지정"| CURRENT["현재 PM 세션"]
+        P -.- PREVIOUS["이전 PM 세션<br/>정리 대기"]
+        CURRENT -->|"작업 배정"| W["Worker들"]
     end
-    M --- MS1
-    M --- MS2
-    P1 -.- PS0
-    P1 --- PS1
-    P2 --- AS1
-    PS1 --> W1
-    PS1 --> W2
-    REG[("registry.yaml<br/>jarvis: 기본 수신자 ID<br/>coordinator: 활성 PM ID")]
-    REG -.-> MS1
-    REG -.-> PS1
-    REG -.-> AS1
+    class CURRENT focal
+    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
 ```
 
 논리적 JARVIS 하나는 여러 대화창으로 동시에 쓸 수 있다. 프로젝트 PM 은 활성 세션 하나와, 교체 뒤 정리 전까지 남는 이전 세션을 가질 수 있다. registry 는 어느 세션이 지금 그 역할을 맡는지를 가리킨다.
@@ -96,31 +85,16 @@ flowchart TD
 PM 세션 하나를 만드는 공통 절차다. 새 프로젝트·장애 복구·교체가 모두 이 절차를 쓴다.
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant J as JARVIS
-    participant C as jarvisctl
-    participant P as Paseo
-    participant N as 새 PM 세션
-    participant H as 훅
-
-    J->>C: lock acquire 프로젝트 --reason new·crash·context
-    C-->>J: lock (old_agent_id, stage handoff)
-    J->>P: create_agent (제목 pm_title, labels jarvis.role·project)
-    H->>H: PreToolUse: 라벨·lock·후보 중복 검사
-    P->>N: 세션 시작
-    N->>H: SessionStart (startup)
-    H-->>N: 규칙 · 인계 노트 · 열린 작업 · 열린 결정 · 표식 jarvis-hooks v1
-    H->>P: PostToolUse: paseo agent detach
-    H->>C: lock 에 candidate_id · detached 기록
-    N->>J: [준비] 맥락 표식 · 프로젝트 · 열린 작업 · 확인 필요
-    alt 검증 통과
-        J->>C: switch 프로젝트 새 ID
-        C->>C: registry coordinator CAS 교체 · sessions.jsonl · lock 해제
-    else 실패
-        J->>P: 후보 archive
-        J->>C: lock release --result failed:verify
-    end
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
+flowchart TD
+    LOCK["① 교체 잠금 확보<br/>JARVIS"] --> CREATE["② 새 PM 후보 생성<br/>JARVIS"]
+    CREATE --> CONTEXT["③ 규칙·상태 주입 / 부모 연결 분리<br/>훅"]
+    CONTEXT --> READY["④ 준비 응답<br/>새 PM"]
+    READY --> CHECK{"⑤ 준비 내용이 맞는가?<br/>JARVIS 검증"}
+    CHECK -->|"통과"| SWITCH["⑥ 현재 담당을 새 PM으로 전환<br/>jarvisctl · 기록 후 잠금 해제"]
+    CHECK -->|"실패"| KEEP["후보 정리 · 잠금 해제<br/>기존 담당 유지"]
+    class SWITCH focal
+    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
 ```
 
 JARVIS 가 lock 을 잡고 후보 세션을 만들면 훅이 그 세션에 맥락을 넣고(Bootstrap) JARVIS 에게서 떼어 낸다. 후보가 `[준비]` 로 답하면 JARVIS 가 검증하고, 통과하면 `switch` 가 registry 를 후보로 바꾸고 lock 을 푼다.
@@ -154,20 +128,30 @@ registry 에 연결되기 전의 PM 은 Worker 를 만들 수 없다(훅). `[배
 ### 4.1 PM 세션의 상태
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Active: 띄우기 · switch
-    Active --> Candidate: 컨텍스트 > 200,000
-    Candidate --> Active: can-rotate 실패<br/>(작업·Worker 진행 중)
-    Candidate --> Handoff: lock acquire
-    Handoff --> Provisioning: [인계노트] 저장
-    Handoff --> Provisioning: 인계 없음 (mode crash)
-    Provisioning --> Verifying: 후보 생성 · detach
-    Verifying --> Switched: [준비] 통과 · switch<br/>(registry 교체 · lock 해제)
-    Verifying --> Active: 실패 · 후보 archive<br/>lock release failed
-    Switched --> Retired: 새 PM 이 [배정] 하나 완료<br/>사용자 승인 후 옛 PM archive
-    Active --> Closed: 사용자 archive · 장애
-    Closed --> Handoff: 다음 [배정] 때<br/>lock acquire --reason crash
-    Retired --> [*]
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
+flowchart TD
+    CHECK{"교체 조건을<br/>모두 만족하는가?"}
+    CHECK -->|"아니오"| KEEP["현재 PM 유지"]
+    CHECK -->|"예"| HANDOFF["① 잠금 확보 · 인계 저장"]
+    HANDOFF --> NEW["② 새 PM 생성 · 준비 검증"]
+    NEW -->|"실패 · 후보 정리 / 잠금 해제"| KEEP
+    NEW -->|"통과"| SWITCH["③ 담당 전환 · 잠금 해제"]
+    SWITCH --> WORK["④ 새 PM이 배정 하나 완료"]
+    WORK -->|"사용자 승인"| ARCHIVE["⑤ 이전 PM 정리"]
+    class SWITCH focal
+    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
+```
+
+장애 복구는 정상 교체와 시작 조건이 다르다.
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
+flowchart LR
+    CLOSED["기존 PM이 닫힘"] -->|"다음 배정 시"| RECORD["복구 잠금 확보<br/>남은 상태·인계 확인"]
+    RECORD --> NEW["새 PM 생성·검증<br/>담당 전환"]
+    NEW --> RECOVER["이전 Worker 결과 확인<br/>이미 한 작업은 중복하지 않음"]
+    class NEW focal
+    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
 ```
 
 lock 은 `switch` 에서 풀린다. 옛 PM 정리(Retired)는 lock 과 무관한 후속 단계라 새 `[배정]` 을 막지 않는다.
@@ -196,16 +180,22 @@ PM 을 바꿔도 Worker 결과가 사라지지 않게 하는 규칙이다.
 PM 세션이 닫히는 경로는 셋이고, 잡는 방법이 다르다.
 
 ```mermaid
-flowchart TD
-    A1["JARVIS 가 archive_agent · kill_agent"] --> H1["PreToolUse: 기본 수신자 JARVIS · 활성 PM ·<br/>열린 Worker 있는 에이전트 · PM kill 은 막음"]
-    H1 --> H2["PostToolUse: sessions.jsonl closed_by jarvis"]
-
-    A2["사용자가 Paseo 화면에서 archive · delete"] --> R1["UserPromptSubmit·SessionStart (JARVIS 창)<br/>pm_reconcile: ~/.paseo/agents 대조"]
-    R1 --> X["sessions.jsonl closed_by unknown<br/>JARVIS 컨텍스트에 알림 (한 번만)"]
-    X --> Y["다음 [배정] 때 띄우기 (mode crash)"]
-
-    A3["PM 세션 종료"] --> S1["SessionEnd: 기록만"]
-    A4["Paseo agent.archive.after"] -.->|"미구현 (결정 필요)"| X
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
+flowchart LR
+    subgraph REQUEST["경로 1 · JARVIS가 닫기 요청"]
+        J["닫기 요청"] --> GUARD["보호 가드 검사"]
+        GUARD -->|"허용된 요청만 실행"| LOG["닫힘 기록"]
+    end
+    subgraph SCREEN["경로 2 · 사용자가 화면에서 PM 닫기"]
+        USER["화면에서 닫힘"] --> RECON["JARVIS 시작·입력 시<br/>실제 상태 대조"]
+        RECON --> NOTICE["닫힘 기록·알림<br/>같은 닫힘은 한 번만"]
+        NOTICE -->|"다음 배정 시"| RECOVER["PM 복구"]
+    end
+    subgraph EVENT["경로 3 · PM 세션 종료 이벤트"]
+        ENDING["SessionEnd"] --> ENDLOG["종료 기록만 남김"]
+    end
+    class RECOVER focal
+    classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
 ```
 
 - 대조는 registry 의 활성 PM 이 `archivedAt` 이 있거나 기록이 사라졌는지 본다. 누가 닫았는지 모르면 `closed_by: unknown` 이다. 같은 닫힘은 `state/sessions/reconciled.json` 으로 한 번만 알린다.
@@ -217,25 +207,34 @@ flowchart TD
 ### 5.1 컨텍스트가 커져 교체할 때
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Malgun Gothic, Noto Sans KR, sans-serif","fontSize":"16px","primaryColor":"#ffffff","primaryTextColor":"#23262f","primaryBorderColor":"#646a78","lineColor":"#646a78","secondaryColor":"#ededeb","tertiaryColor":"#f5f5f3","clusterBkg":"#f5f5f3","clusterBorder":"#cfd2d8","edgeLabelBackground":"#f5f5f3","actorBkg":"#ffffff","actorBorder":"#646a78","actorTextColor":"#23262f","noteBkgColor":"#f5f5f3","noteTextColor":"#23262f","noteBorderColor":"#cfd2d8"},"flowchart":{"htmlLabels":true,"curve":"stepAfter","nodeSpacing":32,"rankSpacing":48},"sequence":{"mirrorActors":false}}}%%
 sequenceDiagram
     autonumber
+    participant OLD as 이전 PM
     participant J as JARVIS
     participant C as jarvisctl
-    participant O as 옛 PM
-    participant N as 새 PM
-
-    J->>C: can-rotate 프로젝트 (ok true)
-    J->>C: lock acquire 프로젝트 --reason context
-    Note over J: lock 동안 이 프로젝트 [배정] 보류
-    J->>O: [인계요청]
-    O-->>J: [인계노트] 60줄 이하
-    J->>C: handoff 프로젝트 파일 (latest.md, 이전 것은 이력)
-    J->>C: lock stage provisioning
-    J->>N: 띄우기 (mode rotation) → [준비]
-    J->>C: switch 프로젝트 새 ID (lock 해제)
-    J->>N: 다음 [배정]
-    N-->>J: [보고]
-    J->>O: 사용자 승인 후 archive_agent (kill 은 훅이 막음)
+    participant NEW as 새 PM
+    rect rgb(237, 237, 235)
+        Note over OLD,NEW: 1단계 · 인계 준비
+        J->>C: 교체 조건 확인 · 잠금 확보
+        Note over J,C: 이 프로젝트의 새 배정 보류
+        J->>OLD: 인계 요청
+        OLD-->>J: 인계 노트
+        J->>C: 인계 저장 · 후보 생성 단계로 이동
+    end
+    rect rgb(251, 238, 230)
+        Note over OLD,NEW: 2단계 · 새 PM 준비와 담당 전환
+        J->>NEW: 공통 절차로 후보 생성
+        NEW-->>J: 준비 응답
+        J->>C: 준비 검증 통과 후 담당 전환
+        Note over J,C: registry 갱신 · 잠금 해제
+    end
+    rect rgb(237, 237, 235)
+        Note over OLD,NEW: 3단계 · 새 업무 확인 후 이전 PM 정리
+        J->>NEW: 다음 업무 배정
+        NEW-->>J: 완료 보고
+        J->>OLD: 사용자 승인 후 archive
+    end
 ```
 
 옛 PM 은 인계 노트를 메시지로 보내고, 파일은 JARVIS 가 쓴다(PM 은 JARVIS 폴더를 고칠 수 없다). 인계 노트와 상태 파일이 다르면 상태 파일이 맞고, 다른 줄은 노트 끝 `## JARVIS 확인` 에 적는다. 옛 PM 은 새 PM 이 `[배정]` 하나를 마친 뒤 사용자 승인을 받아 archive 한다.
