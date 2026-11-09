@@ -3,85 +3,54 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="배정에서 보고까지">
 <title>배정에서 보고까지</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=block" rel="stylesheet">
 <link href="diagram.css" rel="stylesheet">
 </head>
 <body>
 <figure>
-<svg viewBox="0 0 1100 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
+<svg viewBox="0 0 1100 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
 <title id="t">배정에서 보고까지</title>
-<desc id="d">사용자가 JARVIS 에게 요청하면 JARVIS 가 작업 파일을 만들고 Coordinator 에게 배정한다. Coordinator 는 Worker 를 띄우고, Worker 의 완료를 받아 결과를 직접 확인한 뒤 JARVIS 에게 보고한다. JARVIS 는 작업 파일을 고치고 사용자에게 짧게 알린다. 대시보드는 state 파일을 몇 초마다 읽어 보여 준다.</desc>
+<desc id="d">1 사용자가 JARVIS 에게 요청한다. 2 JARVIS 가 작업 파일을 만든다. 3 Coordinator 에게 배정한다. 4 Coordinator 가 Worker 를 띄운다. 5 Worker 가 완료를 알린다. 6 Coordinator 가 결과를 직접 확인한다. 7 JARVIS 에게 보고한다. 8 JARVIS 가 작업 파일을 done 으로 고친다. 9 사용자에게 한 줄로 알린다. 10 보드가 state 파일을 몇 초마다 읽고 11 사용자에게 한 화면으로 보여 준다.</desc>
 <defs>
-<pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" class="dot"/></pattern>
-<marker id="a" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="ah"/></marker>
-<marker id="aa" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="ah-acc"/></marker>
+<marker id="hd" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-down"/></marker>
+<marker id="hu" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-up"/></marker>
+<marker id="hr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto-start-reverse"><polygon points="0 0, 9 3.5, 0 7" class="head-read"/></marker>
 </defs>
-<rect width="1100" height="640" class="bg"/>
-<rect width="1100" height="640" fill="url(#dots)"/>
-
-<!-- 구간 -->
-<rect x="16" y="104" width="1068" height="144" rx="6" class="band"/>
-<text x="28" y="122" class="eyebrow">배정</text>
-<rect x="16" y="256" width="1068" height="104" rx="6" class="band"/>
-<text x="28" y="274" class="eyebrow">작업과 확인</text>
-<rect x="16" y="368" width="1068" height="144" rx="6" class="band"/>
-<text x="28" y="386" class="eyebrow">보고와 기록</text>
-<rect x="16" y="520" width="1068" height="104" rx="6" class="band"/>
-<text x="28" y="538" class="eyebrow">보기</text>
-
-<!-- 참가자: x = 180 340 500 660 820 980 -->
-<g>
-<rect x="120" y="24" width="120" height="56" rx="8" class="box ext"/>
-<text x="180" y="50" class="name" text-anchor="middle" font-size="15">사용자</text>
-<text x="180" y="68" class="sub" text-anchor="middle">Paseo 앱</text>
-<rect x="280" y="24" width="120" height="56" rx="8" class="box hub"/>
-<text x="340" y="50" class="name hubname" text-anchor="middle">JARVIS</text>
-<text x="340" y="68" class="sub hubsub" text-anchor="middle">Manager</text>
-<rect x="440" y="24" width="120" height="56" rx="8" class="box"/>
-<text x="500" y="50" class="name" text-anchor="middle" style="font-size:15px">Coordinator</text>
-<text x="500" y="68" class="sub" text-anchor="middle">프로젝트 폴더</text>
-<rect x="600" y="24" width="120" height="56" rx="8" class="box"/>
-<text x="660" y="50" class="name" text-anchor="middle">Worker</text>
-<text x="660" y="68" class="sub" text-anchor="middle">작업 하나</text>
-<rect x="760" y="24" width="120" height="56" rx="8" class="box"/>
-<text x="820" y="50" class="name" text-anchor="middle" style="font-size:15px">JARVIS 폴더</text>
-<text x="820" y="68" class="sub" text-anchor="middle">state/</text>
-<rect x="920" y="24" width="120" height="56" rx="8" class="box"/>
-<text x="980" y="50" class="name" text-anchor="middle" style="font-size:15px">JARVIS 보드</text>
-<text x="980" y="68" class="sub" text-anchor="middle">127.0.0.1:4991</text>
-</g>
-<path d="M 180,80 V 630 M 340,80 V 630 M 500,80 V 630 M 660,80 V 630 M 820,80 V 630 M 980,80 V 630" class="life"/>
-
-<!-- 배정 -->
-<path d="M 180,144 H 338" class="ln acc" marker-end="url(#aa)"/>
-<text x="260" y="136" class="lbl acc-t" text-anchor="middle">"결제 오류 고쳐 줘"</text>
-<path d="M 340,182 H 818" class="ln" marker-end="url(#a)"/>
-<text x="580" y="174" class="lbl" text-anchor="middle">tasks/W-….md 만들기 (assigned)</text>
-<path d="M 340,222 H 498" class="ln acc" marker-end="url(#aa)"/>
-<text x="420" y="214" class="lbl acc-t" text-anchor="middle">[배정] W-… + 요청 원문</text>
-
-<!-- 작업과 확인 -->
-<path d="M 500,294 H 658" class="ln acc" marker-end="url(#aa)"/>
-<text x="580" y="286" class="lbl acc-t" text-anchor="middle">Worker 띄우기 · 지시</text>
-<path d="M 660,332 H 502" class="ln" marker-end="url(#a)"/>
-<text x="580" y="324" class="lbl" text-anchor="middle">[완료]</text>
-
-<!-- 보고와 기록 -->
-<path d="M 500,400 h 30 q 8,0 8,8 v 6 q 0,8 -8,8 h -28" class="ln" marker-end="url(#a)"/>
-<text x="548" y="416" class="lbl">결과 직접 확인 (파일 · 조회)</text>
-<path d="M 500,448 H 342" class="ln" marker-end="url(#a)"/>
-<text x="420" y="440" class="lbl" text-anchor="middle">[보고] 바뀐 것 · 확인한 것</text>
-<path d="M 340,474 H 818" class="ln" marker-end="url(#a)"/>
-<text x="580" y="468" class="lbl" text-anchor="middle">status: done · 운영 반영 대기</text>
-<path d="M 340,500 H 182" class="ln" marker-end="url(#a)"/>
-<text x="260" y="492" class="lbl" text-anchor="middle">"끝남: 한 줄 요약"</text>
-
-<!-- 보기 -->
-<path d="M 820,566 H 978" class="ln dash" marker-end="url(#a)"/>
-<text x="900" y="558" class="lbl" text-anchor="middle">몇 초마다 읽기</text>
-<path d="M 980,604 H 182" class="ln dash" marker-end="url(#a)"/>
-<text x="580" y="596" class="lbl" text-anchor="middle">작업판 · 결정 · 흐름을 한 화면에</text>
+<rect width="1100" height="470" class="ground"/>
+<text x="560" y="26" class="zone-t" text-anchor="end">내려가는 길: 배정</text><text x="700" y="26" class="zone-t">올라오는 길: 보고와 기록</text>
+<rect x="530" y="40" width="200" height="60" class="box ext"/>
+<text x="630" y="67" class="box-name" text-anchor="middle">사용자</text>
+<text x="630" y="89" class="box-sub" text-anchor="middle">Paseo 앱</text>
+<rect x="530" y="150" width="200" height="60" class="box hub"/>
+<text x="630" y="177" class="box-name hub-name" text-anchor="middle">JARVIS</text>
+<text x="630" y="199" class="box-sub hub-sub" text-anchor="middle">Manager</text>
+<rect x="530" y="260" width="200" height="60" class="box "/>
+<text x="630" y="287" class="box-name" text-anchor="middle">Coordinator</text>
+<text x="630" y="309" class="box-sub" text-anchor="middle">프로젝트 폴더</text>
+<rect x="530" y="370" width="200" height="60" class="box "/>
+<text x="630" y="397" class="box-name" text-anchor="middle">Worker</text>
+<text x="630" y="419" class="box-sub" text-anchor="middle">작업 하나</text>
+<text x="630" y="458" class="zone-t" text-anchor="middle">작업과 확인</text>
+<path d="M 580,100 V 147" class="flow down" marker-end="url(#hd)"/><text x="568" y="128" class="msg down-t" text-anchor="end">1  “결제 오류 고쳐 줘”</text>
+<path d="M 580,210 V 257" class="flow down" marker-end="url(#hd)"/><text x="568" y="238" class="msg down-t" text-anchor="end">3  [배정] W-… + 요청 원문</text>
+<path d="M 580,320 V 367" class="flow down" marker-end="url(#hd)"/><text x="568" y="348" class="msg down-t" text-anchor="end">4  Worker 띄우기, 지시</text>
+<path d="M 680,370 V 323" class="flow up" marker-end="url(#hu)"/><text x="692" y="348" class="msg up-t">5  [완료]</text>
+<path d="M 730,276 h 26 q 8,0 8,8 v 12 q 0,8 -8,8 h -23" class="flow up" marker-end="url(#hu)"/><text x="778" y="296" class="msg up-t">6  결과 직접 확인 (파일, 조회)</text>
+<path d="M 680,260 V 213" class="flow up" marker-end="url(#hu)"/><text x="692" y="238" class="msg up-t">7  [보고] 바뀐 것, 확인한 것</text>
+<path d="M 680,150 V 103" class="flow up" marker-end="url(#hu)"/><text x="692" y="128" class="msg up-t">9  “끝남: 한 줄 요약”</text>
+<path d="M 110,161 a 110,11 0 0 1 220,0 v 62 a 110,11 0 0 1 -220,0 Z" class="box db"/>
+<path d="M 110,161 a 110,11 0 0 0 220,0" class="tree"/>
+<text x="220" y="196" class="box-name" text-anchor="middle">JARVIS 폴더</text>
+<text x="220" y="218" class="box-sub" text-anchor="middle">state/</text>
+<path d="M 530,166 H 333" class="flow up" marker-end="url(#hu)"/><text x="432" y="158" class="read-t" text-anchor="middle">2  tasks/W-….md 만들기</text>
+<path d="M 530,196 H 333" class="flow up" marker-end="url(#hu)"/><text x="432" y="216" class="read-t" text-anchor="middle">8  status: done, 운영 반영 대기</text>
+<rect x="110" y="40" width="220" height="60" class="box "/>
+<text x="220" y="67" class="box-name" text-anchor="middle">JARVIS 보드</text>
+<text x="220" y="89" class="box-sub" text-anchor="middle">127.0.0.1:4991</text>
+<path d="M 220,150 V 103" class="flow read" marker-end="url(#hr)"/><text x="232" y="132" class="read-t">10  몇 초마다 읽기</text>
+<path d="M 330,70 H 527" class="flow read" marker-end="url(#hr)"/><text x="430" y="62" class="read-t" text-anchor="middle">11  작업판, 결정, 흐름을</text><text x="430" y="90" class="read-t" text-anchor="middle">한 화면에</text>
 </svg>
 </figure>
 </body>

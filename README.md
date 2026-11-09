@@ -10,7 +10,7 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/layers-dark.png">
-  <img alt="세 계층: 맨 위 Manager Agent 계층에 JARVIS 하나, 가운데 Coordinator Agent 계층에 프로젝트마다 Coordinator 하나, 맨 아래 Coding Agent 계층에 작업마다 Worker. 배정은 위에서 아래로, 보고는 아래에서 위로. 위 두 계층은 코드를 고치지 않는 관리 계층으로 묶여 있다" src="docs/images/layers-light.png" width="800">
+  <img alt="세 계층을 조직도로 그린 그림: 맨 위에 JARVIS 하나, 그 아래 프로젝트마다 PM 하나(shop-pm, docs-pm, ask-pm), 맨 아래 작업마다 Worker. shop-pm 은 Worker 둘, ask-pm 은 하나, 맡은 일이 없는 docs-pm 은 Worker 가 없다. 배정과 띄우기는 아래로, 보고와 완료는 위로 간다. 위 두 계층은 코드를 고치지 않는다" src="docs/images/layers-light.png" width="800">
 </picture>
 
 회사로 치면 사용자는 사장, JARVIS 는 비서, Coordinator 는 프로젝트 PM, Worker 는 일 하나를 맡아 들어왔다가 끝나면 빠지는 실무 담당자입니다. 사장은 비서하고만 이야기하고, 일은 비서에게서 PM 을 거쳐 담당자에게 내려갑니다. 보고는 같은 길을 거꾸로 올라옵니다.
@@ -40,7 +40,7 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/architecture-dark.png">
-  <img alt="JARVIS 구성: 사용자는 Paseo 앱에서 JARVIS 와 대화하고, JARVIS 는 Coordinator 에 배정하고, Coordinator 는 Worker 를 띄운다. 보고는 거꾸로 올라온다. JARVIS 는 JARVIS 폴더에 기록하고 Notion 할일 DB 에 할 일을 넣는다. 대시보드는 그 폴더와 Paseo 기록, Notion 할 일을 읽는다. 플러그인 훅 두 개가 모든 세션에 걸린다" src="docs/images/architecture-light.png" width="800">
+  <img alt="JARVIS 구성을 왼쪽에서 오른쪽으로 그린 그림: 사용자, Paseo 안에 위에서 아래로 JARVIS, Coordinator, Worker, 그 오른쪽에 기록(Notion 할일 DB, JARVIS 폴더)과 보기(JARVIS 보드). JARVIS 는 Notion 에 할 일을 넣고 폴더에 상태를 쓴다. 플러그인 훅은 모든 세션에 걸려 폴더를 보호하고 커밋 문구를 검사한다. 보드는 폴더, Notion, Paseo 기록을 읽고 사용자는 브라우저로 본다" src="docs/images/architecture-light.png" width="800">
 </picture>
 
 그림과 화면에 나오는 세션과 데이터는 설명용 예시입니다.
@@ -95,7 +95,7 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/flow-dark.png">
-  <img alt="배정에서 보고까지 순서: 사용자 요청, JARVIS 가 작업 파일을 만들고 Coordinator 에 배정, Coordinator 가 Worker 를 띄우고 완료를 받아 직접 확인, JARVIS 에게 보고, JARVIS 가 작업 파일을 고치고 사용자에게 요약. 대시보드는 state 파일을 몇 초마다 읽는다" src="docs/images/flow-light.png" width="800">
+  <img alt="배정에서 보고까지를 U자로 그린 그림: 요청은 왼쪽 길로 사용자, JARVIS, Coordinator, Worker 순서로 내려가고, 완료와 보고는 오른쪽 길로 올라온다. Coordinator 는 보고 전에 결과를 직접 확인한다. JARVIS 는 2번에 작업 파일을 만들고 8번에 done 으로 고친 뒤 사용자에게 한 줄로 알린다. 보드는 state 파일을 몇 초마다 읽어 보여 준다" src="docs/images/flow-light.png" width="800">
 </picture>
 
 메시지 종류는 맨 앞 머리말로 가립니다. 아래로 내려가는 것은 `[배정]` `[인계요청]` `[점유허가]` `[점유대기]` 이고, 위로 올라오는 것은 `[진행]` `[질문]` `[승인요청]` `[계획]` `[보고]` `[완료]` `[인계노트]` `[준비]` 입니다. 프로젝트끼리 겹치는 자원은 `[점유]` 로 허가를 받고 `[해제]` 로 놓습니다. 형식은 [CLAUDE.md](CLAUDE.md), [rules/coordinator.md](rules/coordinator.md), [rules/worker.md](rules/worker.md) 에 있습니다.
@@ -107,7 +107,7 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 PM 은 한 세션을 오래 쓰면 한 번 주고받을 때마다 큰 컨텍스트를 다시 읽습니다(예: 86만 토큰). JARVIS 는 `[보고]` 를 받을 때마다 교체 조건을 보고, 넘으면 인계 노트를 받아 새 세션으로 바꿉니다.
 
 ```powershell
-python scripts\jarvisctl.py can-rotate nipa          # 컨텍스트 > 20만 · PM idle · 진행 중 작업 없음 · 열린 Worker 없음 · lock 없음
+python scripts\jarvisctl.py can-rotate nipa          # 컨텍스트 > 20만, PM idle, 진행 중 작업 없음, 열린 Worker 없음, lock 없음
 python scripts\jarvisctl.py lock acquire nipa --reason context
 #  옛 PM 에 [인계요청] → [인계노트] 를 파일로 저장
 python scripts\jarvisctl.py handoff nipa note.md    # state/handoff/nipa/latest.md (이전 노트는 이력으로)
@@ -198,7 +198,7 @@ $env:JARVIS_DIR = "C:\Users\<나>\JARVIS"; $env:PORT = "4991"; python dashboard\
 
 | 탭 | 보여 주는 것 | 출처 |
 |---|---|---|
-| 에이전트 | 3D 사무실. 사장실, JARVIS 자리, 프로젝트별 방에 PM 과 Worker 책상이 있습니다. 일하는 세션은 앉아서 타자를 치고, 권한을 기다리면 머리 위에 주황 `!` 가 뜨고, 쉬면 휴게실로 갑니다. 방은 일이 있을 때(세션 작업·대기, 진행 중 작업, 정할 결정, PM 교체 중, 최근 활동) 보이고, 그 밖의 방은 장면 위 "항상 보이기" 에서 체크한 것만 보입니다(브라우저에 저장). 프로세스가 닫혔거나 2시간 넘게 활동이 없는 세션은 숨기고 "꺼진 세션 보기" 로 다시 봅니다. PM 이 꺼진 방에는 "PM 꺼짐" 이 붙습니다 | Paseo 에이전트 기록(제목, 부모, 상태, `jarvis.role`·`jarvis.project`·`jarvis.task` 라벨), registry 의 기본 수신 JARVIS·현재 PM |
+| 에이전트 | 3D 사무실. 사장실, JARVIS 자리, 프로젝트별 방에 PM 과 Worker 책상이 있습니다. 일하는 세션은 앉아서 타자를 치고, 권한을 기다리면 머리 위에 주황 `!` 가 뜨고, 쉬면 휴게실로 갑니다. 방은 일이 있을 때(세션 작업·대기, 진행 중 작업, 정할 결정, PM 교체 중) 보이고, 그 밖의 방은 장면 위 "항상 보이기" 에서 체크한 것만 보입니다(브라우저에 저장). 아래 세션 흐름도도 같은 방만 그립니다. 프로세스가 닫혔거나 2시간 넘게 활동이 없는 세션은 숨기고 "꺼진 세션 보기" 로 다시 봅니다. PM 이 꺼진 방에는 "PM 꺼짐" 이 붙습니다 | Paseo 에이전트 기록(제목, 부모, 상태, `jarvis.role`·`jarvis.project`·`jarvis.task` 라벨), registry 의 기본 수신 JARVIS·현재 PM |
 | 흐름 | `[배정]` `[보고]` `[질문]` 메시지를 카드 트리, 3D 부채꼴, 평면 그래프와 목록으로 | 각 세션 대화 기록 |
 | 결정 | 지금 정할 것, 작업은 끝났는데 안 정한 것, 미뤄 둔 것, 정한 것(누가, 기준 몇 번으로). 권한을 기다리는 세션 | `state/decisions/*.md`, Paseo 주의 표시 |
 | 할 일 | Notion 할일 DB 의 오늘, 이번 주, 밀린 일. 완료 체크와 오늘로 옮기기 | Notion API |

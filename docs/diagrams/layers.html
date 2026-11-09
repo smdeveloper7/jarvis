@@ -3,81 +3,54 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>세 계층</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="description" content="Manager, Coordinator, Coding Agent 세 계층">
+<title>Manager, Coordinator, Coding Agent 세 계층</title>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=block" rel="stylesheet">
 <link href="diagram.css" rel="stylesheet">
 </head>
 <body>
 <figure>
 <svg viewBox="0 0 1100 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
-<title id="t">Manager · Coordinator · Coding Agent 계층</title>
-<desc id="d">맨 위 Manager Agent 계층에 JARVIS 하나, 가운데 Coordinator Agent 계층에 프로젝트마다 Coordinator 하나, 맨 아래 Coding Agent 계층에 작업마다 Worker 가 있다. 일은 위에서 아래로 배정되고 보고는 아래에서 위로 올라온다. 위 두 계층은 일을 나누고 넘기고 확인하는 관리 계층이고, 코드는 Coding Agent 계층만 고친다.</desc>
+<title id="t">Manager, Coordinator, Coding Agent 세 계층</title>
+<desc id="d">맨 위 Manager Agent 계층에 JARVIS 하나, 가운데 Coordinator Agent 계층에 프로젝트마다 PM 하나, 맨 아래 Coding Agent 계층에 작업마다 Worker 가 있다. shop-pm 은 Worker 둘, ask-pm 은 하나, docs-pm 은 맡은 일이 없어 Worker 가 없다. 배정과 띄우기는 아래로, 보고와 완료는 위로 간다. 위 두 계층은 코드를 고치지 않는다.</desc>
 <defs>
-<pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" class="dot"/></pattern>
-<marker id="a" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="ah"/></marker>
-<marker id="aa" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="ah-acc"/></marker>
+<marker id="hd" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-down"/></marker>
+<marker id="hu" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-up"/></marker>
+<marker id="hr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto-start-reverse"><polygon points="0 0, 9 3.5, 0 7" class="head-read"/></marker>
 </defs>
-<rect width="1100" height="560" class="bg"/>
-<rect width="1100" height="560" fill="url(#dots)"/>
-
-<!-- 관리 계층 묶음 -->
-<rect x="22" y="22" width="896" height="330" rx="12" class="frame-acc"/>
-<text x="900" y="44" class="lbl acc-t" text-anchor="end">관리 계층 · 일을 나누고 넘기고 확인 (코드는 고치지 않음)</text>
-
-<!-- Manager Agent -->
-<rect x="44" y="56" width="852" height="120" rx="8" class="layer l1"/>
-<text x="68" y="104" class="layer-t l1-t">Manager Agent</text>
-<text x="68" y="130" class="sub">비서 · 하나, 계속 떠 있음</text>
-<rect x="420" y="80" width="200" height="72" rx="8" class="box hub"/>
-<text x="520" y="111" class="name hubname" text-anchor="middle">JARVIS</text>
-<text x="520" y="133" class="sub hubsub" text-anchor="middle">JARVIS 폴더</text>
-<text x="650" y="108" class="lbl">어느 프로젝트 일인지 정해 넘김</text>
-<text x="650" y="128" class="lbl">기준으로 판단 · 보고 요약 · 기록</text>
-
-<!-- Coordinator Agent -->
-<rect x="44" y="210" width="852" height="120" rx="8" class="layer l2"/>
-<text x="68" y="258" class="layer-t l2-t">Coordinator Agent</text>
-<text x="68" y="284" class="sub">프로젝트 PM · 프로젝트마다 하나</text>
-<rect x="330" y="234" width="170" height="72" rx="8" class="box"/>
-<text x="415" y="265" class="name" text-anchor="middle">shop-coord</text>
-<text x="415" y="287" class="sub" text-anchor="middle">쇼핑몰 폴더</text>
-<rect x="520" y="234" width="170" height="72" rx="8" class="box"/>
-<text x="605" y="265" class="name" text-anchor="middle">docs-coord</text>
-<text x="605" y="287" class="sub" text-anchor="middle">사내 문서 폴더</text>
-<rect x="710" y="234" width="170" height="72" rx="8" class="box"/>
-<text x="795" y="265" class="name" text-anchor="middle">ask-coord</text>
-<text x="795" y="287" class="sub" text-anchor="middle">질문 방</text>
-
-<!-- Coding Agent -->
-<rect x="44" y="388" width="852" height="140" rx="8" class="layer l3"/>
-<text x="68" y="440" class="layer-t">Coding Agent</text>
-<text x="68" y="466" class="sub">실무 담당자(Worker) · 작업마다,</text>
-<text x="68" y="484" class="sub">PM 하나에 동시 3개까지, 끝나면 닫힘</text>
-<rect x="330" y="412" width="170" height="72" rx="8" class="box"/>
-<text x="415" y="443" class="name" text-anchor="middle" style="font-size:15px">결제-오류수정</text>
-<text x="415" y="465" class="sub" text-anchor="middle">Claude Code</text>
-<rect x="520" y="412" width="170" height="72" rx="8" class="box"/>
-<text x="605" y="443" class="name" text-anchor="middle" style="font-size:15px">장바구니-시험추가</text>
-<text x="605" y="465" class="sub" text-anchor="middle">Claude Code</text>
-<rect x="710" y="412" width="170" height="72" rx="8" class="box"/>
-<text x="795" y="443" class="name" text-anchor="middle" style="font-size:15px">조사-벡터DB비교</text>
-<text x="795" y="465" class="sub" text-anchor="middle">Codex</text>
-<text x="330" y="510" class="lbl">같은 저장소의 다른 파일을 동시에 고치면 Worker 마다 git worktree</text>
-
-<!-- 내려가는 일 -->
-<path d="M 470,152 V 232" class="ln acc" marker-end="url(#aa)"/>
-<text x="460" y="198" class="lbl acc-t" text-anchor="end">[배정] W-…</text>
-<path d="M 415,306 V 410" class="ln acc" marker-end="url(#aa)"/>
-<text x="405" y="362" class="lbl acc-t" text-anchor="end">띄우기 · 지시</text>
-
-<!-- 올라오는 보고 -->
-<path d="M 896,470 H 950 V 300 H 900" class="ln" marker-end="url(#a)"/>
-<text x="960" y="380" class="lbl">[완료]</text>
-<text x="960" y="398" class="lbl">[질문]</text>
-<path d="M 896,246 H 1010 V 100 H 900" class="ln" marker-end="url(#a)"/>
-<text x="1020" y="160" class="lbl">[보고]</text>
-<text x="1020" y="178" class="lbl">[질문]</text>
-<text x="1020" y="196" class="lbl">[승인요청]</text>
+<rect width="1100" height="560" class="ground"/>
+<text x="24" y="70" class="layer-name">Manager Agent</text><text x="24" y="96" class="layer-sub">비서, 하나가 계속 떠 있음</text>
+<text x="24" y="248" class="layer-name">Coordinator Agent</text><text x="24" y="274" class="layer-sub">프로젝트 PM, 프로젝트마다 하나</text>
+<text x="24" y="432" class="layer-name">Coding Agent</text><text x="24" y="458" class="layer-sub">실무 담당자(Worker), 작업마다</text><text x="24" y="478" class="layer-sub">PM 하나에 동시 3개까지, 끝나면 닫힘</text>
+<line x1="24" y1="364" x2="1076" y2="364" class="divide"/>
+<text x="24" y="354" class="divide-t">여기까지 관리 계층, 코드는 고치지 않음</text><text x="24" y="386" class="divide-t">코드는 이 계층만 고침</text>
+<path d="M 680,116 V 176 M 400,216 V 176 H 960 V 216 M 680,176 V 216" class="tree"/>
+<path d="M 400,292 V 330 M 368,400 V 330 H 536 V 400 M 960,292 V 400" class="tree"/>
+<rect x="600" y="40" width="160" height="76" class="box hub"/>
+<text x="680" y="75" class="box-name hub-name" text-anchor="middle">JARVIS</text>
+<text x="680" y="97" class="box-sub hub-sub" text-anchor="middle">JARVIS 폴더</text>
+<text x="790" y="72" class="note">어느 프로젝트 일인지 정해 넘김</text><text x="790" y="96" class="note">기준으로 판단, 보고 요약, 기록</text>
+<path d="M 790,132 V 162" class="flow down" marker-end="url(#hd)"/><text x="802" y="152" class="msg down-t">[배정] W-…</text>
+<path d="M 890,162 V 132" class="flow up" marker-end="url(#hu)"/><text x="902" y="152" class="msg up-t">[보고] [질문] [승인요청]</text>
+<rect x="320" y="216" width="160" height="76" class="box "/>
+<text x="400" y="251" class="box-name" text-anchor="middle">shop-pm</text>
+<text x="400" y="273" class="box-sub" text-anchor="middle">쇼핑몰 폴더</text><rect x="600" y="216" width="160" height="76" class="box "/>
+<text x="680" y="251" class="box-name" text-anchor="middle">docs-pm</text>
+<text x="680" y="273" class="box-sub" text-anchor="middle">사내 문서 폴더</text><rect x="880" y="216" width="160" height="76" class="box "/>
+<text x="960" y="251" class="box-name" text-anchor="middle">ask-pm</text>
+<text x="960" y="273" class="box-sub" text-anchor="middle">질문 방</text>
+<path d="M 600,318 V 346" class="flow down" marker-end="url(#hd)"/><text x="612" y="338" class="msg down-t">띄우기, 지시</text>
+<path d="M 720,346 V 318" class="flow up" marker-end="url(#hu)"/><text x="732" y="338" class="msg up-t">[완료] [질문]</text>
+<rect x="290" y="400" width="156" height="76" class="box "/>
+<text x="368" y="435" class="box-name" text-anchor="middle">결제-오류수정</text>
+<text x="368" y="457" class="box-sub" text-anchor="middle">Claude Code</text><rect x="458" y="400" width="156" height="76" class="box "/>
+<text x="536" y="435" class="box-name" text-anchor="middle">장바구니-시험추가</text>
+<text x="536" y="457" class="box-sub" text-anchor="middle">Claude Code</text>
+<text x="680" y="442" class="note" text-anchor="middle">맡은 일 없음</text>
+<rect x="882" y="400" width="156" height="76" class="box "/>
+<text x="960" y="435" class="box-name" text-anchor="middle">조사-벡터DB비교</text>
+<text x="960" y="457" class="box-sub" text-anchor="middle">Codex</text>
+<text x="290" y="520" class="note">같은 저장소의 다른 파일을 동시에 고치면 Worker 마다 git worktree</text>
 </svg>
 </figure>
 </body>

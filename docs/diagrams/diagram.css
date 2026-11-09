@@ -1,53 +1,75 @@
-/* JARVIS 그림 공통: 밝은 화면이 기본, prefers-color-scheme: dark 면 어두운 판 */
+/* Hallmark · shape: diagram set · genre: modern-minimal · theme: Coral (deal 1/3, seed agent-orchestration-system-diagrams-8501·b6706f2e·2026-11-09·r0) · redesign: full
+ * hero: none · nav: none · footer: none · imagery: diagrams of the real system · signature: the 배정 spine in deep coral, every other line in ink
+ * axes: light/grotesk-sans/warm · posture: restrained · contrast: pass · fold: n/a · v2.0.0 */
+/* Hallmark · pre-emit critique: P3 H- E3 S3 R3 V3 · weakest: S, Korean falls back to Wanted Sans inside General Sans; kept, the pair sits on the same grotesk skeleton */
+/* Hallmark · waive 26b · no control in these figures, only svg and text · the diagrams are rendered to README PNGs and nothing on them is clickable */
+@font-face { font-family: "Wanted Sans"; src: url("../../dashboard/vendor/WantedSansVariable.woff2") format("woff2"); font-weight: 400 700; font-display: block; }
+
 :root {
-  --bg: #f5f5f3; --dot: rgba(35, 38, 47, 0.10); --ink: #23262f; --muted: #646a78; --line: #59606f;
-  --box: #ffffff; --box-line: #cfd2d8; --zone: rgba(35, 38, 47, 0.03); --zone-line: rgba(35, 38, 47, 0.14);
-  --acc: #c8501c; --hub: #23262f; --hub-ink: #ffffff; --hub-sub: #c9ccd3; --chip: #ffffff; --band: rgba(35, 38, 47, 0.035);
-  --l1: #eaf1fb; --l1-line: #9db6dc; --l1-ink: #1f4f99; --l2: #f1edfa; --l2-line: #b3a3dc; --l2-ink: #5b3aa6; --l3: #f1f2f4; --l3-line: #b9bdc6;
+  --f-text: "General Sans", "Wanted Sans", ui-sans-serif, sans-serif;
+  --w-display: 600; --tr-display: -0.02em;
+  --c-ground: oklch(97% 0.006 55); --c-manage: oklch(94.5% 0.007 55); --c-work: oklch(91.5% 0.009 55);
+  --c-rule: oklch(87% 0.009 55); --c-box: oklch(98.8% 0.0045 80); --c-box-rule: oklch(81% 0.011 55);
+  --c-ink: oklch(21% 0.012 38); --c-ink-2: oklch(29% 0.013 40); --c-muted: oklch(47% 0.013 45);
+  --c-hub: oklch(22% 0.011 40); --c-hub-ink: oklch(96.5% 0.006 70); --c-hub-sub: oklch(78% 0.01 60);
+  --c-divide: oklch(81% 0.011 55); --c-down: oklch(54% 0.165 29); --c-down-t: oklch(50% 0.165 29);
+  --c-up: oklch(47% 0.013 45); --c-up-t: oklch(40% 0.013 45); --c-read: oklch(60% 0.012 50);
+  --c-cast: oklch(32% 0.03 50 / 0.22);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #121316; --dot: rgba(232, 232, 234, 0.08); --ink: #e8e8ea; --muted: #9aa0ad; --line: #a3a9b5;
-    --box: #1d1f24; --box-line: #3a3d45; --zone: rgba(232, 232, 234, 0.025); --zone-line: rgba(232, 232, 234, 0.16);
-    --acc: #f07a3c; --hub: #f2f2f3; --hub-ink: #121316; --hub-sub: #4b4f59; --chip: #1d1f24; --band: rgba(232, 232, 234, 0.04);
-    --l1: #18233a; --l1-line: #3d5a8c; --l1-ink: #8fb4f0; --l2: #221c33; --l2-line: #5b4b8c; --l2-ink: #b9a3f0; --l3: #1b1d22; --l3-line: #444852;
+    --c-ground: oklch(19% 0.011 40); --c-manage: oklch(22.5% 0.012 40); --c-work: oklch(16.5% 0.01 40);
+    --c-rule: oklch(30% 0.012 42); --c-box: oklch(26% 0.012 42); --c-box-rule: oklch(36% 0.013 45);
+    --c-ink: oklch(95% 0.006 70); --c-ink-2: oklch(86% 0.008 65); --c-muted: oklch(72% 0.012 60);
+    --c-hub: oklch(96.5% 0.006 70); --c-hub-ink: oklch(21% 0.012 38); --c-hub-sub: oklch(42% 0.013 45);
+    --c-divide: oklch(40% 0.013 45); --c-down: oklch(74% 0.125 30); --c-down-t: oklch(78% 0.12 30);
+    --c-up: oklch(66% 0.012 60); --c-up-t: oklch(78% 0.012 60); --c-read: oklch(58% 0.012 55);
+    --c-cast: oklch(5% 0.01 40 / 0.5);
   }
 }
-* { box-sizing: border-box; margin: 0; padding: 0 }
-body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans KR', sans-serif; padding: 24px }
-figure { max-width: 1100px; margin: 0 auto }
-svg { width: 100%; display: block }
-.bg { fill: var(--bg) }
-.dot { fill: var(--dot) }
-.ah { fill: var(--line) }
-.ah-acc { fill: var(--acc) }
-.zone { fill: var(--zone); stroke: var(--zone-line); stroke-width: 1 }
-.band { fill: var(--band) }
-.eyebrow { font: 500 12px 'IBM Plex Mono', 'Noto Sans KR', monospace; letter-spacing: 0.02em; fill: var(--muted) }
-.box { fill: var(--box); stroke: var(--box-line); stroke-width: 1.2 }
-.box.ghost { opacity: 0.55 }
-.box.hub { fill: var(--hub); stroke: var(--hub) }
-.box.ext { stroke-dasharray: 5 3 }
-.name { font: 700 17px 'Noto Sans KR', sans-serif; fill: var(--ink) }
-.sub { font: 400 12px 'Noto Sans KR', sans-serif; fill: var(--muted) }
-.hubname { fill: var(--hub-ink) }
-.hubsub { fill: var(--hub-sub) }
-.ln { fill: none; stroke: var(--line); stroke-width: 1.3 }
-.ln.thin { stroke: var(--box-line); stroke-width: 1.2 }
-.ln.acc { stroke: var(--acc); stroke-width: 1.6 }
-.ln.dash { stroke-dasharray: 5 4 }
-.lbl { font: 500 12px 'Noto Sans KR', sans-serif; fill: var(--muted) }
-.acc-t { fill: var(--acc) }
-.chip { fill: var(--chip); stroke: var(--box-line) }
-.chip-t { font: 500 13px 'Noto Sans KR', sans-serif; fill: var(--ink) }
-.mono { font: 500 12px 'IBM Plex Mono', monospace; fill: var(--muted) }
-.life { stroke: var(--box-line); stroke-width: 1.2; stroke-dasharray: 3 4 }
-.note { fill: var(--box); stroke: var(--box-line) }
-.layer { stroke-width: 1.2 }
-.layer.l1 { fill: var(--l1); stroke: var(--l1-line) }
-.layer.l2 { fill: var(--l2); stroke: var(--l2-line) }
-.layer.l3 { fill: var(--l3); stroke: var(--l3-line) }
-.layer-t { font: 700 22px 'Noto Sans KR', sans-serif; fill: var(--ink) }
-.l1-t { fill: var(--l1-ink) }
-.l2-t { fill: var(--l2-ink) }
-.frame-acc { fill: none; stroke: var(--acc); stroke-width: 2; stroke-opacity: 0.55; stroke-dasharray: 8 5 }
+
+html, body { overflow-x: clip; margin: 0; background: var(--c-ground); }
+figure { margin: 0; }
+svg { display: block; width: 100%; height: auto; }
+svg text { font-family: var(--f-text); }
+:focus-visible { outline: 2px solid var(--c-down); outline-offset: 2px; }
+
+.ground { fill: var(--c-ground); }
+.layer, .zone { stroke-width: 1; rx: 10px; }
+.layer.manage, .zone { fill: var(--c-manage); stroke: var(--c-rule); }
+.layer.work { fill: var(--c-work); stroke: var(--c-rule); }
+.layer-name { font-size: 22px; font-weight: var(--w-display); letter-spacing: var(--tr-display); fill: var(--c-ink); }
+.layer-sub { font-size: 13px; fill: var(--c-muted); }
+.zone-t { font-size: 13px; font-weight: 500; fill: var(--c-muted); }
+
+.box { fill: var(--c-box); stroke: var(--c-box-rule); stroke-width: 1; rx: 8px; filter: drop-shadow(4px 4px 5px var(--c-cast)); }
+.box.ghost { filter: none; opacity: 0.6; }
+.box.ext { fill: none; stroke-dasharray: 5 4; filter: none; stroke: var(--c-read); }
+.box.hub { fill: var(--c-hub); stroke: var(--c-hub); filter: drop-shadow(5px 5px 7px var(--c-cast)); }
+.box.db { rx: 0; }
+.chip { fill: var(--c-box); stroke: var(--c-box-rule); stroke-width: 1; rx: 6px; }
+.box-name { font-size: 16px; font-weight: 600; fill: var(--c-ink); }
+.box-sub { font-size: 12.5px; fill: var(--c-muted); }
+.chip-t { font-size: 13px; font-weight: 500; fill: var(--c-ink-2); }
+.hub-name { fill: var(--c-hub-ink); }
+.hub-sub { fill: var(--c-hub-sub); }
+.note { font-size: 13px; fill: var(--c-muted); }
+
+.divide { stroke: var(--c-divide); stroke-width: 1.4; stroke-dasharray: 2 5; stroke-linecap: round; }
+.divide-t { font-size: 13px; font-weight: 500; fill: var(--c-ink-2); }
+.band { fill: var(--c-manage); rx: 8px; }
+.life { stroke: var(--c-box-rule); stroke-width: 1.2; stroke-dasharray: 2 5; stroke-linecap: round; }
+.tree { fill: none; stroke: var(--c-box-rule); stroke-width: 1.4; }
+
+.flow { fill: none; stroke-width: 1.6; }
+.flow.down { stroke: var(--c-down); }
+.flow.up { stroke: var(--c-up); }
+.flow.read { stroke: var(--c-read); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.head-down { fill: var(--c-down); }
+.head-up { fill: var(--c-up); }
+.head-read { fill: var(--c-read); }
+.msg { font-size: 13px; font-weight: 500; }
+.down-t { fill: var(--c-down-t); }
+.up-t { fill: var(--c-up-t); }
+.read-t { font-size: 12.5px; fill: var(--c-muted); }
+.step { font-size: 12px; font-weight: 600; fill: var(--c-muted); }
