@@ -1,7 +1,7 @@
 # 02. Agent Lifecycle Management
 
 > **핵심 질문:** Agent 와 세션을 어떻게 생성·교체·복구할 것인가?
-> **버전:** v0.2 · 2026-11-09 · 구현 반영 (Codex 검토 1차 반영)
+> **버전:** v0.3 · 2026-11-09 · JARVIS 여러 창 반영
 > **관련:** [01 State & Memory](01_State_Memory_Management.md) · [03 Work Lifecycle](03_Work_Lifecycle_Management.md) · 상세 근거 [JARVIS_Agent_Lifecycle_Persistence_Policy.md](JARVIS_Agent_Lifecycle_Persistence_Policy.md)
 > **구현:** `hooks/`(Claude 훅), `scripts/jarvisctl.py`(상태 전환), 실행 지침 `CLAUDE.md` "PM 띄우기"·"PM 세션 교체", `rules/coordinator.md`
 
@@ -19,8 +19,8 @@ flowchart TD
         P2["ask PM"]
     end
     subgraph S["Paseo 세션 (교체 가능)"]
-        MS1["JARVIS 세션 A · 대표"]
-        MS2["JARVIS 세션 B · 읽기만"]
+        MS1["JARVIS 창 A · 기본 수신자"]
+        MS2["JARVIS 창 B"]
         PS0["nipa 세션 #1 · 이전"]
         PS1["nipa 세션 #2 · 활성"]
         AS1["ask 세션 · 활성"]
@@ -28,13 +28,13 @@ flowchart TD
         W2["Worker"]
     end
     M --- MS1
-    M -.- MS2
+    M --- MS2
     P1 -.- PS0
     P1 --- PS1
     P2 --- AS1
     PS1 --> W1
     PS1 --> W2
-    REG[("registry.yaml<br/>jarvis: 대표 ID<br/>coordinator: 활성 PM ID")]
+    REG[("registry.yaml<br/>jarvis: 기본 수신자 ID<br/>coordinator: 활성 PM ID")]
     REG -.-> MS1
     REG -.-> PS1
     REG -.-> AS1
@@ -55,13 +55,13 @@ flowchart TD
 
 | 역할 | 조건 |
 |---|---|
-| `jarvis` (대표) | `registry.jarvis` 와 같음 |
+| `jarvis` (기본 수신자 창) | `registry.jarvis` 와 같음 |
 | `pm` | registry 의 `coordinator` 와 같음(활성), 또는 라벨 `jarvis.role=pm`(후보·이전) |
 | `worker` | 부모가 PM |
-| `jarvis_other` (보조) | JARVIS 폴더에서 뜬 다른 Paseo 세션(schedule 로 뜬 세션 제외) |
+| `jarvis_other` (다른 JARVIS 창) | JARVIS 폴더에서 뜬 다른 Paseo 세션(schedule·검토 세션 제외). 권한은 `jarvis` 와 같다 |
 | `none` | 그 밖(사용자 세션, Paseo 밖 세션) — 훅이 아무것도 안 함 |
 
-판단은 라벨·registry 로 한다. 제목(`nipa-pm`, 옛 `nipa-coord`)은 보여 주는 용도다.
+판단은 라벨·registry 로 한다. PM 제목은 registry `pm_title`(없으면 `<키>-pm`, 옛 `<키>-coord`)이고 보여 주는 용도다. 라벨이 빠진 옛 세션을 알아볼 때만 제목도 본다. Worker 제목은 `<영역>-<작업 이름>`(예: `wf3-쿼리확인`)이어야 하고, 작업 번호·순번만 있는 이름은 훅이 막는다.
 
 **부모 관계(확인함):** 에이전트가 `create_agent` 로 만든 에이전트는 Paseo 에서 그 에이전트의 subagent(부모 라벨)가 된다. JARVIS 가 만든 PM 이 JARVIS 의 자식이면 JARVIS 를 닫을 때 영향을 받을 수 있으므로, PM 생성 직후 PostToolUse 훅이 `paseo agent detach <PM ID>` 로 떼어 낸다(시험: 부모 라벨만 빠지고 세션은 그대로). PM 이 만든 Worker 는 부모 라벨을 유지한다(PM 이 결과를 받는 경로).
 
@@ -69,7 +69,7 @@ flowchart TD
 
 | 층 | 내용 | 바꾸는 주체 |
 |---|---|---|
-| **정의** | registry 프로젝트 항목(name, root, linear_project), `rules/coordinator.md`, 프로젝트 CLAUDE.md | 사용자 · JARVIS(등록할 때만) |
+| **정의** | registry 프로젝트 항목(name, root, pm_title, linear_project), `rules/coordinator.md`, 프로젝트 CLAUDE.md | 사용자 · JARVIS(`jarvisctl register`·`set`) |
 | **띄우기 (Provisioning)** | 세션 하나를 만들고 맥락을 넣고 검증하고 활성화하는 공통 절차 | JARVIS + 훅 + `jarvisctl` |
 | **수명주기 (Lifecycle)** | 언제 바꾸나, 인계, 전환, 닫기, 복구 | JARVIS + `jarvisctl` |
 
@@ -177,10 +177,10 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A1["JARVIS 가 archive_agent · kill_agent"] --> H1["PreToolUse: 대표 JARVIS 자신 · 활성 PM ·<br/>열린 Worker 있는 에이전트 · PM kill 은 막음"]
+    A1["JARVIS 가 archive_agent · kill_agent"] --> H1["PreToolUse: 기본 수신자 JARVIS · 활성 PM ·<br/>열린 Worker 있는 에이전트 · PM kill 은 막음"]
     H1 --> H2["PostToolUse: sessions.jsonl closed_by jarvis"]
 
-    A2["사용자가 Paseo 화면에서 archive · delete"] --> R1["UserPromptSubmit·SessionStart (대표 JARVIS)<br/>pm_reconcile: ~/.paseo/agents 대조"]
+    A2["사용자가 Paseo 화면에서 archive · delete"] --> R1["UserPromptSubmit·SessionStart (JARVIS 창)<br/>pm_reconcile: ~/.paseo/agents 대조"]
     R1 --> X["sessions.jsonl closed_by unknown<br/>JARVIS 컨텍스트에 알림 (한 번만)"]
     X --> Y["다음 [배정] 때 띄우기 (mode crash)"]
 
@@ -199,25 +199,25 @@ flowchart TD
 
 | 훅 | 스크립트 | 대상 | 하는 일 |
 |---|---|---|---|
-| SessionStart (startup·resume·compact·clear) | `session_context.py` | PM · 대표 JARVIS · 보조 JARVIS | PM: 규칙·상태 주입 / 대표: 현황·닫힌 PM / 보조: 읽기만 경고 |
-| UserPromptSubmit | `pm_reconcile.py` | 대표 JARVIS | 닫힌 PM 대조·알림 |
+| SessionStart (startup·resume·compact·clear) | `session_context.py` | PM · JARVIS 창 | PM: 규칙·상태 주입 / JARVIS: 기본 수신자·PM 현황·닫힌 PM |
+| UserPromptSubmit | `pm_reconcile.py` | JARVIS 창 | 닫힌 PM 대조·알림(처음 본 창 하나만) |
 | Stop | `pm_usage.py` | PM | 사용량 Snapshot |
-| PreToolUse (paseo create·archive·kill) | `agent_guard.py` | JARVIS · PM | 중복 PM, 후보·교체 중 Worker 생성, 활성 PM·대표 닫기, PM kill, 남의 Worker 닫기 차단. PM 의 Worker 는 `jarvis.task` 필수 |
+| PreToolUse (paseo create·archive·kill) | `agent_guard.py` | JARVIS · PM | 중복 PM, 다른 창이 진행 중인 교체에 PM 생성, 후보·교체 중 Worker 생성, 활성 PM·기본 수신자 닫기, PM kill, 남의 Worker 닫기 차단. PM 의 Worker 는 `jarvis.task` 라벨과 작업 위주 제목 필수 |
 | PostToolUse (같은 matcher) | `agent_guard.py` | JARVIS · PM | PM detach, lock 후보 기록, 닫음 기록 |
 | PreCompact · SessionEnd | `session_event.py` | PM | 기록만 |
-| PreToolUse (Edit·Write) | `jarvis_only_write.py` | PM · Worker · 보조 JARVIS | JARVIS 폴더 쓰기 차단 |
+| PreToolUse (Edit·Write) | `jarvis_only_write.py` | PM · Worker · JARVIS 창 | PM·Worker 의 JARVIS 폴더 쓰기 차단. JARVIS 창의 `registry.yaml` 직접 수정·새 W/D 파일 직접 생성 차단(jarvisctl 로) |
 | PreToolUse (Bash) | `git-message-style.py` | 모두 | 커밋 문구 검사(기존) |
 
 Claude 로만 PM 을 띄우므로 Codex 훅은 범위 밖이다. Codex Worker 에는 훅이 걸리지 않는다(Worker 규칙은 첫 지시로 전달).
 
 ## 8. JARVIS(Manager) 수명주기
 
-- 논리적 JARVIS 는 하나. 세션은 여럿일 수 있지만 **쓰기 권한은 `registry.jarvis` 의 세션 하나**다. 보조 세션은 Edit·Write(훅)·에이전트 생성/닫기(훅)가 막힌다.
-- 대표 전환은 `jarvisctl claim-jarvis <새 ID>` 하나로만 한다. 허용 조건: 대표가 없음 · 옛 대표가 닫힘(archive·closed) · 옛 대표가 `transfer-jarvis --to <새 ID|next>` 로 넘김. 셋 다 아니면 거절한다(탈취 방지). registry 의 `jarvis:` 값이 읽은 값과 같을 때만 바꾼다(CAS).
-- 계획된 교체: 옛 JARVIS 가 `state/handoff/manager/latest.md` 작성(`jarvisctl handoff manager`) → `transfer-jarvis --to next` → 새 JARVIS 가 `claim-jarvis` → PM 들에게 `[인계]` → 사용자 승인 후 옛 JARVIS archive.
-- 장애: 사용자가 옛 JARVIS 를 archive 하고 새로 띄우면 `claim-jarvis` 가 허용된다.
+- 논리적 JARVIS 는 하나지만 **대화창은 동시에 여러 개** 열 수 있다(2026-11-09 사용자 결정). 모든 창이 상태를 고치고, 겹치는 쓰기는 `jarvisctl` 이 잠금으로 막는다(01 6절).
+- registry `jarvis:` 는 **기본 수신자**: 아침 할일 정리 보고, 맡긴 창이 닫힌 PM 보고, PM 이 보낼 곳을 모를 때. 바꾸는 것은 `jarvisctl claim-jarvis <새 ID>` 하나뿐이다. 허용: 기본 수신자가 없음 · 그 창이 닫힘(archive·closed·missing) · 그 창이 `transfer-jarvis --to <새 ID|next>` 로 넘김. 읽기 실패면 거절. `jarvis:` 값이 읽은 값과 같을 때만 바꾼다(CAS). 자기 자신만 올릴 수 있다.
+- 기본 수신자 창은 닫기 가드가 막는다(다른 창이 먼저 claim 하거나 사용자가 Paseo 화면에서 닫으면 그 뒤 claim 허용).
+- 긴 대화 정리: 옛 창이 `state/handoff/manager/latest.md` 작성(`jarvisctl handoff manager`) → 기본 수신자면 `transfer-jarvis --to next` → 새 창이 `claim-jarvis` → PM 들에게 `[인계]` → 사용자 승인 후 옛 창 archive.
 - 교체 기준은 PM 의 200,000 을 따르지 않는다. 사용자가 정할 때 바꾼다.
-- JARVIS 가 완전히 멈추면 스스로 복구하지 못한다. 사용자가 새로 띄운다.
+- JARVIS 창이 모두 멈추면 스스로 복구하지 못한다. 사용자가 새로 띄운다.
 
 ## 9. Worker 연속성
 
@@ -255,7 +255,7 @@ Claude 로만 PM 을 띄우므로 Codex 훅은 범위 밖이다. Codex Worker �
 |---|---|---|
 | 1 | 훅 6개·`jarvisctl`·테스트, `CLAUDE.md`·`rules` 반영, `-pm` 제목·라벨 | 완료 (Codex 검토 2회 반영) |
 | 2 | `jarvis` 플러그인 설치, 시험 에이전트로 훅 확인 | 완료: 시험 PM 에서 SessionStart 주입·표식, Stop Snapshot, Paseo archive 시 SessionEnd, 대조 알림 1회 확인. 생성·닫기 가드와 detach 는 플러그인 설치 뒤 뜬 JARVIS 세션에서 확인 필요(설치 전 세션에는 훅이 없음) |
-| 3 | 대표 JARVIS 전환(`registry.jarvis` 갱신 완료), 보조 JARVIS 세션 정리 | 정리는 사용자 승인 |
+| 3 | JARVIS 여러 창: 번호 발급·registry 를 jarvisctl 로, 기본 수신자 개념 | 완료(2026-11-09). 남은 옛 JARVIS 창 정리는 사용자 승인 |
 | 4 | nipa 실제 교체 → `nipa-pm` | 완료(2026-11-09): 87.8만 → 6.8만 토큰, 표식 일치, detach 확인. 옛 PM archive 는 사용자 승인 대기 |
 | 5 | Paseo 플러그인 `agent.archive.after` | 결정 대기 |
 | 6 | 대시보드: 이전 PM·그 Worker 를 프로젝트 방에 "이전" 으로 | 완료 |

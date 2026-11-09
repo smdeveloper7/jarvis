@@ -142,7 +142,9 @@ def roles(recs, reg, home=None, rep=None):
     def title_proj(r):   # 제목 '<프로젝트>-coord' / '<프로젝트>-w-<W-ID>' 의 프로젝트 키
         t = (r.get('title') or '').strip()
         for k in sorted(reg, key=len, reverse=True):
-            if t in (k + '-coord', k + '-pm') or t.startswith(k + '-w-') or t.startswith(k + '-coord')                     or t.startswith(k + '-pm-'):
+            pt = (reg.get(k) or {}).get('pm_title')
+            if t in (k + '-coord', k + '-pm') or t.startswith((k + '-w-', k + '-coord', k + '-pm-')) \
+                    or (pt and (t == pt or t.startswith(pt + '-'))):
                 return k
         return None
 
@@ -165,7 +167,8 @@ def roles(recs, reg, home=None, rep=None):
         i = r['id']
         if out[i] is None:
             p = out.get(parent.get(i))
-            out[i] = ('worker', p[1] or title_proj(r) or root_of.get(norm(r.get('cwd'))) or '')                 if p and p[0] in ('coordinator', 'pm_prev') else ('other', '')
+            out[i] = ('worker', p[1] or title_proj(r) or root_of.get(norm(r.get('cwd'))) or '') \
+                if p and p[0] in ('coordinator', 'pm_prev') else ('other', '')
     return out, jid, by_id
 
 
@@ -175,7 +178,8 @@ def is_prev_pm(r, reg, parent, title_proj):
     if lb.get('jarvis.role') == 'pm' and lb.get('jarvis.project') in reg:
         return True
     t = (r.get('title') or '').strip()
-    return not parent and any(t in (k + '-pm', k + '-coord') for k in reg)
+    return not parent and any(t in (k + '-pm', k + '-coord') or (v.get('pm_title') and t == v['pm_title'])
+                              for k, v in reg.items())
 
 
 def row_of(r, role, proj, now_ms):

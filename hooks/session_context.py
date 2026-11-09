@@ -3,8 +3,7 @@
 
 - PM: 규칙(rules/coordinator.md), 프로젝트·JARVIS ID, 인계 노트, 열린 작업, 열린 결정 경로.
   startup·resume·compact·clear 모두. 새로 만들 때와 교체할 때 같은 초기화가 되게 한다.
-- 대표 JARVIS: 닫힌 PM 대조 결과, manager 인계 노트 위치.
-- JARVIS 보조 세션: 읽기만 하라는 경고.
+- JARVIS 창(여러 개일 수 있음): 기본 수신자 여부, PM 현황, 닫힌 PM 대조 결과, manager 인계 노트 위치.
 그 밖의 세션에서는 아무것도 하지 않는다.
 """
 import os
@@ -77,11 +76,16 @@ def pm_context(jdir, reg, proj, agent_id, source):
     return '\n'.join(out)
 
 
-def jarvis_context(jdir, reg):
+def jarvis_context(jdir, reg, agent_id=''):
     msgs = reconcile(jdir, reg)
     ho = state(jdir, 'handoff', 'manager', 'latest.md')
+    rep = reg.get('jarvis')
     out = ['# JARVIS 시작 점검 (훅이 넣음)',
-           '- 대표 JARVIS: 이 세션 (registry jarvis:)',
+           '- JARVIS 창은 여러 개일 수 있다. 상태 파일은 공유하고, 작업·결정 번호는 jarvisctl new-task·new-decision, '
+           'registry 는 jarvisctl 로만 바꾼다.',
+           '- 기본 수신자(registry jarvis:, 아침 정리 보고·보낸 창이 닫힌 보고를 받음): %s'
+           % ('이 창' if rep == agent_id else (rep or '없음')[:8] + (' (닫혀 있으면 jarvisctl claim-jarvis 로 이 창이 맡는다)'
+                                                                      if rep else ' (jarvisctl claim-jarvis 로 맡는다)')),
            '- manager 인계 노트: %s' % (ho.replace('\\', '/') if os.path.exists(ho) else '없음')]
     for k, p in reg['projects'].items():
         aid = p.get('coordinator')
@@ -103,12 +107,8 @@ def main():
     source = inp.get('source') or 'startup'
     if role == 'pm':
         emit_context('SessionStart', pm_context(jdir, reg, proj, agent_id, source))
-    elif role == 'jarvis':
-        emit_context('SessionStart', jarvis_context(jdir, reg))
-    elif role == 'jarvis_other':
-        emit_context('SessionStart', '# JARVIS 보조 세션 (훅이 넣음)\n이 세션(%s)은 registry 의 대표 JARVIS(%s)가 아니다. '
-                     'registry.yaml·state/ 를 고치지 말고 읽기만 한다. 대표로 바꾸려면 사용자에게 묻는다.'
-                     % (agent_id[:8], (reg.get('jarvis') or '없음')[:8]))
+    elif role in ('jarvis', 'jarvis_other'):
+        emit_context('SessionStart', jarvis_context(jdir, reg, agent_id))
     return 0
 
 

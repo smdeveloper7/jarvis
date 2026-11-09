@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""UserPromptSubmit 훅(대표 JARVIS): registry 의 PM 이 Paseo 에서 닫혔는지 대조한다 (docs/02 6절).
+"""UserPromptSubmit 훅(JARVIS 창): registry 의 PM 이 Paseo 에서 닫혔는지 대조한다 (docs/02 6절).
 
 사용자가 Paseo 화면에서 PM 을 archive·delete 하면 Claude 쪽에는 이벤트가 없다. 그래서 JARVIS 가
 글을 받을 때마다(PM 보고도 JARVIS 에게는 사용자 글로 들어온다) Paseo 기록을 보고, 처음 본 닫힘이면
@@ -53,7 +53,7 @@ def main():
     if not jdir:
         return 0
     _, role, _, reg, _ = current_role(inp, jdir)
-    if role != 'jarvis':
+    if role not in ('jarvis', 'jarvis_other'):     # 어느 JARVIS 창이든 처음 본 창이 알린다
         return 0
     msgs = reconcile(jdir, reg)
     if msgs:

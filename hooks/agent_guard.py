@@ -4,10 +4,10 @@
 matcher: mcp__paseo__create_agent | mcp__paseo__archive_agent | mcp__paseo__kill_agent
 
 막는 것 (PreToolUse)
-- JARVIS 보조 세션: 셋 다 못 씀(대표 JARVIS 만).
-- 대표 JARVIS 가 PM 생성: 라벨 jarvis.role=pm·jarvis.project 필수. 활성 PM 이 열려 있는데 교체 lock 이 없으면,
+- JARVIS 창은 여러 개일 수 있고 모두 같은 규칙을 따른다(registry jarvis: 는 기본 수신자일 뿐).
+- JARVIS 가 PM 생성: 라벨 jarvis.role=pm·jarvis.project 필수. 활성 PM 이 열려 있는데 교체 lock 이 없으면,
   또는 lock 의 후보가 이미 열려 있으면 막는다(중복 PM).
-- 대표 JARVIS 의 archive·kill: 대표 JARVIS 자신, registry 의 활성 PM, 열린 Worker 가 있는 에이전트는 막는다.
+- JARVIS 의 archive·kill: 기본 수신자 JARVIS, registry 의 활성 PM, 열린 Worker 가 있는 에이전트는 막는다.
   PM 은 kill 대신 archive.
 - PM: 후보(아직 registry 전) 이거나 교체 lock 중이면 Worker 생성을 막는다. Worker 에는 라벨 jarvis.task 필수.
   자기 Worker 가 아닌 에이전트는 닫지 못한다.
@@ -35,14 +35,29 @@ UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 
 
 def pm_target(ti, reg):
-    """create_agent 입력이 PM 생성이면 프로젝트 키. 라벨이 없어도 제목이 <키>-pm·<키>-coord 면 PM 으로 본다."""
+    """create_agent 입력이 PM 생성이면 프로젝트 키. 라벨이 없어도 제목이 registry pm_title·<키>-pm·<키>-coord 면 PM."""
     lb = ti.get('labels') or {}
     if lb.get('jarvis.role') == 'pm':
         return lb.get('jarvis.project') or '?'
     title = (ti.get('title') or '').strip()
-    for k in reg['projects']:
-        if title in (k + '-pm', k + '-coord'):
+    for k, p in reg['projects'].items():
+        if title in (k + '-pm', k + '-coord') or (p.get('pm_title') and title == p['pm_title']):
             return k
+    return None
+
+
+ID_ONLY = re.compile(r'W-\d{8}-\d+|^(worker|w|agent|task)[-_ ]?\d*$|^[0-9a-f-]{6,}$', re.I)
+
+
+def worker_title_problem(title, proj):
+    """Worker 제목은 맡긴 일이 보이게 '<영역>-<작업 이름>'. 작업 번호·순번만 있는 이름은 막는다."""
+    t = (title or '').strip()
+    if not t:
+        return 'Worker 제목이 비어 있다'
+    if ID_ONLY.search(t) or t.startswith(proj + '-w-'):
+        return 'Worker 제목에 작업 번호·순번 대신 하는 일을 쓴다(작업 번호는 라벨 jarvis.task 에)'
+    if '-' not in t or not re.search(r'[^\W\d_]', t.split('-', 1)[1]):
+        return "Worker 제목은 '<영역>-<작업 이름>' 꼴로 짓는다(예: wf3-쿼리확인, 평가-검토화면)"
     return None
 
 
@@ -71,6 +86,11 @@ def check_jarvis_create(ti, reg, jdir):
         cand = lock.get('candidate_id')
         if cand and is_open(paseo_record(cand)):
             return '%s 교체 lock 에 이미 후보 PM(%s)이 있다. 그 세션을 검증하거나 archive 한 뒤 다시.' % (proj, cand[:8])
+        owner = lock.get('owner')
+        me = os.environ.get('PASEO_AGENT_ID', '').strip()
+        if owner and me and owner != me and is_open(paseo_record(owner)):
+            return ('%s 교체는 다른 JARVIS 창(%s)이 진행 중이다. 그 창에서 마치거나 jarvisctl lock stage %s … '
+                    '--takeover 로 넘겨받은 뒤 다시.' % (proj, owner[:8], proj))
         rs = lock.get('reserving')
         if rs and time.time() - rs < RESERVE_S:
             return '%s 후보 PM 을 만드는 중이다(%d초 전 예약). 결과를 기다린다.' % (proj, time.time() - rs)
@@ -103,9 +123,10 @@ def made_since(proj, since_epoch):
 def check_close(tool, target, role, me, reg):
     if not target:
         return None
-    if role == 'jarvis':
+    if role in ('jarvis', 'jarvis_other'):
         if target == reg.get('jarvis'):
-            return '대표 JARVIS 자신은 닫지 않는다.'
+            return ('기본 수신자 JARVIS(registry jarvis:)다. 먼저 다른 창에서 jarvisctl claim-jarvis 로 넘긴 뒤 닫는다'
+                    '(옛 창이 닫히면 claim 이 허용된다).')
         for k, p in reg['projects'].items():
             if p.get('coordinator') == target:
                 return ('%s 의 활성 PM 이다. 교체 절차(jarvisctl switch)로 registry 를 바꾼 뒤 닫는다.' % k)
@@ -138,12 +159,9 @@ def pre(inp, jdir):
     agent_id, role, proj, reg, _ = current_role(inp, jdir)
     tool = inp.get('tool_name') or ''
     ti = inp.get('tool_input') or {}
-    if role == 'jarvis_other':
-        return deny('대표 JARVIS(registry jarvis: %s)만 에이전트를 만들고 닫는다. 이 세션은 읽기만 한다.'
-                    % (reg.get('jarvis') or '없음')[:8])
     why = None
     if tool.endswith('create_agent'):
-        if role == 'jarvis':
+        if role in ('jarvis', 'jarvis_other'):
             why = check_jarvis_create(ti, reg, jdir)
         elif role == 'pm':
             if reg['projects'].get(proj, {}).get('coordinator') != agent_id:
@@ -154,6 +172,8 @@ def pre(inp, jdir):
                 why = 'PM 은 PM 을 만들지 않는다.'
             elif not (ti.get('labels') or {}).get('jarvis.task'):
                 why = 'Worker 에는 labels {"jarvis.task":"<W-ID>"} 를 붙인다(rules/coordinator.md).'
+            else:
+                why = worker_title_problem(ti.get('title'), proj)
     elif tool.endswith('archive_agent') or tool.endswith('kill_agent'):
         why = check_close(tool, ti.get('agentId'), role, agent_id, reg)
     if why:
@@ -185,8 +205,10 @@ def detach(agent_id):
 
 def post(inp, jdir):
     agent_id, role, proj, reg, _ = current_role(inp, jdir)
-    if role not in ('jarvis', 'pm'):
+    if role not in ('jarvis', 'jarvis_other', 'pm'):
         return 0
+    if role == 'jarvis_other':
+        role = 'jarvis'
     tool = inp.get('tool_name') or ''
     ti = inp.get('tool_input') or {}
     resp = inp.get('tool_response')

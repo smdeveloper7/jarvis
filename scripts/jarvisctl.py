@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
-"""JARVIS 수명주기 명령 (docs/02). 대표 JARVIS 가 Bash 로 부른다. 판단은 JARVIS, 상태 전환은 이 코드가 원자적으로 한다.
+"""JARVIS 수명주기·상태 명령 (docs/01·02). JARVIS 세션이 Bash 로 부른다. 판단은 JARVIS, 상태 전환은 이 코드가
+원자적으로 한다. JARVIS 대화창은 여러 개일 수 있으므로, 겹치면 안 되는 일(번호 발급, registry, PM 교체)은 모두 여기서
+잠금 안에서 한다.
+
+  new-task <프로젝트> --title T [--request R]   W-YYYYMMDD-NN 작업 파일을 잠금 안에서 발급
+  new-decision <프로젝트> --question Q [--task W-…] [--option …] [--recommended ①] [--force]
+                                    D-YYYYMMDD-NN 결정 파일 발급(같은 작업의 열린 결정이 있으면 그것을 돌려줌)
+  register <프로젝트> --root <폴더> [--name 이름] [--pm-title 제목] [--linear-project 이름]   프로젝트 등록
+  set <프로젝트> <name|root|pm_title|linear_project> <값>   registry 필드 바꾸기
+  decide <D-ID> [--status decided|waiting|dropped] --decision … [--by user|criteria] [--criterion n]
+                                    결정 확정(open·waiting 일 때만, 성공한 창만 PM 에게 답함)
+  decision-note <D-ID> "<한 줄>"     결정 파일에 설명 덧붙이기(결정 파일은 Edit·Write 금지)
+  occupy <자원> --project P --task W [--agent PM] [--until 시각] [--note …]   공유 자원 점유(겹치면 대기)
+  vacate <자원> [--task W]           점유 해제
 
   usage <에이전트ID>                 컨텍스트 토큰 (Paseo 기록 → Stop Snapshot → transcript)
   can-rotate <프로젝트>               교체 조건 점검(JSON)
@@ -11,11 +24,12 @@
   switch <프로젝트> <새 PM ID>        검증 후 registry coordinator 를 CAS 로 바꾸고 lock 해제(다시 실행해도 안전)
   handoff <프로젝트|manager> <파일>   인계 노트를 latest.md 로 (이전 것은 이력으로)
   hook-check <에이전트ID>             SessionStart 훅이 그 세션에 넣은 표식(nonce)
-  transfer-jarvis --to <ID|next>      대표 JARVIS 가 넘길 대상 지정
-  claim-jarvis <새 JARVIS ID>         대표 JARVIS 전환(CAS)
+  transfer-jarvis --to <ID|next>      기본 수신자(registry jarvis:)가 넘길 대상 지정
+  claim-jarvis <새 JARVIS ID>         기본 수신자 전환(CAS)
 
-상태를 바꾸는 명령은 대표 JARVIS(registry jarvis:)만 쓴다. Paseo 밖(사용자 셸, PASEO_AGENT_ID 없음)에서는
-사용자 직접 복구로 보고 허용한다. JARVIS 폴더는 이 파일 위치(scripts/..), 다른 경로는 JARVIS_DIR 환경변수.
+상태를 바꾸는 명령은 JARVIS 폴더에서 뜬 세션(어느 JARVIS 창이든)과 Paseo 밖 사용자 셸만 쓴다. PM·Worker 는 못 쓴다.
+registry `jarvis:` 는 쓰기 권한이 아니라 기본 수신자(아침 정리 보고, 보낸 창이 닫힌 보고를 받는 창)다.
+JARVIS 폴더는 이 파일 위치(scripts/..), 다른 경로는 JARVIS_DIR 환경변수.
 """
 import argparse
 import json
@@ -23,14 +37,14 @@ import os
 import re
 import shutil
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..', 'hooks'))
 from jarvis_state import (FileLock, Unknown, append_jsonl, clean, closed_state, context_tokens,  # noqa: E402
                           labels, now_iso, open_children_checked, open_tasks, paseo_lookup, read_json, registry,
                           write_json)
-from pathutil import norm  # noqa: E402
+from pathutil import inside, norm  # noqa: E402
 
 JDIR = os.path.abspath(os.environ.get('JARVIS_DIR') or os.path.join(HERE, '..'))
 THRESHOLD = int(os.environ.get('JARVIS_ROTATE_TOKENS') or 200000)
@@ -55,11 +69,285 @@ def caller():
     return os.environ.get('PASEO_AGENT_ID', '').strip() or None
 
 
-def require_rep():
-    """대표 JARVIS 가 아니면 거절. Paseo 밖(사용자 셸)은 허용."""
-    me, rep = caller(), registry(JDIR).get('jarvis')
-    if me and rep and me != rep:
-        raise Refuse('대표 JARVIS(%s)만 쓴다. 이 세션은 %s' % (rep[:8], me[:8]))
+def require_jarvis():
+    """JARVIS 창(역할 jarvis·jarvis_other)이나 Paseo 밖 사용자 셸만 허용. PM·Worker·검토·schedule 세션은 거절."""
+    me = caller()
+    if not me:
+        return
+    from jarvis_state import role_of
+    stt, rec = paseo_lookup(me)
+    if stt != 'ok':
+        raise Refuse('호출한 세션(%s)의 Paseo 기록을 읽지 못함(%s)' % (me[:8], stt))
+    role, _ = role_of(me, registry(JDIR), JDIR, rec.get('cwd') or '', rec)
+    if role not in ('jarvis', 'jarvis_other'):
+        raise Refuse('JARVIS 창만 쓴다(이 세션 %s 의 역할: %s)' % (me[:8], role))
+
+
+def own_lock(lock, takeover=False):
+    """교체 lock 의 소유 창만 진행한다. 소유 창이 닫혔거나 --takeover 면 소유를 넘겨받는다(기록 남김)."""
+    me, owner = caller(), lock.get('owner')
+    if not me or not owner or me == owner:
+        return lock
+    ost = closed_state(owner)
+    if takeover or ost in ('archived', 'closed', 'missing'):
+        event({'event': 'lock_takeover', 'project_id': lock.get('project'), 'old_agent_id': owner, 'new_agent_id': me,
+               'reason': 'takeover' if takeover else 'owner_' + ost, 'source': 'jarvisctl'})
+        lock['owner'] = me
+        return lock
+    raise Refuse('다른 JARVIS 창(%s)이 이 교체를 진행 중. 그 창에서 마치거나 --takeover 로 넘겨받는다' % owner[:8])
+
+
+require_rep = require_jarvis   # 옛 이름
+
+
+KST = timezone(timedelta(hours=9))
+
+
+def next_id(folder, prefix):
+    """<prefix>-YYYYMMDD-NN 의 다음 번호(KST 오늘). 호출하는 쪽이 잠금을 잡고 있어야 한다."""
+    day = datetime.now(KST).strftime('%Y%m%d')
+    os.makedirs(folder, exist_ok=True)
+    nums = [int(m.group(1)) for f in os.listdir(folder)
+            for m in [re.match(r'^%s-%s-(\d+)\.md$' % (prefix, day), f)] if m]
+    return '%s-%s-%02d' % (prefix, day, max(nums, default=0) + 1)
+
+
+def create_exclusive(path, text):
+    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        f.write(text)
+
+
+def cmd_new_task(a):
+    require_jarvis()
+    reg = registry(JDIR)
+    if a.project not in reg['projects']:
+        raise Refuse('registry 에 없는 프로젝트 %s' % a.project)
+    folder = st('tasks')
+    with FileLock(os.path.join(folder, '_alloc')):
+        tid = next_id(folder, 'W')
+        now = now_iso()
+        body = ('---\nid: %s\nproject: %s\ntitle: %s\nstatus: assigned\njarvis: %s\ncoordinator: %s\nworkers: []\n'
+                'linear:\nfeature:\nassigned_at: %s\nupdated_at: %s\ndone_at:\nverified: none\nrelease: none\n---\n'
+                '## 요청\n%s\n\n## 보고\n\n## 경과\n- %s 배정\n'
+                % (tid, a.project, a.title.replace('\n', ' '), caller() or 'user',
+                   reg['projects'][a.project].get('coordinator') or '', now, now, a.request or a.title,
+                   now[11:16]))
+        create_exclusive(os.path.join(folder, tid + '.md'), body)
+    return out({'ok': True, 'id': tid, 'path': os.path.join(folder, tid + '.md')})
+
+
+def cmd_new_decision(a):
+    require_jarvis()
+    folder = st('decisions')
+    with FileLock(os.path.join(folder, '_alloc')):
+        key = a.key or qkey(a.question)
+        if not a.force:
+            from jarvis_state import front
+            same = [front(os.path.join(folder, f)) for f in sorted(os.listdir(folder)) if f.startswith('D-')]
+            same = [m for m in same if m.get('project') == a.project and m.get('task') == (a.task or '')
+                    and m.get('key') == key and m.get('status') in ('open', 'waiting')]
+            if same:
+                return out({'ok': True, 'existing': True, 'ids': [m.get('id') for m in same],
+                            'why': '같은 작업·같은 질문의 열린 결정이 이미 있다(다른 창이 만들었을 수 있음). 그것을 쓴다'})
+        did = next_id(folder, 'D')
+        opts = ', '.join('"%s"' % o.replace('"', "'") for o in (a.option or []))
+        body = ('---\nid: %s\ntask: %s\nproject: %s\nstatus: open\nkey: %s\njarvis: %s\ndecided_by:\ncriterion:\n'
+                'options: [%s]\nrecommended: "%s"\nraised_at: %s\nuntil:\ndecided_at:\ndecision:\n---\n'
+                '## 질문\n%s\n\n## 결정과 이유\n'
+                % (did, a.task or '', a.project, key, caller() or 'user', opts, a.recommended or '', now_iso(),
+                   a.question))
+        create_exclusive(os.path.join(folder, did + '.md'), body)
+    return out({'ok': True, 'id': did, 'path': os.path.join(folder, did + '.md')})
+
+
+def qkey(q):
+    import hashlib
+    return hashlib.sha1(re.sub(r'\s+', ' ', q.strip()).encode('utf-8')).hexdigest()[:10]
+
+
+def set_front(text, **kw):
+    """마크다운 앞부분의 key: value 를 바꾼다(없는 키는 --- 앞에 더함)."""
+    head, sep, body = text[4:].partition('\n---\n')
+    lines = head.split('\n')
+    for k, v in kw.items():
+        v = '' if v is None else str(v).replace('\n', ' ')
+        for i, line in enumerate(lines):
+            if re.match(r'^%s:' % re.escape(k), line):
+                lines[i] = '%s: %s' % (k, v) if v else '%s:' % k
+                break
+        else:
+            lines.append('%s: %s' % (k, v))
+    return '---\n' + '\n'.join(lines) + sep + body
+
+
+def cmd_decide(a):
+    """결정 확정은 open·waiting → decided·waiting·dropped CAS. 성공한 창만 PM 에게 답을 보낸다."""
+    require_jarvis()
+    from jarvis_state import front
+    path = st('decisions', a.id + '.md')
+    if not os.path.exists(path):
+        raise Refuse('결정 파일 없음 %s' % a.id)
+    with FileLock(path):
+        cur = front(path)
+        if cur.get('status') not in ('open', 'waiting'):
+            return out({'ok': False, 'why': '이미 %s(%s, %s)' % (cur.get('status'), cur.get('decision'),
+                                                              cur.get('decided_at')),
+                        'decision': cur.get('decision'), 'decided_by': cur.get('decided_by')}, 1)
+        if a.status == 'waiting':
+            kw = {'status': 'waiting', 'until': a.until or '사용자가 다시 말할 때'}
+        else:
+            kw = {'status': a.status, 'decided_by': a.by, 'criterion': a.criterion, 'decided_at': now_iso(),
+                  'decision': a.decision, 'decided_in': caller() or 'user'}
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+        text = set_front(text, **kw)
+        if a.reason:
+            text = text.rstrip('\n') + '\n- %s %s\n' % (now_iso()[:16], a.reason)
+        tmp = path + '.tmp%d' % os.getpid()
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.write(text)
+        os.replace(tmp, path)
+    return out({'ok': True, 'id': a.id, 'status': a.status, 'next': '이 창이 PM 에게 답을 보낸다'})
+
+
+# ---------- 공유 자원 점유 ----------
+
+def read_occupancy(path):
+    """없으면 빈 목록. 있는데 못 읽으면 거절(기존 점유를 덮어쓰지 않게)."""
+    if not os.path.exists(path):
+        return {'items': []}
+    d = read_json(path)
+    if not isinstance(d, dict) or not isinstance(d.get('items', []), list):
+        raise Refuse('occupancy.json 을 읽지 못함. 고칠 때까지 허가·해제를 하지 않는다: %s' % path)
+    d.setdefault('items', [])
+    return d
+
+
+def reclaimable(it):
+    """점유한 PM 이 archive·삭제됐고, 그 PM 이 띄운 Worker 도 모두 닫혔을 때만 회수. 확인 못 하면 유지."""
+    aid = it.get('agent')
+    if not aid or closed_state(aid) not in ('archived', 'missing'):
+        return False
+    try:
+        return not open_children_checked(aid)
+    except Unknown:
+        return False
+
+
+def cmd_decision_note(a):
+    """결정 파일에 설명 한 줄 더하기(잠금 안). 상태·결정 값은 decide 로만."""
+    require_jarvis()
+    path = st('decisions', a.id + '.md')
+    if not os.path.exists(path):
+        raise Refuse('결정 파일 없음 %s' % a.id)
+    with FileLock(path):
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+        text = text.rstrip('\n') + '\n- %s %s\n' % (now_iso()[:16], a.text.replace('\n', ' '))
+        tmp = path + '.tmp%d' % os.getpid()
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.write(text)
+        os.replace(tmp, path)
+    return out({'ok': True, 'id': a.id})
+
+
+def cmd_occupy(a):
+    """같은 자원을 다른 작업이 쓰고 있으면 거절(대기). 비었으면 등록. 성공한 창만 [점유허가] 를 보낸다."""
+    require_jarvis()
+    path = st('occupancy.json')
+    with FileLock(path):
+        d = read_occupancy(path)
+        items, dropped = [], []
+        for it in d.get('items', []):
+            (dropped if reclaimable(it) else items).append(it)
+        held = [it for it in items if it.get('resource') == a.resource and it.get('task') != a.task]
+        if held:
+            d['items'] = items
+            d['updated_at'] = now_iso()
+            write_json(path, d)
+            return out({'ok': False, 'wait': held[0], 'reclaimed': dropped,
+                        'next': '[점유대기] %s 가 %s 까지' % (held[0].get('task'), held[0].get('until'))}, 1)
+        items = [it for it in items if not (it.get('resource') == a.resource and it.get('task') == a.task)]
+        items.append({'resource': a.resource, 'project': a.project, 'task': a.task, 'agent': a.agent,
+                      'since': now_iso(), 'until': a.until, 'note': a.note, 'granted_by': caller() or 'user'})
+        write_json(path, {'updated_at': now_iso(), 'items': items})
+    return out({'ok': True, 'reclaimed': dropped, 'next': '[점유허가] 를 보낸다'})
+
+
+def cmd_vacate(a):
+    require_jarvis()
+    path = st('occupancy.json')
+    with FileLock(path):
+        d = read_occupancy(path)
+        gone = [it for it in d.get('items', []) if it.get('resource') == a.resource and (not a.task or it.get('task') == a.task)]
+        d['items'] = [it for it in d.get('items', []) if it not in gone]
+        d['updated_at'] = now_iso()
+        write_json(path, d)
+    return out({'ok': True, 'removed': gone})
+
+
+# ---------- registry 필드 ----------
+
+FIELDS = ('name', 'root', 'pm_title', 'linear_project')
+
+
+def set_field(text, proj, field, value):
+    lines = text.split('\n')
+    cur, start, end = None, None, None
+    for i, line in enumerate(lines):
+        m = re.match(r'^  ([A-Za-z0-9_.-]+):[ \t]*$', line)
+        if m:
+            if cur == proj:
+                end = i
+                break
+            cur = m.group(1)
+            if cur == proj:
+                start = i
+        elif cur == proj and line and not line.startswith('    ') and not line.startswith('#'):
+            end = i
+            break
+    if start is None:
+        raise Refuse('registry 에 없는 프로젝트 %s' % proj)
+    end = end if end is not None else len(lines)
+    while end > start + 1 and not lines[end - 1].strip():
+        end -= 1
+    val = '"%s"' % value.replace('"', "'") if field in ('name', 'root', 'pm_title') else value
+    for i in range(start + 1, end):
+        if re.match(r'^    %s:' % field, lines[i]):
+            lines[i] = '    %s: %s' % (field, val)
+            return '\n'.join(lines)
+    lines.insert(end, '    %s: %s' % (field, val))
+    return '\n'.join(lines)
+
+
+def cmd_set(a):
+    require_jarvis()
+    if a.field not in FIELDS:
+        raise Refuse('바꿀 수 있는 필드: %s (coordinator 는 switch, jarvis 는 claim-jarvis)' % ', '.join(FIELDS))
+    rewrite_registry(lambda t: set_field(t, a.project, a.field, a.value))
+    return out({'ok': True, 'project': a.project, a.field: a.value})
+
+
+def cmd_register(a):
+    require_jarvis()
+    if not re.match(r'^[A-Za-z0-9_.-]+$', a.project):
+        raise Refuse('프로젝트 키는 영문·숫자·_.- 만')
+
+    def fn(text):
+        if re.search(r'^  %s:[ \t]*$' % re.escape(a.project), text, flags=re.M):
+            raise Refuse('이미 등록된 프로젝트 %s' % a.project)
+        if not re.search(r'^projects:[ \t]*$', text, flags=re.M):
+            text = text.rstrip('\n') + '\nprojects:\n'
+        block = '  %s:\n    name: "%s"\n    root: "%s"\n    coordinator:\n' % (
+            a.project, (a.name or a.project).replace('"', "'"), a.root.replace('\\', '/'))
+        block += '    pm_title: "%s"\n' % (a.pm_title or a.project + '-pm').replace('"', "'")
+        if a.linear_project:
+            block += '    linear_project: %s\n' % a.linear_project
+        return text.rstrip('\n') + '\n' + block
+
+    rewrite_registry(fn)
+    return out({'ok': True, 'project': a.project, 'next': 'PM 띄우기(lock acquire %s --reason new)' % a.project})
 
 
 def event(row):
@@ -144,15 +432,16 @@ def lock_file(proj):
     return st('handoff', proj, 'rotating.lock')
 
 
-def update_lock(proj, held=False, **kw):
-    """lock 갱신. held=True 면 이미 FileLock 안에서 부른 것."""
+def update_lock(proj, held=False, takeover=False, **kw):
+    """lock 갱신(소유 창만). held=True 면 이미 FileLock 안에서 부른 것."""
     path = lock_file(proj)
     if not held:
         with FileLock(path):
-            return update_lock(proj, held=True, **kw)
+            return update_lock(proj, held=True, takeover=takeover, **kw)
     lock = read_json(path)
     if lock is None:
         raise Refuse('lock 없음')
+    own_lock(lock, takeover)
     lock.update(kw, updated_at=now_iso())
     write_json(path, lock)
     return lock
@@ -199,17 +488,19 @@ def cmd_lock(a):
     if a.op == 'stage':
         if a.value not in ('handoff', 'provisioning', 'verifying'):
             raise Refuse('stage 값: handoff|provisioning|verifying')
-        return out({'ok': True, 'lock': update_lock(a.project, stage=a.value)})
+        return out({'ok': True, 'lock': update_lock(a.project, takeover=a.takeover, stage=a.value)})
     if a.op == 'candidate':
         if not a.value:
             raise Refuse('후보 ID 필요')
-        return out({'ok': True, 'lock': update_lock(a.project, candidate_id=a.value, stage='verifying',
-                                                    reserving=None), 'problems': check_candidate(a.project, a.value)})
+        return out({'ok': True, 'lock': update_lock(a.project, takeover=a.takeover, candidate_id=a.value,
+                                                    stage='verifying', reserving=None),
+                    'problems': check_candidate(a.project, a.value)})
     if a.op == 'release':
         with FileLock(path):
             lock = read_json(path)
             if lock is None:
                 raise Refuse('lock 없음')
+            own_lock(lock, a.takeover)
             cur = registry(JDIR)['projects'].get(a.project, {}).get('coordinator')
             if lock.get('stage') == 'switched' or (lock.get('candidate_id') and cur == lock['candidate_id']):
                 raise Refuse('registry 가 이미 후보(%s)를 가리킨다. switch %s %s 를 다시 실행해 마무리한다'
@@ -225,7 +516,8 @@ def cmd_lock(a):
 
 # ---------- registry 쓰기 (잠금 안에서 다시 읽고 비교) ----------
 
-def rewrite_registry(fn):
+def rewrite_registry(fn, after=None):
+    """registry 잠금 안에서 읽기 → fn → 쓰기 → after(). transfer.json 같은 짝 파일도 같은 잠금 안에서 다룬다."""
     with FileLock(REG):
         with open(REG, encoding='utf-8') as f:
             text = f.read()
@@ -235,6 +527,8 @@ def rewrite_registry(fn):
             with open(tmp, 'w', encoding='utf-8') as f:
                 f.write(new)
             os.replace(tmp, REG)
+        if after:
+            after()
 
 
 def set_coordinator(text, proj, old, new):
@@ -286,6 +580,7 @@ def cmd_switch(a):
         lock = read_json(path)
         if not lock:
             raise Refuse('lock 없음. lock acquire 부터')
+        own_lock(lock, a.takeover)
         if lock.get('candidate_id') != a.new:
             raise Refuse('lock 의 후보(%s)와 다름. 훅이 못 적었으면 lock candidate %s %s'
                          % (lock.get('candidate_id'), a.project, a.new))
@@ -313,7 +608,7 @@ def cmd_switch(a):
             if bad:
                 raise Refuse('; '.join(bad))
             rewrite_registry(lambda t: set_coordinator(t, a.project, old, a.new))
-        lock = update_lock(a.project, held=True, stage='switched')
+        lock = update_lock(a.project, held=True, takeover=True, stage='switched', owner=lock.get('owner'))
         t, src, cost = usage(old) if old else (None, None, None)
         ev = event({'event': 'rotation', 'project_id': a.project, 'old_agent_id': old, 'new_agent_id': a.new,
                     'context_tokens_before': t, 'total_cost_usd_before': cost, 'reason': lock.get('reason'),
@@ -351,19 +646,32 @@ def cmd_hook_check(a):
 # ---------- 대표 JARVIS ----------
 
 def cmd_transfer(a):
-    rep = registry(JDIR).get('jarvis')
-    me = caller()
-    if me and rep and me != rep:
-        raise Refuse('대표 JARVIS 만 넘길 수 있음')
-    body = {'from': rep, 'to': a.to, 'at': now_iso(), 'by': me or 'user'}
-    write_json(st('handoff', 'manager', 'transfer.json'), body)
-    return out({'ok': True, 'transfer': body})
+    require_jarvis()
+    import uuid
+    holder = {}
+
+    def put():
+        body = {'from': registry(JDIR).get('jarvis'), 'to': a.to, 'at': now_iso(), 'by': caller() or 'user',
+                'token': uuid.uuid4().hex[:10]}
+        write_json(st('handoff', 'manager', 'transfer.json'), body)
+        holder['body'] = body
+
+    rewrite_registry(lambda t: t, after=put)
+    return out({'ok': True, 'transfer': holder['body']})
 
 
 def cmd_claim(a):
+    require_jarvis()
     me = caller()
+    from jarvis_state import role_of
+    stt, rec = paseo_lookup(a.new)
+    if stt != 'ok' or rec.get('archivedAt') or rec.get('lastStatus') == 'closed':
+        raise Refuse('올릴 세션 %s 이 열려 있지 않거나 기록을 읽지 못함(%s)' % (a.new[:8], stt))
+    trole, _ = role_of(a.new, registry(JDIR), JDIR, rec.get('cwd') or '', rec)
+    if trole not in ('jarvis', 'jarvis_other'):
+        raise Refuse('JARVIS 창만 기본 수신자가 된다(%s 의 역할: %s)' % (a.new[:8], trole))
     if me and me != a.new:
-        raise Refuse('자기 자신(%s)만 대표로 올릴 수 있음' % me[:8])
+        raise Refuse('자기 자신(%s)만 기본 수신자로 올릴 수 있음' % me[:8])
     holder = {}
 
     def fn(text):
@@ -382,15 +690,17 @@ def cmd_claim(a):
             raise Refuse('대표 %s 가 살아 있고 넘김(transfer-jarvis)이 없음. 대표에게 넘기게 하거나 사용자가 옛 대표를 '
                          'archive 한 뒤 다시' % old[:8])
         holder['why'] = 'transfer' if tr.get('from') == old and old else ('old_' + ost if old else 'first')
+        holder['token'] = tr.get('token') if holder['why'] == 'transfer' else None
         return set_jarvis(text, old, a.new)
 
-    rewrite_registry(fn)
+    def consume():
+        tok = holder.get('token')
+        if tok and (read_json(st('handoff', 'manager', 'transfer.json')) or {}).get('token') == tok:
+            os.remove(st('handoff', 'manager', 'transfer.json'))
+
+    rewrite_registry(fn, after=consume)
     if 'why' not in holder:
-        return out({'ok': True, 'why': '이미 대표'})
-    try:
-        os.remove(st('handoff', 'manager', 'transfer.json'))
-    except OSError:
-        pass
+        return out({'ok': True, 'why': '이미 기본 수신자'})
     ev = event({'event': 'jarvis_claim', 'old_agent_id': holder['old'], 'new_agent_id': a.new,
                 'reason': holder['why'], 'result': 'switched', 'source': 'jarvisctl'})
     return out({'ok': True, 'event': ev})
@@ -406,12 +716,33 @@ def main(argv=None):
     p = sub.add_parser('lock'); p.add_argument('op', choices=['acquire', 'show', 'stage', 'candidate', 'release'])
     p.add_argument('project'); p.add_argument('value', nargs='?')
     p.add_argument('--reason', default='context', choices=['context', 'crash', 'manual', 'new'])
-    p.add_argument('--result'); p.set_defaults(fn=cmd_lock)
-    p = sub.add_parser('switch'); p.add_argument('project'); p.add_argument('new'); p.set_defaults(fn=cmd_switch)
+    p.add_argument('--result'); p.add_argument('--takeover', action='store_true'); p.set_defaults(fn=cmd_lock)
+    p = sub.add_parser('switch'); p.add_argument('project'); p.add_argument('new')
+    p.add_argument('--takeover', action='store_true'); p.set_defaults(fn=cmd_switch)
     p = sub.add_parser('handoff'); p.add_argument('role'); p.add_argument('file'); p.set_defaults(fn=cmd_handoff)
     p = sub.add_parser('hook-check'); p.add_argument('agent'); p.set_defaults(fn=cmd_hook_check)
     p = sub.add_parser('transfer-jarvis'); p.add_argument('--to', required=True); p.set_defaults(fn=cmd_transfer)
     p = sub.add_parser('claim-jarvis'); p.add_argument('new'); p.set_defaults(fn=cmd_claim)
+    p = sub.add_parser('new-task'); p.add_argument('project'); p.add_argument('--title', required=True)
+    p.add_argument('--request'); p.set_defaults(fn=cmd_new_task)
+    p = sub.add_parser('new-decision'); p.add_argument('project'); p.add_argument('--question', required=True)
+    p.add_argument('--task'); p.add_argument('--option', action='append'); p.add_argument('--recommended')
+    p.add_argument('--key'); p.add_argument('--force', action='store_true'); p.set_defaults(fn=cmd_new_decision)
+    p = sub.add_parser('decide'); p.add_argument('id')
+    p.add_argument('--status', default='decided', choices=['decided', 'waiting', 'dropped'])
+    p.add_argument('--decision'); p.add_argument('--by', default='user', choices=['user', 'criteria'])
+    p.add_argument('--criterion'); p.add_argument('--until'); p.add_argument('--reason'); p.set_defaults(fn=cmd_decide)
+    p = sub.add_parser('decision-note'); p.add_argument('id'); p.add_argument('text')
+    p.set_defaults(fn=cmd_decision_note)
+    p = sub.add_parser('occupy'); p.add_argument('resource'); p.add_argument('--project', required=True)
+    p.add_argument('--task', required=True); p.add_argument('--agent'); p.add_argument('--until')
+    p.add_argument('--note'); p.set_defaults(fn=cmd_occupy)
+    p = sub.add_parser('vacate'); p.add_argument('resource'); p.add_argument('--task'); p.set_defaults(fn=cmd_vacate)
+    p = sub.add_parser('set'); p.add_argument('project'); p.add_argument('field'); p.add_argument('value')
+    p.set_defaults(fn=cmd_set)
+    p = sub.add_parser('register'); p.add_argument('project'); p.add_argument('--root', required=True)
+    p.add_argument('--name'); p.add_argument('--pm-title'); p.add_argument('--linear-project')
+    p.set_defaults(fn=cmd_register)
     a = ap.parse_args(argv)
     try:
         return a.fn(a)

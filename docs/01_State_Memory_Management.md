@@ -1,7 +1,7 @@
 # 01. State & Memory Management
 
 > **핵심 질문:** 무엇을 영구적으로 기억하고 보존할 것인가?
-> **버전:** v0.2 · 2026-11-09 · 구현 반영 (Codex 검토 1차 반영)
+> **버전:** v0.3 · 2026-11-09 · JARVIS 여러 창 반영
 > **관련:** [02 Agent Lifecycle](02_Agent_Lifecycle_Management.md) · [03 Work Lifecycle](03_Work_Lifecycle_Management.md)
 > **실행 지침:** `CLAUDE.md`, `rules/` 는 이 문서를 운영 규칙으로 줄인 것이다. 둘이 다르면 이 문서를 고치고 규칙에 반영한다.
 
@@ -21,7 +21,7 @@
 ```mermaid
 flowchart LR
     subgraph JARVIS["JARVIS 폴더 (git 제외 state)"]
-        REG["registry.yaml<br/>프로젝트 · 현재 PM ID · 대표 JARVIS ID"]
+        REG["registry.yaml<br/>프로젝트 · 현재 PM ID · 기본 수신 JARVIS ID"]
         TASK["state/tasks/<br/>W 작업"]
         DEC["state/decisions/<br/>D 결정"]
         HO["state/handoff/{역할}/<br/>인계 노트"]
@@ -57,7 +57,7 @@ flowchart LR
 
 | 정보 | 원본 | 다른 곳에 남기는 것 |
 |---|---|---|
-| 프로젝트 목록, 현재 PM 에이전트 ID, 대표 JARVIS ID | `registry.yaml` | 대시보드 표시 |
+| 프로젝트 목록, 현재 PM 에이전트 ID, 기본 수신 JARVIS ID | `registry.yaml` (`jarvisctl` 로만 바꿈) | 대시보드 표시 |
 | 위임한 작업(W)의 상태·보고 | `state/tasks/W-*.md` | wiki 요약, Notion 할일 체크리스트 |
 | 사용자·기준으로 정한 결정(D) | `state/decisions/D-*.md` | wiki `decisions/` 에 이유 정리 |
 | 최신 인계 맥락 | `state/handoff/<역할>/latest.md` | 없음 |
@@ -95,7 +95,7 @@ C:/Users/SMDEVELOPER/
 │       │   ├── manager/             # JARVIS 교체용
 │       │   │   ├── latest.md
 │       │   │   ├── YYYYMMDD-HHmmss.md # 이전 노트
-│       │   │   └── transfer.json    # 대표를 넘길 때만
+│       │   │   └── transfer.json    # 기본 수신자를 넘길 때만
 │       │   └── <프로젝트>/          # PM 교체용
 │       │       ├── latest.md
 │       │       ├── YYYYMMDD-HHmmss.md
@@ -123,7 +123,7 @@ C:/Users/SMDEVELOPER/
 
 ```yaml
 boss: 상문
-jarvis: <대표 JARVIS Paseo 에이전트 ID>   # 쓰기 권한을 가진 JARVIS 는 이 하나
+jarvis: <기본 수신 JARVIS Paseo 에이전트 ID>   # 아침 보고·주인 없는 보고를 받는 창 (쓰기 권한과 무관)
 projects:
   nipa:
     name: "NIPA"
@@ -197,27 +197,42 @@ Manager 노트(`manager/latest.md`, JARVIS 가 직접 쓴다):
 
 ## 6. 쓰기 권한
 
+JARVIS 대화창은 동시에 여러 개일 수 있고(2026-11-09 사용자 결정), 모두 같은 상태 파일을 고친다. 창끼리 겹치면 안 되는 쓰기만 `scripts/jarvisctl.py` 로 모아 잠금 안에서 한다.
+
 ```mermaid
 flowchart TD
-    J["대표 JARVIS<br/>(registry jarvis: 와 같은 ID)"] -->|"Edit · Write"| S["registry.yaml · state/ · criteria.md · rules/"]
-    J2["다른 JARVIS 세션"] -.->|"읽기만"| S
+    J1["JARVIS 창 A"] -->|"Edit · Write"| S["state/ 의 기존 파일 · criteria.md · rules/"]
+    J2["JARVIS 창 B"] -->|"Edit · Write"| S
+    J1 --> C["scripts/jarvisctl.py<br/>(잠금 안에서)"]
+    J2 --> C
+    C -->|"번호 발급 new-task · new-decision"| S
+    C -->|"register · switch · claim-jarvis"| REG["registry.yaml"]
     PM["PM"] -.->|"읽기만<br/>바꿀 것은 메시지로 JARVIS 에게"| S
     W["Worker"] -.->|"읽기만"| S
-    H["훅 스크립트<br/>(Stop · SessionEnd · Paseo 플러그인)"] -->|"sessions · sessions.jsonl 만"| S
-    J -->|"worklog.ps1"| R["worklog/raw"]
-    J -->|"요청 받을 때 정리"| WK["worklog/wiki"]
+    H["훅 스크립트"] -->|"sessions · sessions.jsonl · lock"| S
+    J1 -->|"worklog.ps1"| R["worklog/raw"]
 ```
 
 | 주체 | 쓸 수 있는 것 | 강제 방법 |
 |---|---|---|
-| 대표 JARVIS | JARVIS 폴더 전부, worklog, Notion 할일 | — |
-| 다른 JARVIS 세션 | 없음(읽기). 대표가 되려면 `jarvisctl claim-jarvis` | `jarvis_only_write`: `PASEO_AGENT_ID` ≠ `registry.jarvis` 면 막음. schedule 로 뜬 세션은 예외 |
-| PM, Worker | 프로젝트 폴더. JARVIS 폴더는 못 씀 | `jarvis_only_write`(작업 폴더가 JARVIS 밖이면 막음) |
-| 훅 스크립트, `scripts/` | `state/sessions*`, lock, `linear_pending` | 쓰는 경로를 코드로 고정. registry 는 `jarvisctl` 만 CAS 로 바꿈 |
+| JARVIS 창(어느 것이든) | `state/` 의 기존 작업 파일 등, `criteria.md`, `rules/`, worklog, Notion 할일 | — |
+| JARVIS 창, 겹치면 안 되는 쓰기 | 새 작업·결정 파일(번호 발급), 결정 확정, `registry.yaml`, `occupancy.json` | `jarvis_only_write`: Paseo 세션이 Edit·Write 로 `registry.yaml`·`occupancy.json` 을 고치거나 없는 `W-*`·`D-*` 파일을 만들면 막음 → `jarvisctl` 로. 결정 파일은 있는 것도 Edit·Write 금지(`decide`·`decision-note`) |
+| PM, Worker | 프로젝트 폴더. JARVIS 폴더는 못 씀, `jarvisctl` 도 못 씀 | `jarvis_only_write`(작업 폴더가 JARVIS 밖이면 막음), `jarvisctl` 의 호출자 검사 |
+| 훅 스크립트, `scripts/` | `state/sessions*`, lock, `linear_pending`, registry(jarvisctl) | 쓰는 경로를 코드로 고정. 모든 파일 잠금은 소유자 토큰 확인 |
+| Paseo 밖 사용자 세션 | 전부 | 막지 않음(사용자 직접 복구) |
+
+- registry `jarvis:` 는 쓰기 권한이 아니라 **기본 수신자**다: 아침 할일 정리 보고, 맡긴 창이 닫힌 보고, PM 이 보낼 곳을 모를 때 받는 창.
+- 작업 파일의 `jarvis:` 는 그 일을 맡긴 창이다. 보고는 그 창으로 간다(`rules/coordinator.md`).
+- 같은 작업·같은 질문(질문 문장 해시 `key`)의 결정을 또 만들려 하면 `new-decision` 이 열린 결정을 돌려준다. 다른 질문은 새 결정이다.
+- 결정 확정은 `jarvisctl decide` 의 open·waiting → decided CAS 다. 성공한 창만 PM 에게 답을 보낸다(두 창이 서로 다른 답을 보내는 것 방지).
+- 공유 자원 점유(`occupancy.json`)는 `jarvisctl occupy`·`vacate` 로만 바꾼다. 확인과 등록이 한 잠금 안이고, 점유한 PM 이 사라졌으면 회수한다.
+- PM 교체 lock 은 잡은 창(`owner`)만 진행한다. 그 창이 닫혔으면 넘겨받고, 열려 있으면 `--takeover` 로만(기록 남김).
+- 기본 수신자 넘김(`transfer.json`)의 작성과 소비는 registry 잠금 안에서 하고, claim 은 자기가 읽은 토큰의 넘김만 지운다.
+- 창끼리는 사용자와 나눈 대화를 모른다. 지켜야 할 지시는 결정 파일이나 `criteria.md` 에 남긴다. 이것은 코드로 막을 수 없는 남은 위험이다.
 
 설정(`jarvis_dir`)이 비어 있으면 보호 훅은 아무것도 막지 않는다(설치 확인 항목). 훅 입력이 깨졌을 때도 통과시킨다(세션을 멈추지 않는 쪽을 택함).
 
-**알려진 빈틈:** `jarvis_only_write` 는 Edit·Write 도구만 막는다. Bash·PowerShell·Python 으로 쓰는 것은 막지 못한다. 규칙(`rules/`)으로 금지하고, 필요해지면 Bash 패턴 검사를 더한다.
+**알려진 빈틈:** `jarvis_only_write` 는 Edit·Write 도구만 막는다. Bash·PowerShell·Python 으로 쓰는 것은 막지 못한다. 규칙(`rules/`, `CLAUDE.md`)으로 금지한다.
 
 ## 7. 장기 기억
 

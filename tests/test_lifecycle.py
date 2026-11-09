@@ -9,7 +9,7 @@ import tempfile
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 HOOKS = os.path.join(ROOT, 'hooks')
 sys.path.insert(0, HOOKS)
-from jarvis_only_write import not_representative  # noqa: E402
+from jarvis_only_write import MSG_NEW, MSG_REG, shared_block  # noqa: E402
 from jarvis_state import registry, role_of  # noqa: E402
 
 JV, PM, PM2, W1, W2, OTHER = ('aaaaaaaa-0000-0000-0000-00000000000%d' % i for i in range(1, 7))
@@ -116,7 +116,7 @@ try:
     c, out, _ = run('session_context.py', {'hook_event_name': 'SessionStart', 'source': 'startup'}, PM2)
     assert '연결 전' in out
     c, out, _ = run('session_context.py', {'hook_event_name': 'SessionStart'}, OTHER, cwd=J)
-    assert '보조 세션' in out
+    assert 'JARVIS 시작 점검' in out and '기본 수신자' in out          # 다른 JARVIS 창도 같은 맥락
     c, out, _ = run('session_context.py', {'hook_event_name': 'SessionStart'}, W1)
     assert out.strip() == ''
     c, out, _ = run('session_context.py', {'hook_event_name': 'SessionStart'}, '')
@@ -125,12 +125,12 @@ try:
     # ---- create_agent 가드 ----
     assert denied(run('agent_guard.py', create('nipa-pm'), JV, cwd=J)[1])                  # 라벨 없음
     assert denied(run('agent_guard.py', create('nipa-pm', PMLB), JV, cwd=J)[1])            # 활성 PM 열림, lock 없음
-    assert denied(run('agent_guard.py', create('x', PMLB), OTHER, cwd=J)[1])               # 보조 JARVIS
+    assert denied(run('agent_guard.py', create('x', PMLB), OTHER, cwd=J)[1])               # 다른 창도 중복 PM 은 막힘
     assert not denied(run('agent_guard.py', create('wf3-일'), JV, cwd=J)[1])               # PM 아닌 생성은 통과
     code, lk = ctl('lock', 'acquire', 'nipa')
     assert code == 0 and lk['lock']['old_agent_id'] == PM
     assert ctl('lock', 'acquire', 'nipa')[0] == 1                                          # 배타적
-    assert ctl('lock', 'acquire', 'nipa', agent=OTHER)[0] == 1                              # 대표만 lock
+    assert ctl('lock', 'acquire', 'nipa', agent=PM)[0] == 1                                 # PM 은 jarvisctl 못 씀
     assert not denied(run('agent_guard.py', create('nipa-pm', PMLB), JV, cwd=J)[1])        # lock 중 후보 생성 허용
     assert denied(run('agent_guard.py', create('nipa-pm', PMLB), JV, cwd=J)[1])            # 예약 중 두 번째 생성
     post = dict(create('nipa-pm', PMLB), hook_event_name='PostToolUse',
@@ -153,7 +153,7 @@ try:
     code, res = ctl('switch', 'nipa', PM2)
     assert code == 1 and 'detach' in res['why'], res                                       # 아직 JARVIS 의 자식
     rec(PM2, PROJ, labels=PMLB)
-    assert ctl('switch', 'nipa', PM2, agent=OTHER)[0] == 1                                 # 대표만
+    assert ctl('switch', 'nipa', PM2, agent=PM)[0] == 1                                    # PM 은 못 씀
     code, res = ctl('switch', 'nipa', PM2)
     assert code == 0 and res['ok'], res
     assert registry(J)['projects']['nipa']['coordinator'] == PM2
@@ -223,23 +223,26 @@ try:
     c, out, _ = run('pm_reconcile.py', {'hook_event_name': 'UserPromptSubmit'}, JV, cwd=J)
     assert out.strip() == ''                                                               # 한 번만
     c, out, _ = run('pm_reconcile.py', {'hook_event_name': 'UserPromptSubmit'}, OTHER, cwd=J)
-    assert out.strip() == ''                                                               # 대표만
+    assert out.strip() == ''                                                               # 이미 다른 창이 알림
 
     # ---- 대표 JARVIS 전환 ----
     assert ctl('claim-jarvis', OTHER, agent=OTHER)[0] == 1                                 # 대표 살아 있음
     assert ctl('claim-jarvis', OTHER, agent=JV)[0] == 1                                    # 남을 대표로 올리지 못함
-    assert ctl('transfer-jarvis', '--to', 'next', agent=OTHER)[0] == 1                     # 대표 아님
+    assert ctl('transfer-jarvis', '--to', 'next', agent=PM)[0] == 1                        # PM 은 못 씀
     assert ctl('transfer-jarvis', '--to', 'next', agent=JV)[0] == 0
     code, res = ctl('claim-jarvis', OTHER, agent=OTHER)
     assert code == 0 and registry(J)['jarvis'] == OTHER, res
 
     # ---- 쓰기 권한 ----
     f = {'tool_input': {'file_path': os.path.join(J, 'state', 'x.md')}, 'cwd': J}
-    assert not_representative(f, J, JV, OTHER)
-    assert not not_representative(f, J, OTHER, OTHER)
-    assert not not_representative(f, J, '', OTHER)                                         # Paseo 밖 세션
-    assert not not_representative(f, J, JV, OTHER, schedule=True)
-    assert not not_representative({'tool_input': {'file_path': os.path.join(TMP, 'a')}, 'cwd': J}, J, JV, OTHER)
+    assert shared_block(f, J, JV) is None                                                  # 공유 파일은 어느 창이든
+    r = {'tool_input': {'file_path': os.path.join(J, 'registry.yaml')}, 'cwd': J}
+    assert shared_block(r, J, OTHER) == MSG_REG and shared_block(r, J, '') is None          # Paseo 밖 사용자는 허용
+    nt = {'tool_input': {'file_path': os.path.join(J, 'state', 'tasks', 'W-20990101-01.md')}, 'cwd': J}
+    assert shared_block(nt, J, JV) == MSG_NEW                                               # 새 작업 파일 직접 생성 금지
+    ex = {'tool_input': {'file_path': os.path.join(J, 'state', 'tasks', 'W-20261109-01.md')}, 'cwd': J}
+    assert shared_block(ex, J, JV) is None                                                  # 있는 작업 파일 고치기는 허용
+    assert shared_block({'tool_input': {'file_path': os.path.join(TMP, 'a')}, 'cwd': J}, J, JV) is None
 
     # ---- 인계 노트 이력 ----
     note = os.path.join(TMP, 'note.md')
@@ -323,6 +326,96 @@ try:
     got = {r['id']: r for r in lin.read_pending()}
     assert got['a']['done'] and got['b']['done'] and 'conflict' in got['b']['result'], got
     assert not got['c']['done'] and got['c']['error'] and not got['c'].get('claim'), got
+    # ---- 번호 발급·결정 중복·프로젝트 등록 (여러 창이 동시에 써도 겹치지 않게) ----
+    import concurrent.futures as cf
+    with cf.ThreadPoolExecutor(4) as ex_:
+        ids = list(ex_.map(lambda i: ctl('new-task', 'nipa', '--title', '시험%d' % i, agent=[JV, OTHER][i % 2])[1]['id'],
+                           range(6)))
+    assert len(set(ids)) == 6, ids                                                         # 동시에 6개, 번호 안 겹침
+    t1 = open(os.path.join(J, 'state', 'tasks', ids[0] + '.md'), encoding='utf-8').read()
+    assert 'status: assigned' in t1 and 'project: nipa' in t1 and 'jarvis: ' in t1
+    assert ctl('new-task', 'nipa', '--title', 'x', agent=PM)[0] == 1                       # PM 은 못 만듦
+    code, d1 = ctl('new-decision', 'nipa', '--question', 'q?', '--task', ids[0], '--option', '① a', '--option', '② b')
+    assert code == 0 and d1['id'].startswith('D-')
+    code, d2 = ctl('new-decision', 'nipa', '--question', 'q? ', '--task', ids[0], agent=OTHER)
+    assert code == 0 and d2.get('existing') and d2['ids'] == [d1['id']], d2                # 같은 질문은 재사용
+    code, d3 = ctl('new-decision', 'nipa', '--question', '다른 질문', '--task', ids[0], agent=OTHER)
+    assert code == 0 and not d3.get('existing') and d3['id'] != d1['id'], d3              # 다른 질문은 새 결정
+    # 결정 확정은 한 창만 성공(CAS)
+    code, r1 = ctl('decide', d1['id'], '--decision', '①', '--reason', '사용자가 ① 선택')
+    assert code == 0, r1
+    code, r2 = ctl('decide', d1['id'], '--decision', '②', agent=OTHER)
+    assert code == 1 and r2['decision'] == '①', r2                                        # 늦은 창은 거절, 기존 답 확인
+    dtext = open(os.path.join(J, 'state', 'decisions', d1['id'] + '.md'), encoding='utf-8').read()
+    assert 'status: decided' in dtext and 'decision: ①' in dtext and '사용자가 ① 선택' in dtext, dtext
+    # 공유 자원 점유: 확인과 등록이 한 잠금 안
+    assert ctl('occupy', 'langflow-dev:WF4', '--project', 'nipa', '--task', 'W-A', '--agent', PM3)[0] == 0
+    code, oc = ctl('occupy', 'langflow-dev:WF4', '--project', 'ask', '--task', 'W-B', agent=OTHER)
+    assert code == 1 and oc['wait']['task'] == 'W-A', oc                                  # 다른 창도 같은 결과
+    rec(PM3, PROJ, labels=PMLB, archived='2026-11-09T02:00:00Z')                          # 점유한 PM 이 사라지면 회수
+    code, oc = ctl('occupy', 'langflow-dev:WF4', '--project', 'ask', '--task', 'W-B', agent=OTHER)
+    assert code == 0 and oc['reclaimed'][0]['task'] == 'W-A', oc
+    assert ctl('vacate', 'langflow-dev:WF4', '--task', 'W-B')[0] == 0
+    rec(PM3, PROJ, labels=PMLB)
+    # 점유한 PM 이 사라져도 그 Worker 가 열려 있으면 회수하지 않음
+    HOLD, HW = '12345678-0000-0000-0000-000000000001', '12345678-0000-0000-0000-000000000002'
+    rec(HOLD, PROJ, labels=PMLB)
+    assert ctl('occupy', 'db:dev', '--project', 'nipa', '--task', 'W-H', '--agent', HOLD)[0] == 0
+    rec(HOLD, PROJ, labels=PMLB, archived='2026-11-09T03:00:00Z')
+    rec(HW, PROJ, status='running', labels={'paseo.parent-agent-id': HOLD, 'jarvis.task': 'W-H'})
+    code, oc = ctl('occupy', 'db:dev', '--project', 'ask', '--task', 'W-I', agent=OTHER)
+    assert code == 1 and oc['wait']['task'] == 'W-H', oc
+    rec(HW, PROJ, status='closed', labels={'paseo.parent-agent-id': HOLD, 'jarvis.task': 'W-H'})
+    code, oc = ctl('occupy', 'db:dev', '--project', 'ask', '--task', 'W-I', agent=OTHER)
+    assert code == 0 and oc['reclaimed'][0]['task'] == 'W-H', oc
+    # 점유 파일이 깨지면 허가하지 않음
+    occ = os.path.join(J, 'state', 'occupancy.json')
+    good = open(occ, encoding='utf-8').read()
+    w(occ, '{깨진')
+    assert ctl('occupy', 'x', '--project', 'nipa', '--task', 'W-Z')[0] == 1
+    w(occ, good)
+    # 결정 파일은 직접 못 고침, 설명은 decision-note, 프로젝트가 다르면 같은 질문도 새 결정
+    dpath = {'tool_input': {'file_path': os.path.join(J, 'state', 'decisions', d1['id'] + '.md')}, 'cwd': J}
+    assert shared_block(dpath, J, JV) is not None
+    assert ctl('decision-note', d1['id'], '참고 한 줄')[0] == 0
+    assert '참고 한 줄' in open(os.path.join(J, 'state', 'decisions', d1['id'] + '.md'), encoding='utf-8').read()
+    code, dq = ctl('new-decision', 'ask', '--question', '같은 질문')
+    code, dr = ctl('new-decision', 'nipa', '--question', '같은 질문')
+    assert not dr.get('existing') and dr['id'] != dq['id'], dr
+    # PM 은 기본 수신자가 될 수 없음
+    assert ctl('claim-jarvis', PM3, agent=PM3)[0] == 1
+    oc_path = {'tool_input': {'file_path': os.path.join(J, 'state', 'occupancy.json')}, 'cwd': J}
+    assert shared_block(oc_path, J, JV) is not None                                        # 직접 수정 금지
+    # 교체 lock 은 잡은 창만 진행, 넘겨받기는 기록
+    assert ctl('lock', 'acquire', 'nipa', '--reason', 'manual', agent=JV)[0] == 0
+    assert ctl('lock', 'stage', 'nipa', 'provisioning', agent=OTHER)[0] == 1
+    assert denied(run('agent_guard.py', create('nipa-pm', PMLB), OTHER, cwd=J)[1])         # 남의 교체에 PM 생성 금지
+    assert ctl('lock', 'stage', 'nipa', 'provisioning', '--takeover', agent=OTHER)[0] == 0
+    assert events()[-1]['event'] == 'lock_takeover'
+    assert ctl('lock', 'release', 'nipa', agent=OTHER)[0] == 0
+    # 검토·schedule 세션은 JARVIS 폴더에 있어도 jarvisctl 못 씀
+    RV = 'ffffffff-0000-0000-0000-000000000001'
+    rec(RV, J, labels={'jarvis.role': 'reviewer'})
+    assert ctl('new-task', 'nipa', '--title', 'x', agent=RV)[0] == 1
+    # 프로젝트 등록·필드: pm_title 기본값, set 으로 변경, 그 제목도 PM 생성으로 판정
+    assert ctl('register', 'docs', '--root', 'C:/x/docs', '--linear-project', 'DOCS')[0] == 0
+    rg = registry(J)['projects']['docs']
+    assert rg['linear_project'] == 'DOCS' and rg['pm_title'] == 'docs-pm', rg
+    assert ctl('register', 'docs', '--root', 'C:/x/docs')[0] == 1                          # 중복 등록 거절
+    assert ctl('set', 'docs', 'pm_title', '문서 PM')[0] == 0
+    assert ctl('set', 'docs', 'coordinator', 'x')[0] == 1                                  # coordinator 는 switch 로만
+    assert registry(J)['projects']['docs']['pm_title'] == '문서 PM'
+    assert registry(J)['projects']['nipa']['coordinator'] == PM3                           # 다른 항목은 그대로
+    assert denied(run('agent_guard.py', create('문서 PM'), JV, cwd=J)[1])                  # 라벨 없는 PM 제목도 잡음
+    # Worker 이름은 하는 일 위주
+    for bad in ('nipa-w-W-20261109-01', 'worker-1', 'W-20261109-01', '쿼리확인'):
+        assert denied(run('agent_guard.py', create(bad, {'jarvis.task': 'W-1'}), PM3)[1]), bad
+    assert not denied(run('agent_guard.py', create('wf3-쿼리확인', {'jarvis.task': 'W-1'}), PM3)[1])
+    # 기본 수신자 넘김: claim 이 넘김 파일을 소비
+    assert ctl('transfer-jarvis', '--to', 'next', agent=OTHER)[0] == 0
+    assert ctl('claim-jarvis', JV, agent=JV)[0] == 0 and registry(J)['jarvis'] == JV
+    assert not os.path.exists(os.path.join(J, 'state', 'handoff', 'manager', 'transfer.json'))
+
     print('ok')
 finally:
     shutil.rmtree(TMP, ignore_errors=True)

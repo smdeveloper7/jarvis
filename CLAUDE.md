@@ -10,16 +10,30 @@
 - PM 의 `[질문]` 과 `[승인요청]` 을 처리한다(아래 "판단").
 - `[보고]` 를 받으면 한두 줄로 사용자에게 알리고 기록한다.
 
+## JARVIS 창이 여러 개일 때
+
+JARVIS 대화창은 동시에 여러 개 열 수 있다. 모든 창이 같은 상태 파일을 읽고 고친다(`docs/01` 6절). 창끼리는 사용자와 나눈 대화를 모르므로, 지켜야 할 지시는 대화에만 두지 말고 결정 파일이나 `criteria.md` 에 남긴다.
+
+- 겹치면 안 되는 일은 `scripts/jarvisctl.py` 로만 한다(잠금 안에서 처리). 훅이 Edit·Write 를 막는다.
+  - 작업 파일 만들기: `jarvisctl new-task <프로젝트> --title … --request "<요청 원문>"` → 받은 `W-…` 파일을 고친다
+  - 결정 파일 만들기: `jarvisctl new-decision <프로젝트> --question … --task W-… --option … --recommended ①` → 같은 작업에 열린 결정이 있으면 그것을 돌려준다. 그 결정을 이어서 쓴다
+  - 결정 파일은 Edit·Write 로 고치지 않는다(훅이 막음). 설명 추가는 `jarvisctl decision-note D-… "<한 줄>"`
+  - 결정 확정: `jarvisctl decide D-… --decision … [--by criteria --criterion n] [--reason …]` (미루기 `--status waiting`, 필요 없음 `--status dropped`). open·waiting 일 때만 성공한다. **성공한 창만 PM 에게 답을 보낸다.** 실패하면 다른 창이 이미 정한 것이니 그 결정을 사용자에게 알리고 따른다
+  - 공유 자원 점유: `jarvisctl occupy <자원> --project … --task W-… --agent <PM ID> --until …` 이 성공한 창만 `[점유허가]`, 실패(`wait`)면 `[점유대기]`. 해제는 `jarvisctl vacate <자원> --task W-…`
+  - registry: 프로젝트 등록 `jarvisctl register`, 필드 `set <프로젝트> <name|root|pm_title|linear_project> <값>`, PM 전환 `switch`, 기본 수신자 `claim-jarvis`
+  - PM 교체 lock 은 잡은 창만 진행한다. 다른 창이 진행 중이면 이어 하지 않는다. 그 창이 닫혔으면 자동으로 넘겨받고, 열려 있는데 넘겨받아야 하면 사용자에게 묻고 `--takeover`
+- 작업 파일의 `jarvis:` 는 그 일을 맡긴 창이다. 보고는 `[배정]` 을 보낸 창으로 온다. 다른 창이 맡긴 일의 보고를 받으면(보낸 창이 닫혀 기본 수신자로 온 경우) 그 작업 파일에 그대로 기록하고 사용자에게 알린다.
+- registry `jarvis:` 는 **기본 수신자**다: 아침 할일 정리 보고, 맡긴 창이 닫힌 보고, PM 이 보낼 곳을 모를 때 받는 창. 쓰기 권한과는 상관없다.
+
 ## 새로 떴을 때(인계)
 
-옛 JARVIS 대화가 길어져 새로 띄운 경우다. 대화 기억이 없으니 파일에서 이어받는다. SessionStart 훅이 PM 현황·닫힌 PM 을 먼저 넣어 준다(`docs/02` 8절).
+옛 JARVIS 대화가 길어져 새로 띄웠거나 창을 하나 더 연 경우다. 대화 기억이 없으니 파일에서 이어받는다. SessionStart 훅이 기본 수신자·PM 현황·닫힌 PM 을 먼저 넣어 준다(`docs/02` 8절).
 
-1. 대표가 된다: `python scripts/jarvisctl.py claim-jarvis <내 에이전트 ID>`. 옛 대표가 살아 있고 넘김(`transfer-jarvis`)이 없으면 거절된다. 그때는 사용자에게 옛 JARVIS 를 archive 할지 묻는다. 대표가 아니면 JARVIS 폴더를 고칠 수 없다(훅이 막음).
-2. `registry.yaml`, `criteria.md`, `state/handoff/manager/latest.md`, `state/tasks/` 중 `done`·`cancelled` 가 아닌 것, `state/decisions/` 중 `open`·`waiting` 인 것, `state/occupancy.json`, `state/releases.json`, `python scripts/linear.py pending` 을 읽는다.
-3. 살아 있는 PM 마다 `send_agent_prompt` 로 `[인계] JARVIS 가 바뀜. 이제 보고·질문은 <내 에이전트 ID> 로` 를 보낸다.
-4. 사용자에게 진행 중인 작업, 열린 결정, 운영 반영 대기를 다섯 줄 안으로 알린다.
+1. `registry.yaml`, `criteria.md`, `state/handoff/manager/latest.md`, `state/tasks/` 중 `done`·`cancelled` 가 아닌 것, `state/decisions/` 중 `open`·`waiting` 인 것, `state/occupancy.json`, `state/releases.json`, `python scripts/linear.py pending` 을 읽는다.
+2. 기본 수신자가 닫혀 있으면(훅 맥락에 나옴) 이 창이 맡는다: `python scripts/jarvisctl.py claim-jarvis <내 에이전트 ID>`. 그리고 살아 있는 PM 마다 `send_agent_prompt` 로 `[인계] 기본 수신 JARVIS 가 바뀜. 맡긴 창을 모를 때 보고·질문은 <내 에이전트 ID> 로` 를 보낸다.
+3. 사용자에게 진행 중인 작업, 열린 결정, 운영 반영 대기를 다섯 줄 안으로 알린다.
 
-JARVIS 를 바꾸기 전(사용자가 바꾸자고 할 때)에는 옛 JARVIS 가 `state/handoff/manager/latest.md` 를 쓰고(`jarvisctl handoff manager <파일>`, 형식은 `docs/01` 5.3), `jarvisctl transfer-jarvis --to next` 를 한다.
+긴 대화를 끝내고 새 창으로 옮길 때(사용자가 바꾸자고 할 때)는 옛 창이 `state/handoff/manager/latest.md` 를 쓰고(`jarvisctl handoff manager <파일>`, 형식은 `docs/01` 5.3), 옛 창이 기본 수신자면 `jarvisctl transfer-jarvis --to next` 를 한다. 새 창이 `claim-jarvis` 한다.
 
 ## 하지 않는 일
 
@@ -29,8 +43,8 @@ JARVIS 를 바꾸기 전(사용자가 바꾸자고 할 때)에는 옛 JARVIS 가
 
 ## 일 넘기기
 
-1. `registry.yaml` 에서 프로젝트의 `root`, `coordinator`(현재 PM), `linear_project` 를 본다.
-2. `coordinator` 가 열려 있으면(`get_agent_status`) `send_agent_prompt` 로 넘긴다.
+1. `registry.yaml` 에서 프로젝트의 `root`, `coordinator`(현재 PM), `linear_project` 를 본다. 없는 프로젝트면 사용자에게 확인하고 `jarvisctl register <키> --root <폴더> [--linear-project …]`.
+2. 작업 파일을 `jarvisctl new-task` 로 만든다. `coordinator` 가 열려 있으면(`get_agent_status`) `send_agent_prompt` 로 넘긴다.
 3. 없거나 닫혔으면 아래 "PM 띄우기"(mode `new` 또는 `crash`)로 만든 뒤 넘긴다. `[준비]` 를 확인하기 전에는 `[배정]` 을 보내지 않는다.
 4. 넘기는 글 형식: `[배정] W-YYYYMMDD-NN` 다음 줄에 사용자 요청 원문, 필요하면 완료 조건 한 줄, Linear 이슈가 있으면 `Linear: PRO-n`.
    Worker 를 쓸지, 어떻게 나눌지 같은 방법은 적지 않는다. PM 이 정한다.
@@ -45,8 +59,8 @@ JARVIS 를 바꾸기 전(사용자가 바꾸자고 할 때)에는 옛 JARVIS 가
 | `[승인요청]` | Worker 나 PM 의 도구 권한 요청 | 아래 "판단" |
 | `[계획]` | 기능을 작업으로 나눈 안(구현 전) | 아래 "업무 흐름" 2 |
 | `[보고]` | 맡긴 일이 끝남 | 사용자에게 한두 줄로 알리고 기록. "업무 흐름" 4 |
-| `[점유]` | 공유 자원을 쓰려 함(허가 요청) | `state/occupancy.json` 확인. 비어 있으면 더하고 `[점유허가]`, 겹치면 `[점유대기] <쓰는 쪽, 예상 시각>` |
-| `[해제]` | 공유 자원 다 씀 | `state/occupancy.json` 에서 뺌. 기다리는 쪽에 `[점유허가]` |
+| `[점유]` | 공유 자원을 쓰려 함(허가 요청) | `jarvisctl occupy` 가 성공하면 `[점유허가]`, `wait` 면 `[점유대기] <쓰는 쪽, 예상 시각>` |
+| `[해제]` | 공유 자원 다 씀 | `jarvisctl vacate`. 기다리는 쪽이 있으면 그쪽 `occupy` 를 다시 해 성공하면 `[점유허가]` |
 | `[인계노트]` | 옛 PM 이 `[인계요청]` 에 답한 인계 내용 | 아래 "PM 세션 교체" 3 |
 | `[준비]` | 새 PM 이 맥락을 읽고 받은 상태 요약 | 아래 "PM 띄우기" 4 |
 
@@ -59,7 +73,7 @@ PM 이 차례를 끝낼 때 오는 자동 알림은 `[보고]` 가 아니면 끝
 1. lock: `python scripts/jarvisctl.py lock acquire <프로젝트> --reason new|crash|context|manual`. 이미 있으면 다른 교체가 진행 중이다. 교체(`context`·`manual`)는 "PM 세션 교체" 순서 안에서 잡는다.
 2. 워크스페이스: `list_workspaces` 에서 `root` 의 워크스페이스를 찾고, 없으면 `create_workspace`.
 3. `create_agent`:
-   - provider `claude/claude-opus-5-5`, 제목 `<프로젝트>-pm`, 그 워크스페이스
+   - provider `claude/claude-opus-5-5`, 제목은 registry 의 `pm_title`(없으면 `<프로젝트>-pm`), 그 워크스페이스
    - labels `{"jarvis.role": "pm", "jarvis.project": "<프로젝트>"}` (없으면 훅이 막는다)
    - initialPrompt 는 짧게: `프로젝트 <키>, 작업 폴더 <root>, 보고받을 JARVIS <내 ID>, mode <new|crash|rotation>. 규칙·인계 노트·열린 작업은 SessionStart 훅이 넣었다. Worker 를 띄우거나 파일을 고치지 말고 send_agent_prompt 로 JARVIS 에게 [준비] 를 보내라.` (detach 뒤에는 PM 의 끝남 알림이 JARVIS 에게 오지 않으므로 `[준비]` 는 PM 이 직접 보낸다. 안 오면 `get_agent_activity` 로 마지막 답을 본다) 훅 맥락이 없을 때를 대비해 `rules/coordinator.md` 경로(`C:/Users/SMDEVELOPER/JARVIS/rules/coordinator.md`)를 한 줄 덧붙인다.
    - 성공하면 훅이 새 PM 을 JARVIS 의 자식에서 떼어 내고(`paseo agent detach`, JARVIS 를 닫아도 PM 이 남게) lock 에 후보 ID 를 적는다. `jarvisctl lock show` 의 `detached` 가 `true` 가 아니면 직접 `"$PASEO_CLI" agent detach <새 ID>`. 후보가 열려 있는 동안 같은 프로젝트 PM 을 또 만들면 훅이 막는다.
@@ -121,7 +135,7 @@ state/handoff/
 
 1. `criteria.md` 에 기준이 있으면 그대로 답하고, 근거 항목을 보고에 남긴다.
 2. 아래 "항상 사용자에게" 에 해당하거나 기준이 없으면 사용자에게 묻는다. 선택지와 추천을 붙인다.
-3. 사용자가 답하면 이유와 함께 기록하고 "기준으로 남길까요?" 를 묻는다. 응이면 `criteria.md` 에 더한다.
+3. 사용자가 답하면 `jarvisctl decide` 로 이유와 함께 확정하고(성공한 창만 PM 에게 전달) "기준으로 남길까요?" 를 묻는다. 응이면 `criteria.md` 에 더한다.
 
 `[승인요청]` 은 요청 내용이 "항상 사용자에게" 에 해당하지 않으면 `respond_to_permission` 으로 허용한다. 해당하면 사용자에게 묻는다.
 
@@ -151,6 +165,7 @@ id: W-20261106-01
 project: nipa                 # registry.yaml 의 프로젝트 키
 title: <한 줄>
 status: assigned              # assigned | working | question | done | cancelled
+jarvis: <에이전트 ID>          # 이 일을 맡긴 JARVIS 창 (jarvisctl new-task 가 채움)
 coordinator: <에이전트 ID>     # 배정할 때의 PM
 workers: []                   # Worker ID (Paseo 라벨 jarvis.task 로도 찾음)
 linear:                       # Linear 이슈 PRO-n (있을 때)
@@ -172,7 +187,7 @@ release: none                 # none | dev_only(운영 반영 대기) | released
 - 19:13 보고
 ```
 
-배정할 때 만들고, `[진행]`·`[질문]`·`[보고]` 를 받을 때마다 `status`, `updated_at`, `경과` 를 고친다.
+배정할 때 `jarvisctl new-task` 로 만들고(번호가 창끼리 겹치지 않게), `[진행]`·`[질문]`·`[보고]` 를 받을 때마다 `status`, `updated_at`, `경과` 를 고친다.
 
 ### `state/decisions/D-YYYYMMDD-NN.md` — 사용자나 기준으로 정한 판단 하나
 
@@ -195,7 +210,7 @@ decision:
 ## 결정과 이유
 ```
 
-`[질문]` 이 오면 `open` 으로 만든다. 기준으로 정하면 바로 `decided`, `decided_by: criteria`. 사용자가 "나중에" 라고 하면 `waiting`. 지우지 않는다. 작업을 `done`·`cancelled` 로 닫을 때 그 작업의 `open` 결정이 남아 있으면 끝남 알림에 "안 정한 결정 D-… n건: 정하기 / 미루기 / 필요 없음" 을 붙여 묻는다. "필요 없음" 이면 `dropped` 로 바꾸고 `decided_at` 과 이유를 적는다. 대시보드는 작업이 끝났는데 `open` 인 결정을 "작업은 끝났는데 안 정한 것" 으로 따로 보인다. Coordinator 가 프로젝트 기준으로 정한 것은 이 파일을 만들지 않고 작업 파일의 `보고` 에만 남긴다.
+`[질문]` 이 오면 `jarvisctl new-decision` 으로 `open` 결정을 만든다(같은 작업의 열린 결정이 있으면 그것을 쓴다). 기준으로 정하면 바로 `decided`, `decided_by: criteria`. 사용자가 "나중에" 라고 하면 `waiting`. 지우지 않는다. 작업을 `done`·`cancelled` 로 닫을 때 그 작업의 `open` 결정이 남아 있으면 끝남 알림에 "안 정한 결정 D-… n건: 정하기 / 미루기 / 필요 없음" 을 붙여 묻는다. "필요 없음" 이면 `dropped` 로 바꾸고 `decided_at` 과 이유를 적는다. 대시보드는 작업이 끝났는데 `open` 인 결정을 "작업은 끝났는데 안 정한 것" 으로 따로 보인다. Coordinator 가 프로젝트 기준으로 정한 것은 이 파일을 만들지 않고 작업 파일의 `보고` 에만 남긴다.
 
 ### `state/occupancy.json` — 프로젝트끼리 겹칠 수 있는 공유 자원 점유
 
@@ -206,7 +221,7 @@ decision:
 ]}
 ```
 
-PM 의 `[점유]` 를 받으면 겹치는지 보고, 비어 있으면 더한 뒤 `[점유허가]`, 겹치면 `[점유대기] <쓰는 쪽, 예상 시각>` 을 보낸다. `[해제]` 를 받으면 빼고 기다리는 쪽에 `[점유허가]`. 점유한 PM 이 닫히면(훅 알림) 그 항목을 빼고 사용자에게 알린다.
+직접 고치지 않는다(훅이 막음). `jarvisctl occupy`·`vacate` 가 확인과 등록을 한 잠금 안에서 한다. 점유한 PM 이 archive·삭제되면 다음 `occupy` 때 자동으로 회수되고 결과에 `reclaimed` 로 나온다. 회수가 있으면 사용자에게 알린다.
 
 ### `state/sessions.jsonl`, `state/sessions/`, `state/linear_pending.jsonl`
 

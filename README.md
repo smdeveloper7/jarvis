@@ -64,7 +64,7 @@ JARVIS 는 개인용 Manager 에이전트입니다. 사용자는 JARVIS 하고�
 | 정책 문서 | `docs/01~03_*.md` | 위 세 관리 영역 |
 | JARVIS 규칙 | `CLAUDE.md` | 이 폴더에서 뜬 세션이 JARVIS 가 됩니다. 어디에 맡길지, PM 을 어떻게 띄우고 바꿀지, 무엇을 사용자에게 물을지, 무엇을 어떻게 기록할지 |
 | PM, Worker 규칙 | `rules/` | PM 은 SessionStart 훅으로, Worker 는 PM 의 첫 지시로 받는 규칙 |
-| 수명주기 명령 | `scripts/jarvisctl.py` | 교체 조건 점검, 교체 lock, registry 전환(CAS), 인계 노트 보관, 대표 JARVIS 전환 |
+| 수명주기·상태 명령 | `scripts/jarvisctl.py` | 작업·결정 번호 발급, 결정 확정(CAS), 공유 자원 점유, 프로젝트 등록·필드, 교체 조건 점검, 교체 lock(소유 창만), registry 전환(CAS), 인계 노트 보관, 기본 수신자 전환. 모두 잠금 안에서 |
 | Linear 연동 | `scripts/linear.py` | JARVIS 만 쓰는 Linear 조회·이슈 만들기·상태·코멘트, 실패 재시도 |
 | 판단 기준 | `criteria.md` | JARVIS 가 사용자 대신 정해도 되는 기준. 사용자가 결정할 때마다 하나씩 늘어남 |
 | 프로젝트 목록 | `registry.yaml` | 프로젝트 키, 폴더, 지금 Coordinator ID. 개인 상태라 git 에 올리지 않음(`registry.example.yaml` 참고) |
@@ -105,7 +105,7 @@ python scripts\jarvisctl.py switch nipa <새 ID>     # registry 를 CAS 로 바�
 
 새 프로젝트, 닫힌 PM 다시 만들기, 교체가 모두 같은 "PM 띄우기" 절차를 씁니다. 사용자가 Paseo 화면에서 PM 을 닫으면 JARVIS 가 다음 글을 받을 때 훅이 알아채 알려 주고, 다음 `[배정]` 때 새로 띄웁니다. 자세한 순서와 실패 처리는 [docs/02](docs/02_Agent_Lifecycle_Management.md) 와 `CLAUDE.md` 의 "PM 띄우기", "PM 세션 교체" 에 있습니다.
 
-JARVIS 자신도 세션이 여럿일 수 있지만 상태를 고칠 수 있는 것은 registry 의 `jarvis:` 에 적힌 대표 하나입니다. 새 JARVIS 는 `jarvisctl claim-jarvis <자기 ID>` 로 대표가 됩니다(옛 대표가 닫혔거나 넘겼을 때만).
+JARVIS 대화창은 동시에 여러 개 열 수 있고, 모두 같은 상태 파일을 고칩니다. 창끼리 겹치면 안 되는 일(작업·결정 번호 발급, registry 변경, PM 교체)은 `jarvisctl` 이 잠금 안에서 처리하고, 훅이 그 밖의 경로를 막습니다. registry 의 `jarvis:` 는 쓰기 권한이 아니라 기본 수신자(아침 정리 보고와 맡긴 창이 닫힌 보고를 받는 창)이고, `jarvisctl claim-jarvis <자기 ID>` 로 바꿉니다(그 창이 닫혔거나 넘겼을 때만).
 
 ## Linear
 
@@ -139,7 +139,7 @@ JARVIS 는 이 저장소를 받은 폴더에서 돌아갑니다. 플러그인에
      --config jarvis_dir=C:/Users/<나>/JARVIS
    ```
 
-7. JARVIS 폴더와 프로젝트 폴더를 Paseo 프로젝트로 등록하고(`paseo project create <폴더>`), JARVIS 폴더에서 제목을 `JARVIS` 로 해 에이전트를 띄웁니다. 처음 뜬 JARVIS 는 `python scripts\jarvisctl.py claim-jarvis <자기 에이전트 ID>` 로 대표가 됩니다(`CLAUDE.md` "새로 떴을 때"). 그다음부터는 Paseo 앱에서 JARVIS 와 대화하면 됩니다.
+7. JARVIS 폴더와 프로젝트 폴더를 Paseo 프로젝트로 등록하고(`paseo project create <폴더>`), JARVIS 폴더에서 제목을 `JARVIS` 로 해 에이전트를 띄웁니다. 처음 뜬 JARVIS 는 `python scripts\jarvisctl.py claim-jarvis <자기 에이전트 ID>` 로 기본 수신자가 됩니다(`CLAUDE.md` "새로 떴을 때"). 창은 더 열어도 됩니다. 그다음부터는 Paseo 앱에서 JARVIS 와 대화하면 됩니다.
 8. Notion 할 일을 쓰려면 [Notion 할 일](#notion-할-일) 의 설정을 따릅니다. 쓰지 않으면 건너뛰어도 됩니다.
 9. Linear 를 쓰려면 개인 API 키를 사용자 환경변수 `LINEAR_API_KEY` 에 두고, registry 프로젝트에 `linear_project` 를 적습니다.
 
@@ -150,7 +150,7 @@ JARVIS 는 이 저장소를 받은 폴더에서 돌아갑니다. 플러그인에
 | 키 | 필수 | 뜻 |
 |---|---|---|
 | `python` | 예 | 훅을 돌릴 Python 3. Windows 는 `python.exe` 절대 경로. 비어 있으면 훅이 돌지 않음 |
-| `jarvis_dir` | 아니요 | JARVIS 폴더 절대 경로. 비우면 수명주기 훅과 폴더 보호가 모두 꺼짐. 다른 세션(PM, Worker, 대표가 아닌 JARVIS)이 이 폴더 파일을 Edit, Write 로 고치지 못하게 막음 |
+| `jarvis_dir` | 아니요 | JARVIS 폴더 절대 경로. 비우면 수명주기 훅과 폴더 보호가 모두 꺼짐. PM, Worker 가 이 폴더 파일을 Edit, Write 로 고치지 못하게 막고, JARVIS 창도 `registry.yaml` 과 새 작업·결정 파일은 `jarvisctl` 로만 쓰게 함 |
 
 훅은 새로 뜨는 세션부터 걸립니다. 설치 전에 떠 있던 세션에는 걸리지 않습니다.
 
@@ -185,7 +185,7 @@ $env:JARVIS_DIR = "C:\Users\<나>\JARVIS"; $env:PORT = "4991"; python dashboard\
 
 | 탭 | 보여 주는 것 | 출처 |
 |---|---|---|
-| 에이전트 | 3D 사무실. 사장실, JARVIS 자리, 프로젝트별 방에 PM 과 Worker 책상이 있습니다. 일하는 세션은 앉아서 타자를 치고, 권한을 기다리면 머리 위에 주황 `!` 가 뜨고, 쉬면 휴게실로 갑니다. 교체된 옛 PM 은 archive 전까지 그 방에 "(이전)" 으로 남습니다 | Paseo 에이전트 기록(제목, 부모, 상태, `jarvis.role`·`jarvis.project`·`jarvis.task` 라벨), registry 의 대표 JARVIS·현재 PM |
+| 에이전트 | 3D 사무실. 사장실, JARVIS 자리, 프로젝트별 방에 PM 과 Worker 책상이 있습니다. 일하는 세션은 앉아서 타자를 치고, 권한을 기다리면 머리 위에 주황 `!` 가 뜨고, 쉬면 휴게실로 갑니다. 교체된 옛 PM 은 archive 전까지 그 방에 "(이전)" 으로 남습니다 | Paseo 에이전트 기록(제목, 부모, 상태, `jarvis.role`·`jarvis.project`·`jarvis.task` 라벨), registry 의 기본 수신 JARVIS·현재 PM |
 | 흐름 | `[배정]` `[보고]` `[질문]` 메시지를 카드 트리, 3D 부채꼴, 평면 그래프와 목록으로 | 각 세션 대화 기록 |
 | 결정 | 지금 정할 것, 작업은 끝났는데 안 정한 것, 미뤄 둔 것, 정한 것(누가, 기준 몇 번으로). 권한을 기다리는 세션 | `state/decisions/*.md`, Paseo 주의 표시 |
 | 할 일 | Notion 할일 DB 의 오늘, 이번 주, 밀린 일. 완료 체크와 오늘로 옮기기 | Notion API |
@@ -216,7 +216,7 @@ JARVIS 는 상태가 바뀌는 즉시 `state/` 에 씁니다. 대화가 길어�
 | `state/tasks/W-YYYYMMDD-NN.md` | 작업 하나. 상태(assigned, working, question, done, cancelled), 확인 여부, 운영 반영 여부, 경과 |
 | `state/decisions/D-YYYYMMDD-NN.md` | 판단 하나. 질문, 선택지, 추천, 상태(open, waiting, decided, dropped), 누가 어떤 기준으로 정했는지 |
 | `state/handoff/<역할>/` | 인계 노트. `manager/`(JARVIS), `<프로젝트>/`(PM) 마다 `latest.md` 와 이전 노트, 교체 중에만 있는 `rotating.lock` |
-| `state/sessions.jsonl` | 세션 교체·닫힘·종료·대표 전환 이력(event_id 가 붙은 한 줄씩) |
+| `state/sessions.jsonl` | 세션 교체·닫힘·종료·기본 수신자 전환 이력(event_id 가 붙은 한 줄씩) |
 | `state/sessions/<에이전트ID>.json` | PM 의 마지막 컨텍스트 크기(Stop 훅), `.hook.json` 은 SessionStart 표식 |
 | `state/linear_pending.jsonl` | 실패한 Linear 쓰기, `linear.py retry` 로 다시 |
 | `state/occupancy.json` | 프로젝트끼리 겹칠 수 있는 공유 자원(dev 서버 플로우, 공용 DB 등)을 지금 누가 쓰는지 |
