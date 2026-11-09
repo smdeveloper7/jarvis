@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse·PostToolUse 훅: Paseo 에이전트 생성·닫기를 역할별로 막고 기록한다 (docs/02 4~7절).
+"""PreToolUse·PostToolUse 훅: Paseo 에이전트 생성·닫기를 역할별로 막고 기록한다 (docs/02 3·4·7절).
 
 matcher: mcp__paseo__create_agent | mcp__paseo__archive_agent | mcp__paseo__kill_agent
 

@@ -27,13 +27,13 @@ JARVIS 대화창은 동시에 여러 개 열 수 있다. 모든 창이 같은 �
 
 ## 새로 떴을 때(인계)
 
-옛 JARVIS 대화가 길어져 새로 띄웠거나 창을 하나 더 연 경우다. 대화 기억이 없으니 파일에서 이어받는다. SessionStart 훅이 기본 수신자·PM 현황·닫힌 PM 을 먼저 넣어 준다(`docs/02` 8절).
+옛 JARVIS 대화가 길어져 새로 띄웠거나 창을 하나 더 연 경우다. 대화 기억이 없으니 파일에서 이어받는다. SessionStart 훅이 기본 수신자·PM 현황·닫힌 PM 을 먼저 넣어 준다(`docs/02` 6절).
 
 1. `registry.yaml`, `criteria.md`, `state/handoff/manager/latest.md`, `state/tasks/` 중 `done`·`cancelled` 가 아닌 것, `state/decisions/` 중 `open`·`waiting` 인 것, `state/occupancy.json`, `state/releases.json`, `python scripts/linear.py pending` 을 읽는다.
 2. 기본 수신자가 닫혀 있으면(훅 맥락에 나옴) 이 창이 맡는다: `python scripts/jarvisctl.py claim-jarvis <내 에이전트 ID>`. 그리고 살아 있는 PM 마다 `send_agent_prompt` 로 `[인계] 기본 수신 JARVIS 가 바뀜. 맡긴 창을 모를 때 보고·질문은 <내 에이전트 ID> 로` 를 보낸다.
 3. 사용자에게 진행 중인 작업, 열린 결정, 운영 반영 대기를 다섯 줄 안으로 알린다.
 
-긴 대화를 끝내고 새 창으로 옮길 때(사용자가 바꾸자고 할 때)는 옛 창이 `state/handoff/manager/latest.md` 를 쓰고(`jarvisctl handoff manager <파일>`, 형식은 `docs/01` 5.3), 옛 창이 기본 수신자면 `jarvisctl transfer-jarvis --to next` 를 한다. 새 창이 `claim-jarvis` 한다.
+긴 대화를 끝내고 새 창으로 옮길 때(사용자가 바꾸자고 할 때)는 옛 창이 `state/handoff/manager/latest.md` 를 쓰고(`jarvisctl handoff manager <파일>`, 형식은 `docs/01` 8.4), 옛 창이 기본 수신자면 `jarvisctl transfer-jarvis --to next` 를 한다. 새 창이 `claim-jarvis` 한다.
 
 ## 하지 않는 일
 
@@ -68,7 +68,7 @@ PM 이 차례를 끝낼 때 오는 자동 알림은 `[보고]` 가 아니면 끝
 
 ## PM 띄우기
 
-새 프로젝트, 닫힌 PM 다시 만들기, 세션 교체가 모두 이 절차 하나를 쓴다(`docs/02` 4절). PM(Coordinator)은 프로젝트(registry 키)로 계속 있고, Paseo 에이전트는 바꿀 수 있는 실행 세션이다.
+새 프로젝트, 닫힌 PM 다시 만들기, 세션 교체가 모두 이 절차 하나를 쓴다(`docs/02` 3절). PM(Coordinator)은 프로젝트(registry 키)로 계속 있고, Paseo 에이전트는 바꿀 수 있는 실행 세션이다.
 
 1. lock: `python scripts/jarvisctl.py lock acquire <프로젝트> --reason new|crash|context|manual`. 이미 있으면 다른 교체가 진행 중이다. 교체(`context`·`manual`)는 "PM 세션 교체" 순서 안에서 잡는다.
 2. 워크스페이스: `list_workspaces` 에서 `root` 의 워크스페이스를 찾고, 없으면 `create_workspace`.
@@ -82,7 +82,7 @@ PM 이 차례를 끝낼 때 오는 자동 알림은 `[보고]` 가 아니면 끝
 
 ## PM 세션 교체
 
-컨텍스트가 커진 PM 을 인계 노트를 받아 새 세션으로 바꾼다(`docs/02` 5절).
+컨텍스트가 커진 PM 을 인계 노트를 받아 새 세션으로 바꾼다(`docs/02` 4·5절).
 
 ### 언제
 
@@ -225,7 +225,7 @@ decision:
 
 ### `state/sessions.jsonl`, `state/sessions/`, `state/linear_pending.jsonl`
 
-세션 이벤트 이력, PM 사용량 Snapshot, Linear 쓰기 실패 목록. 훅과 `scripts/` 가 쓴다. 형식은 `docs/01` 5.4·5.5.
+세션 이벤트 이력, PM 사용량 Snapshot, Linear 쓰기 실패 목록. 훅과 `scripts/` 가 쓴다. 형식은 `docs/01` 8.5·8.6.
 
 ### `state/releases.json` — 운영 반영 대기
 

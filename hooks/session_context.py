@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SessionStart 훅: 역할에 맞는 맥락을 넣는다 (docs/02 4절, docs/01 7.3절).
+"""SessionStart 훅: 역할에 맞는 맥락을 넣는다 (docs/02 3절, docs/01 7.3절).
 
 - PM: 규칙(rules/coordinator.md), 프로젝트·JARVIS ID, 인계 노트, 열린 작업, 열린 결정 경로.
   startup·resume·compact·clear 모두. 새로 만들 때와 교체할 때 같은 초기화가 되게 한다.
