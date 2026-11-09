@@ -18,6 +18,7 @@ description: Use when asked about past work, past decisions or why something was
 
    - 키워드는 2~3개, 고유한 낱말(테이블·플로우·W/D 번호·도구 이름)을 고른다. 결과가 많으면 `--project`·`--since` 로 좁힌다.
    - `[결정, 일부]` 처럼 "일부" 는 키워드 일부만 맞은 것이다. 낱말을 바꿔 다시 찾는다.
+   - 낱말이 정확히 기억나지 않으면 `--qmd` 를 붙인다(JARVIS 폴더 안 qmd 시범, 위키·일지를 BM25 로 순위). `--semantic` 은 뜻이 비슷한 말까지 찾는 의미 검색인데 임베딩 모델을 받은 뒤에만 된다. 둘 다 안 되면 기본 검색으로 돌아간다.
 3. 걸린 노트·일지 중 답에 필요한 것만 열어 읽는다. 일지에 `refs:` 나 W·D 번호가 있으면 그 상태 파일에서 요청·보고·이유를 확인한다.
 4. 여기까지 없으면 대화 원문을 찾는다: `~/.claude/projects/<작업폴더>/*.jsonl` 을 Grep(Claude 원문은 30일 뒤 지워진다). Codex 는 `~/.codex/sessions/`.
 

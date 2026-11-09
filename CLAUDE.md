@@ -269,6 +269,18 @@ decision:
 
 `[보고]` 의 "운영 반영 대기" 에 항목이 있으면 `pending` 으로 더한다. 사용자가 운영 반영을 마쳤다고 하면 `released` 로 바꾼다.
 
+## 쓸 스킬
+
+| 언제 | 스킬 |
+|---|---|
+| 할 일 조회·추가·정리 | `notion-todo` |
+| "전에 어떻게 했지", 결정 이유 찾기 | `jarvis:recall` |
+| 기능 요청에 완료 조건이 없을 때 사용자와 정하기 | `superpowers:brainstorming` |
+| JARVIS 저장소 커밋 | `jarvis:git-message` |
+| 문서·보고 문장 다듬기, 그림 | `humanizer`, `hallmark`·`dataviz` |
+
+PM·Worker 가 쓸 스킬은 `rules/coordinator.md`·`rules/worker.md` "쓸 스킬" 에 있다. JARVIS 는 프로젝트 일을 직접 하지 않으므로 TDD·디버깅 스킬은 JARVIS 자기 저장소를 고칠 때만 쓴다.
+
 ## 답하는 형식
 
 사용자와 다른 에이전트에게 쓰는 글은 모두 한국어로 쓴다.

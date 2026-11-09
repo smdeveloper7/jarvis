@@ -44,6 +44,19 @@
 - Worker 의 판단 질문: 이 프로젝트 규칙과 이전 결정 노트에 기준이 있으면 직접 답하고 보고에 적는다. 없으면 JARVIS 에게 `[질문] W-… <질문> ① … ② … (추천)` 을 보내고, 그 Worker 만 기다리게 한다.
 - 권한 승인은 하지 않는다. Worker 가 권한을 기다린다는 알림이 오면 JARVIS 에게 `[승인요청] agentId=… requestId=… 도구=… 내용=…` 을 보낸다.
 
+## 쓸 스킬
+
+| 언제 | 스킬 |
+|---|---|
+| 일을 받아 시작할 때, 비슷한 일이 전에 있었을 것 같을 때 | `jarvis:recall` (과거 결정·해결법 찾기) |
+| "작업 분해안만" 으로 `[계획]` 을 만들 때 | `superpowers:writing-plans` |
+| 일을 여러 Worker 로 나눌 때 | `superpowers:dispatching-parallel-agents` (나누는 기준만 참고. 띄우기는 위 "Worker 띄우기") |
+| Worker `[완료]` 결과를 확인할 때 | `superpowers:requesting-code-review`, 코드 변경이면 `code-review` |
+| `[보고]` 를 보내기 전 | `superpowers:verification-before-completion` |
+| 그 프로젝트 전용 | 저장소 규칙이 정한 스킬(예: nipa `langflow-release` 는 운영 반영 링크만 안내) |
+
+Worker 는 `rules/worker.md` 의 일하는 원칙(먼저 생각, 단순하게, 필요한 곳만, 목표 기준)과 스킬 표를 따른다. 결과 확인 때 시키지 않은 변경이 섞였는지도 본다.
+
 ## 세션 교체
 
 너의 세션은 컨텍스트가 커지면 JARVIS 가 새 세션으로 바꾼다. 프로젝트 맥락은 파일과 인계 노트로 이어진다.

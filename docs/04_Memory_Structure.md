@@ -266,19 +266,21 @@ worklog/wiki/
 | B3 | 세션 종료 보완(일지 한 줄, 열린 W 점검), 인계 노트 합치기 점검(`handoff` 의 `stale`·`dropped_open`), PM 인계노트 기준 | `CLAUDE.md`, `jarvisctl.py`, `rules/coordinator.md` | 완료(테스트) |
 | C1 | 위키 형식과 정리 지침, 규칙 제안 | `worklog/AGENTS.md`, `wiki-curator` | 완료 |
 | C2 | 지금 위키를 새 폴더로 옮기기, AO 실험 노트 삭제(사용자 승인) | `worklog/wiki/` | 완료(백업 `%TEMP%/claude_patch/wiki-backup-20261109`) |
-| C3 | 밀린 정리 한 번(11-01 ~) | `worklog/wiki/` | 진행 중 |
-| C4 | 매일 정리·주 1회 점검 schedule | Paseo schedule | 할 일(비용 확인 후) |
+| C3 | 밀린 정리 한 번(11-01 ~) | `worklog/wiki/` | 완료(새 노트: 개요 4, 결정 11, 해결법 7) |
+| C4 | 매일 정리·주 1회 점검 schedule | Paseo schedule | 완료(07:00 매일, 월 07:05 점검. 밀린 9일 정리가 Sonnet 약 20만 토큰·9분) |
 | E1 | 시작 때 주입 훅 | `hooks/session_context.py` | 완료(테스트, 새 세션 확인 필요) |
 | E2 | 기억 찾기 스킬 | `skills/recall`, `scripts/recall.py` | 완료 |
 | D1 | 규칙 제안 흐름(지식 → 사용자 확인 → 규칙 층), 자동 메모리 범위 | `CLAUDE.md`, 공통 규칙, `wiki-curator` | 완료(규칙 문장) |
 | D2 | nipa 자동 메모리 107건 분류·이동 | 자동 메모리, 위키, nipa `CLAUDE.md` | 할 일(분류표 승인 후) |
 | F1 | qmd 시범 | — | 나중 |
 | F2 | 원문 보관 기간 | `~/.claude/settings.json` | 나중(결정 필요) |
-| G | 기존 문서 맞추기(11절) | `docs/01·02·03`, README, `rules/` | 마지막 |
+| G | 기존 문서 맞추기(11절) | `docs/01·02·03`, README, `rules/` | 일부(01·02·CLAUDE·rules·공통 규칙 완료, 11절 남은 것) |
 
 순서는 A → B → C → E → D → (며칠 운영) → G.
 
 ## 11. 기존 문서와 다른 점 (나중에 맞출 곳)
+
+2026-11-09 맞춤 완료: `docs/01`(겹치는 절은 이 문서로 연결), `docs/02` 5.2·6절·8절, `CLAUDE.md`, `rules/coordinator.md`, 공통 `projects/AGENTS.md`, `worklog/AGENTS.md`, `wiki-curator`. 남은 것: `docs/02` 7절 훅 표(시작 주입 내용), `docs/03`(다른 창 작업 중이라 보류), `README.md`·`docs/README.md`, `docs/01` 그림 두 장(`state-storage`·`state-memory`, 오전 구조 기준) 다시 그리기. 아래 표는 처음 적은 목록이다.
 
 | 문서 | 다른 점 |
 |---|---|

@@ -148,7 +148,7 @@ JARVIS 가 lock 을 잡고 후보 세션을 만들면 훅이 그 세션에 맥�
 세션에 들어가는 정보는 두 곳으로 나뉜다.
 
 - initialPrompt(이번 세션의 목적): 프로젝트 키, root, 보고받을 JARVIS ID, `mode`, "`[준비]` 를 보내라", 훅이 안 돌 때를 대비한 `rules/coordinator.md` 경로 한 줄.
-- SessionStart 훅(항상 같은 규칙과 현재 상태): `rules/coordinator.md` 전문, 인계 노트(`state/handoff/<프로젝트>/latest.md`, 80줄까지), 열린 작업, `open`·`waiting` 결정 경로, Linear Project, lock 이 있으면 교체 중 경고와 이전 PM ID. `startup`·`resume`·`compact`·`clear` 모두에서 넣으므로 대화가 압축되거나 다시 열려도 복원된다.
+- SessionStart 훅(항상 같은 규칙과 현재 상태): `rules/coordinator.md` 전문, 인계 노트(`state/handoff/<프로젝트>/latest.md`, 60줄까지), 열린 작업, `open`·`waiting` 결정 경로, Linear Project, lock 이 있으면 교체 중 경고와 이전 PM ID. `startup`·`resume`·`compact`·`clear` 모두에서 넣으므로 대화가 압축되거나 다시 열려도 복원된다. 위키 `<프로젝트>/개요.md` 와 결정·해결법 제목도 넣는다(04 7절).
 
 ### `[준비]` 검증
 
@@ -313,7 +313,7 @@ JARVIS 가 교체 도중 새로 뜨면 `jarvisctl lock show <프로젝트>` 의 
 
 | 훅(실행 시점) | 스크립트 | 대상 | 하는 일 | 상태 |
 |---|---|---|---|---|
-| SessionStart (startup·resume·compact·clear) | `session_context.py` | PM · JARVIS 창 | PM: 규칙·상태 주입 / JARVIS: 기본 수신자·PM 현황·닫힌 PM | 구현·실측(PM 2회, JARVIS 창 시작) |
+| SessionStart (startup·resume·compact·clear) | `session_context.py` | PM · JARVIS 창 | PM: 규칙·상태 주입, 위키 개요·노트 제목 / JARVIS: 기본 수신자·PM 현황·닫힌 PM, 인계 노트 내용·열린 W·D·판단 기준·위키 최근 결정·위키 밀림 경고(04 7절) | 구현·실측(PM 2회, JARVIS 창 시작, PM resume 1회) |
 | UserPromptSubmit | `pm_reconcile.py` | JARVIS 창 | 닫힌 PM 대조·알림(처음 본 창 하나만) | 구현. 스크립트 직접 실행과 SessionStart 경로로 확인, UserPromptSubmit 경로는 실측 필요 |
 | Stop | `pm_usage.py` | PM | 사용량 Snapshot | 구현·실측(시험 PM, nipa-pm) |
 | PreToolUse (paseo create·archive·kill) | `agent_guard.py` | JARVIS · PM | 중복 PM, 다른 창이 진행 중인 교체에 PM 생성, 후보·교체 중 Worker 생성, 활성 PM·기본 수신자 닫기, PM kill, 남의 Worker 닫기 차단. PM 의 Worker 는 `jarvis.task` 라벨과 작업 위주 제목 필수 | 구현, PM 생성 가드 실측 필요 |

@@ -1,8 +1,8 @@
 # 01. State & Memory Management (상태·기억 관리)
 
 > **핵심 질문:** 무엇을 영구적으로 보존하고, 세션이 바뀌어도 어떻게 기억을 이어 가는가?
-> **버전:** v0.4 · 2026-11-09 · 구조 재정리(정책·구현 변경 없음)
-> **관련:** [02 Agent Lifecycle](02_Agent_Lifecycle_Management.md) · [03 Work Lifecycle](03_Work_Lifecycle_Management.md)
+> **버전:** v0.5 · 2026-11-09 · 기억 구조(기억 4단계 + 규칙 층)를 04 로 옮기고 겹치는 절은 04 로 연결
+> **관련:** [02 Agent Lifecycle](02_Agent_Lifecycle_Management.md) · [03 Work Lifecycle](03_Work_Lifecycle_Management.md) · [04 기억 구조](04_Memory_Structure.md)
 > **실행 지침:** `CLAUDE.md`, `rules/` 는 이 문서를 운영 규칙으로 줄인 것이다. 둘이 다르면 이 문서를 고치고 규칙에 반영한다.
 
 ## 요약
@@ -15,7 +15,7 @@ JARVIS·PM·Worker 의 세션은 언제든 바뀐다. 이 문서는 세션이 �
 
 1. 상태는 세션 밖에 둔다. 진행 상황은 `registry.yaml`·`state/`·worklog 에 남기고, 대화 원문으로 복원하지 않는다.
 2. 정보마다 원본은 하나다. 같은 정보를 두 곳에 원본으로 두지 않고, 다른 곳에는 요약과 링크만 둔다.
-3. 실행 상태의 원본은 JARVIS State(`JARVIS/state/`, `JARVIS/registry.yaml`)이고, 장기 지식은 Obsidian(`projects/worklog/`)이다. 정리는 State → Obsidian 한 방향이며, Obsidian 노트를 고쳐도 상태는 바뀌지 않는다.
+3. 실행 상태의 원본은 JARVIS State(`JARVIS/state/`, `JARVIS/registry.yaml`)이고, 장기 지식은 Obsidian(`projects/worklog/`, 일지 `raw/` → 지식 `wiki/`)이다. 정리는 State → 일지 → 지식 한 방향이며, Obsidian 노트를 고쳐도 상태는 바뀌지 않는다. 단계·계기·읽기 방법은 [04](04_Memory_Structure.md) 가 원본이다.
 4. 논리적 JARVIS 는 하나, 대화창은 여러 개다. 모든 창이 같은 상태를 고치고, 겹치면 안 되는 쓰기만 `jarvisctl` 이 잠금 안에서 처리한다.
 5. 모르는 값은 추정하지 않는다. 확인 못 한 값은 `null` 로 두고, 인계 노트와 상태 파일이 다르면 상태 파일이 맞다.
 
@@ -27,6 +27,7 @@ JARVIS·PM·Worker 의 세션은 언제든 바뀐다. 이 문서는 세션이 �
 | 파일 위치와 형식 | 작업 상태 전이와 완료 기준 → 03 |
 | 쓰기 권한과 동시성 규칙 | 승인 기준 → 03 |
 | 장기 기억에 남길 것과 남기지 않을 것 | 외부 도구(Notion·Linear) 발행 절차 → 03 |
+| | 기억 단계 사이 흐름(작업 단위, 세션 종료, 매일 정리, 시작 주입, 검색) → 04 |
 
 ### 다른 문서와의 관계
 
@@ -34,9 +35,13 @@ JARVIS·PM·Worker 의 세션은 언제든 바뀐다. 이 문서는 세션이 �
 
 ## 1. 개념: State 와 Memory
 
+기억은 원문 → 상태 → 일지 → 지식 네 단계이고, 규칙은 그와 따로 둔다([04](04_Memory_Structure.md) 2절). 이 절은 용어만 정한다.
+
 State(상태) 는 지금 무엇이 진행 중인지에 대한 구조화된 사실이다. 실제 위치는 `C:/Users/SMDEVELOPER/JARVIS/state/` 와 같은 폴더의 `registry.yaml` 이고, 문서에서는 이 둘을 JARVIS State 라고 부른다. 프로젝트별 현재 PM, 맡긴 작업, 사용자가 정한 결정, 세션 교체 이력이 여기에 속한다. 자동화(훅·`jarvisctl`·대시보드)가 이 값을 읽고 판단하므로 형식이 정해져 있다.
 
-Memory(기억) 는 사람이 읽는 지식이다. 결정의 배경, 재사용할 해결법, 회고가 여기에 속한다. Obsidian 보관함(`projects/worklog`)에 두고, 필요할 때 검색한다. 자동 판단의 근거로 쓰지 않는다.
+Memory(기억) 는 사람이 읽는 지식이다. 결정의 배경, 재사용할 해결법, 회고가 여기에 속한다. Obsidian 보관함(`projects/worklog`)에 일지(`raw/`)와 지식(`wiki/`)으로 둔다. 세션 시작 때 요약이 들어가고, 필요할 때 기억 찾기(`skills/recall`)로 검색한다. 자동 판단의 근거로 쓰지 않는다.
+
+Rules(규칙 층) 는 행동을 바꾸는 짧은 문장이다. `CLAUDE.md`·`rules/`·`criteria.md`, 프로젝트 저장소 `CLAUDE.md`, Claude 자동 메모리(`~/.claude/projects/<폴더>/memory/`, 일하는 방식만)가 여기에 속하고 늘 읽힌다. 지식은 규칙을 제안만 하고 사용자가 정한다.
 
 Handoff(인계 노트) 는 둘 사이에 있다. 세션을 바꿀 때 다음 세션이 일을 이어 가는 데 필요한 최소 맥락만 적은 노트다. 상태처럼 State 쪽(`state/handoff/`)에 두지만, 상태 파일과 다르면 상태 파일이 우선한다.
 
@@ -78,8 +83,11 @@ Source of Truth(원본) 는 어떤 정보에 대해 "여기 적힌 값이 맞다
 | 최신 인계 맥락 | `state/handoff/<역할>/latest.md` | 없음 |
 | 세션 교체·종료 이력, 사용량 | `state/sessions.jsonl`, `state/sessions/` | 없음 |
 | 공유 자원 점유, 운영 반영 대기 | `state/occupancy.json`, `state/releases.json` | 대시보드 |
-| 하루 작업 기록 | `worklog/raw/YYYY-MM-DD.md` | wiki |
-| 프로젝트 지식, 결정 배경, 재사용할 해결법 | `worklog/wiki/` | — |
+| 작업일지(W 하나에 한 건) | `worklog/raw/YYYY-MM-DD.md` | wiki |
+| 프로젝트 지식, 결정 배경, 재사용할 해결법 | `worklog/wiki/<프로젝트>/`(개요·decisions·해결법) | — |
+| 판단 기준 | `criteria.md` | 시작 맥락 |
+| 프로젝트 전체 규칙 | 프로젝트 저장소 `CLAUDE.md` | — |
+| 그 폴더에서 일하는 방식 | Claude 자동 메모리(`feedback`·`reference`) | — |
 | 할 일, 일정 | Notion 할일 DB | — |
 | 프로젝트 ↔ Linear Project 연결 | `registry.yaml` `linear_project` (프로젝트 단위 한 칸) | — |
 | 기능 정의 | Notion 기능 페이지 | Linear 상위 이슈 설명에 링크 |
@@ -99,7 +107,7 @@ Source of Truth(원본) 는 어떤 정보에 대해 "여기 적힌 값이 맞다
 
 | 역할 | 남기는 상태 | 남기는 방법 |
 |---|---|---|
-| JARVIS(Manager) | registry, 작업·결정 파일, Manager 인계 노트, 점유·운영 반영 대기, 작업일지, Notion 할일 | 직접 쓰기 또는 `jarvisctl`(겹치면 안 되는 쓰기) |
+| JARVIS(Manager) | registry, 작업·결정 파일, Manager 인계 노트, 점유·운영 반영 대기, 작업일지, Notion 할일 | 직접 쓰기 또는 `jarvisctl`(겹치면 안 되는 쓰기). W 상태는 `jarvisctl task`, 작업일지는 W 를 닫을 때 `--worklog` |
 | PM(Coordinator) | 진행·보고 내용, 인계 노트 내용 | 메시지(`[보고]`·`[인계노트]` 등)로 JARVIS 에게 보내고 JARVIS 가 기록 |
 | Worker | 작업 결과 | `[완료]` 로 PM 에게. Paseo 라벨 `jarvis.task` 로 W 와 묶임 |
 | 훅·스크립트 | 세션 이벤트, PM 사용량, 교체 lock, Linear 실패 큐 | 정해진 경로에만 코드로 기록 |
@@ -115,7 +123,14 @@ Obsidian 은 장기 지식을 읽고 정리하는 데 쓴다. 실행 상태의 �
   <img alt="장기 기억과 지금 상태: 작업 단위가 끝나면 스크립트로 raw 에 작업일지를 더하고, 사용자가 정리를 요청하면 raw 를 wiki 로 정리한다. 결정 파일은 배경을 정리해 wiki 에 남긴다. 다음 세션은 필요할 때 wiki 를 검색한다. 진행 중인 작업과 열린 결정은 Obsidian 에 사본 없이 JARVIS 보드에서만 본다" src="images/state-memory-light.png" width="800">
 </picture>
 
-작업 단위가 끝나면 JARVIS 가 작업일지 원본(`raw/`)을 스크립트로 추가한다. 사용자가 정리를 요청하면 JARVIS 가 raw 와 결정 파일을 근거로 wiki 를 갱신한다. 새 세션은 과거 맥락이 필요할 때만 wiki·raw 를 검색한다.
+기억 단계 사이의 흐름은 [04](04_Memory_Structure.md) 가 원본이다. 줄이면 이렇다.
+
+- 작업 단위는 W 하나다. W 가 닫힐 때 `jarvisctl task --worklog` 가 일지(`raw/`)에 한 건 남긴다(W·D 번호 포함).
+- 매일 07:00 schedule(`wiki-curator`)이 일지를 지식(`wiki/<프로젝트>/` 개요·결정·해결법)으로 정리하고, 규칙 후보를 제안한다. 월요일에는 점검만 한다.
+- 세션 시작 때 훅이 인계 노트·열린 W·D·판단 기준·위키 요약을 넣고, 그 밖에는 기억 찾기로 검색한다.
+- 영구 지식은 사용자가 "세션 종료" 라고 한 창만 남긴다.
+
+위 그림은 2026-11-09 오전 기준(정리는 요청할 때만)이라 다시 그릴 예정이다.
 
 지금 상태(진행 중인 작업, 열린 결정, 운영 반영 대기, 점유)는 Obsidian 에 사본을 두지 않고 JARVIS 보드(`dashboard/`, "현황"·"결정" 탭)에서 본다. 보드는 JARVIS State 를 직접 읽는다. Obsidian 에는 정해진 결정의 이유와 배운 것처럼 오래 남길 지식만 둔다(2026-11-09 사용자 결정).
 
@@ -160,7 +175,7 @@ JARVIS 대화창은 동시에 여러 개일 수 있고 모두 같은 상태 파�
 
 1. JARVIS 가 `jarvisctl new-task <프로젝트> --title … --request …` 로 작업 파일을 만든다.
 2. PM 의 `[진행]`·`[질문]`·`[보고]` 를 받을 때마다 같은 파일의 `status`·`updated_at`·`경과` 를 고친다.
-3. `[보고]` 로 끝나면 작업일지(raw)에 한 번 기록한다. 단, 프로젝트와 관계없는 질문(`ask`)처럼 단순 질의응답은 W 로 맡겨도 작업일지를 남기지 않는다(`CLAUDE.md`). 업무 단위(기능·이슈)와의 연결은 03.
+3. `[보고]` 로 끝나면 `jarvisctl task <W> --status done --worklog --result …` 로 닫고 작업일지(raw)에 한 건 남긴다. 단, 프로젝트와 관계없는 질문(`ask`)처럼 단순 질의응답은 W 로 맡겨도 작업일지를 남기지 않는다(`CLAUDE.md`). 업무 단위(기능·이슈)와의 연결은 03.
 
 ### 7.2 결정을 남길 때
 
@@ -170,15 +185,7 @@ JARVIS 대화창은 동시에 여러 개일 수 있고 모두 같은 상태 파�
 
 ### 7.3 세션이 바뀌어 맥락을 복원할 때
 
-새 세션은 아래 순서로 읽는다. 대화 원문 전체를 다시 넣지 않는다.
-
-1. 역할과 권한: `CLAUDE.md` 또는 `rules/coordinator.md`
-2. 현재 상태: `registry.yaml`, 열린 `state/tasks`
-3. 최근 인계: `state/handoff/<역할>/latest.md`
-4. 결정: `open`·`waiting` 결정 파일 경로
-5. 과거 기록: 필요할 때만 wiki·raw 검색
-
-PM 에게는 SessionStart 훅이 1~4 를 자동으로 넣는다. 인계 노트를 받고 바꾸는 절차는 02.
+새 세션은 대화 원문을 다시 넣지 않는다. 무엇을 넣는지는 [04](04_Memory_Structure.md) 7절이 원본이다. JARVIS 창에는 인계 노트·열린 W·D·판단 기준·위키 최근 결정을, PM 에게는 규칙·인계 노트·열린 W·D·위키 개요와 노트 제목을 SessionStart 훅이 넣는다. 과거 기록은 필요할 때 기억 찾기로 검색한다. 인계 노트를 받고 바꾸는 절차는 02, 닫힌 PM 을 이어 띄우는 것은 02 5.2.
 
 ### 7.4 JARVIS 창을 하나 더 열 때
 
@@ -196,8 +203,9 @@ C:/Users/SMDEVELOPER/
 │   ├── registry.yaml                # (git 제외)
 │   ├── rules/                       # coordinator.md, worker.md
 │   ├── hooks/                       # 플러그인 훅
-│   ├── scripts/                     # jarvisctl.py, linear.py
-│   ├── docs/                        # 01·02·03 정책 문서
+│   ├── scripts/                     # jarvisctl.py, linear.py, recall.py(기억 찾기)
+│   ├── skills/                      # git-message, recall
+│   ├── docs/                        # 01·02·03·04 정책 문서
 │   └── state/                       # (git 제외)
 │       ├── tasks/                   # W-YYYYMMDD-NN.md
 │       ├── decisions/               # D-YYYYMMDD-NN.md
@@ -221,11 +229,12 @@ C:/Users/SMDEVELOPER/
 └── projects/
     ├── <프로젝트>/                  # 프로젝트 소스 (PM·Worker 작업 폴더)
     └── worklog/                     # = OneDrive/worklog, Obsidian Vault 루트
-        ├── raw/                     # 스크립트로만 추가
-        └── wiki/
+        ├── raw/                     # 일지. 스크립트로만 추가
+        └── wiki/                    # 지식 (04 4.4)
             ├── index.md · log.md
-            ├── projects/<프로젝트>.md
-            └── decisions/
+            ├── 공통/                # 개요.md · decisions/ · 해결법/
+            ├── <프로젝트>/          # 개요.md · decisions/ · 해결법/
+            └── _보관/
 ```
 
 ### 8.2 `registry.yaml`
@@ -255,7 +264,9 @@ projects:
 ### 8.4 인계 노트 `state/handoff/<역할>/`
 
 - `latest.md` 가 지금 쓰는 노트다. 새 노트는 `jarvisctl handoff <역할> <파일>` 로 둔다. 기존 `latest.md` 는 `YYYYMMDD-HHmmss.md`(같은 초면 `-2`)로 옮겨진다. 지우지 않는다.
-- 60줄 이하로, 다음 세션이 일을 이어 가는 데 필요한 최소 맥락만 적는다. 대화를 요약하지 않는다.
+- 쓰는 때: JARVIS 는 사용자가 "세션 종료" 라고 할 때, PM 은 교체할 때(04 6절).
+- 60줄 이하로, 열린 일만 적는다. 끝난 일은 적지 않되 다음 행동에 필요한 판단·경로는 남긴다. 대화를 요약하지 않는다.
+- JARVIS 창이 여럿이면 덮어쓰지 않고 합친다. `jarvisctl handoff` 가 끝난 W·D(`stale`)와 빠진 열린 W·D(`dropped_open`)를 알려 준다.
 - 상태 파일·결정 파일에 이미 있는 내용은 경로만 적는다.
 
 PM 노트(`<프로젝트>/latest.md`, PM 이 `[인계노트]` 로 보내고 JARVIS 가 쓴다):
@@ -284,7 +295,7 @@ Manager 노트(`manager/latest.md`, JARVIS 가 직접 쓴다):
 
 ```json
 {"event_id":"3f9c…","timestamp":"2026-11-09T15:00:00+09:00","event":"rotation","project_id":"nipa","old_agent_id":"…","new_agent_id":"…","context_tokens_before":864356,"total_cost_usd_before":63.90,"reason":"context","result":"switched"}
-{"timestamp":"…","event":"closed","project_id":"nipa","agent_id":"…","closed_by":"user","source":"paseo:agent.archive.after"}
+{"event_id":"8775…","timestamp":"…","event":"closed","project_id":"nipa","agent_id":"…","closed_by":"jarvis","how":"archive","source":"hook:agent_guard"}
 ```
 
 | 필드 | 값 |
@@ -293,8 +304,9 @@ Manager 노트(`manager/latest.md`, JARVIS 가 직접 쓴다):
 | `event` | `rotation` · `closed` · `session_end` · `pre_compact` · `jarvis_claim` |
 | `reason` | `context` · `crash` · `manual` |
 | `result` | `switched` · `failed:<단계>` · `archived` |
-| `closed_by` | `jarvis` · `pm` · `unknown` (대조·Paseo 이벤트로는 누가 닫았는지 모름) |
-| `source` | 기록한 곳: `jarvis` · `hook:<이름>` · `paseo:<이벤트>` · `reconcile` |
+| `closed_by` | `jarvis` · `pm` · `unknown` (대조로는 누가 닫았는지 모름) |
+| `how` | `archive` · `kill` (closed 이벤트), 대조는 `archived` · `missing` · `closed` |
+| `source` | 기록한 곳: `jarvisctl` · `hook:<이름>` · `reconcile` (Paseo 플러그인 이벤트는 쓰지 않음, D-20261109-02) |
 
 모르는 값은 `null`. 추정값을 넣지 않는다. 여러 훅이 동시에 써도 줄이 섞이지 않게 `sessions.jsonl.lock` 으로 잠그고 한 줄씩 추가한다.
 
@@ -325,9 +337,10 @@ Manager 노트(`manager/latest.md`, JARVIS 가 직접 쓴다):
 |---|---|
 | `jarvis` 플러그인 설치 | 완료(2026-11-09). 실측 범위는 02 10절 |
 | `agent-hub-ao` 플러그인 | 결정됨: 제거(2026-11-09, D-20261109-01). `C:/Users/SMDEVELOPER/hub` 보호도 함께 사라짐 |
-| state 백업 | git 제외라 백업이 없다. 결정 대기(D-20261109-04) |
-| wiki 정리 | 11-05 이후 멈춤. 구조 바꾸기 전에 밀린 정리 먼저 |
+| state 백업 | 결정됨: 백업 안 함(D-20261109-04). 오래 남길 것은 일지·위키로 올라간다 |
+| wiki 정리 | 2026-11-09 새 구조로 옮기고 밀린 정리(11-01~) 반영. 매일 07:00 schedule, 월요일 점검 |
+| 기억 구조 | 결정됨: 기억 4단계 + 규칙 층(D-20261109-11). 원본 04 |
 | OneDrive 동기화 충돌 | raw 는 스크립트 잠금으로 추가. wiki 는 JARVIS 가 정리할 때만 고치므로 위험 낮음 |
-| claude-mem | JARVIS 에서만 시험. 공식 상태를 대체하지 않는 보조 검색으로만 검토 |
+| claude-mem | 보류. 원본이 하나 더 생겨 기억 구조에 넣지 않는다. 의미 검색이 필요하면 qmd 와 함께 보조 검색으로 비교(04 10절 F1) |
 
-관련 문서: 세션 생성·교체·복구는 [02](02_Agent_Lifecycle_Management.md), 업무 단위와 외부 도구는 [03](03_Work_Lifecycle_Management.md), 실행 지침은 `CLAUDE.md`.
+관련 문서: 세션 생성·교체·복구는 [02](02_Agent_Lifecycle_Management.md), 업무 단위와 외부 도구는 [03](03_Work_Lifecycle_Management.md), 기억 구조는 [04](04_Memory_Structure.md), 실행 지침은 `CLAUDE.md`.

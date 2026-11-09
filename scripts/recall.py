@@ -2,6 +2,10 @@
 """기억 찾기 (docs/04 7절): 판단 기준 → 위키 → 일지 순으로 키워드를 찾아 출처와 함께 짧게 돌려준다.
 
   python scripts/recall.py <키워드…> [--project nipa] [--since 2026-10-01] [--limit 8] [--raw-only|--wiki-only]
+  python scripts/recall.py --qmd [--semantic] <질문…>   # qmd(JARVIS/tools/qmd, 시범): 키워드(BM25), --semantic 이면 의미 검색
+
+- qmd 는 JARVIS 폴더 안 tools/qmd 에만 설치한 로컬 검색 엔진이다(전역 설치·MCP 아님, 2026-11-09 사용자 결정 시범).
+  없거나 실패하면 아래 기본 검색으로 돌아간다. 의미 검색은 임베딩 모델(qmd pull/embed)이 있어야 한다.
 
 - 키워드는 모두 들어간 줄·노트를 먼저, 일부만 들어간 것은 뒤에 둔다(대소문자 무시).
 - 결과는 단계 순(criteria → wiki 결정 → 해결법 → 개요 → 그 밖의 위키 → 일지 최근 순)으로, 노트마다 맞은 줄 두세 개.
@@ -89,17 +93,50 @@ def snippets(text, terms, n=3):
     return out
 
 
+QMD_DIR = os.path.join(JDIR, 'tools', 'qmd')
+QMD = os.path.join(QMD_DIR, 'node_modules', '.bin', 'qmd.cmd' if os.name == 'nt' else 'qmd')
+
+
+def qmd_search(query, semantic, limit):
+    """qmd 로 찾는다. 색인을 먼저 갱신(바뀐 파일만). 실패하면 None."""
+    import json
+    import subprocess
+    if not os.path.exists(QMD):
+        return None
+    run = lambda *args: subprocess.run([QMD] + list(args), cwd=QMD_DIR, capture_output=True, encoding='utf-8',
+                                       errors='replace', timeout=300, shell=(os.name == 'nt'))
+    try:
+        run('update')
+        r = run('vsearch' if semantic else 'search', query, '-n', str(limit), '--json')
+        return json.loads(r.stdout) if r.returncode == 0 and r.stdout.strip().startswith('[') else None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
 def main(argv=None):
     for s in (sys.stdout, sys.stderr):
         s.reconfigure(encoding='utf-8')
     ap = argparse.ArgumentParser(prog='recall')
     ap.add_argument('terms', nargs='+')
+    ap.add_argument('--qmd', action='store_true', help='qmd 로 찾기(시범)')
+    ap.add_argument('--semantic', action='store_true', help='qmd 의미 검색(임베딩 필요)')
     ap.add_argument('--project')
     ap.add_argument('--since', help='일지 날짜 하한 YYYY-MM-DD')
     ap.add_argument('--limit', type=int, default=8)
     ap.add_argument('--raw-only', action='store_true')
     ap.add_argument('--wiki-only', action='store_true')
     a = ap.parse_args(argv)
+    if a.qmd or a.semantic:
+        res = qmd_search(' '.join(a.terms), a.semantic, a.limit)
+        if res:
+            for x in res:
+                f = x.get('file', '').replace('qmd://wiki/', '[[wiki/').replace('qmd://raw/', '[[raw/')
+                print('[qmd %d%%] %s  %s]]' % (round(100 * (x.get('score') or 0)), x.get('title') or '', f[:-3] if f.endswith('.md') else f))
+                for ln in (x.get('snippet') or '').replace('\r', '').split('\n')[1:4]:
+                    if ln.strip() and not ln.startswith('---'):
+                        print('    ' + ln.strip()[:180])
+            return 0
+        print('(qmd 없음·실패·의미 검색 모델 없음 → 기본 검색)')
     terms = [t.lower() for t in a.terms]
     found = []   # (전부 맞음 여부, 단계, -최신, 횟수, 제목, 링크, 줄들)
     if not a.raw_only:
