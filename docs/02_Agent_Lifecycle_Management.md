@@ -1,8 +1,8 @@
 # 02. Agent Lifecycle Management (에이전트 수명주기 관리)
 
 > **핵심 질문:** 논리적 Agent 와 실제 실행 세션을 어떻게 생성·교체·복구하는가?
-> **버전:** v0.4 · 2026-11-09 · 구조 재정리(정책·구현 변경 없음)
-> **관련:** [01 State & Memory](01_State_Memory_Management.md) · [03 Work Lifecycle](03_Work_Lifecycle_Management.md)
+> **버전:** v0.5 · 2026-11-09 · 닫힌 PM 이어 띄우기, 정해진 항목과 구현 상태 갱신
+> **관련:** [01 State & Memory](01_State_Memory_Management.md) · [03 Work Lifecycle](03_Work_Lifecycle_Management.md) · [04 기억 구조](04_Memory_Structure.md)
 > **구현:** `hooks/`(Claude 훅), `scripts/jarvisctl.py`(상태 전환), 실행 지침 `CLAUDE.md` "PM 띄우기"·"PM 세션 교체", `rules/coordinator.md`
 
 ## 요약
@@ -69,13 +69,14 @@ JARVIS·PM·Worker 는 모두 Paseo 데몬이 실행하는 Claude Code 세션이
 | 구성 | 이 PC 에서 본 것 | 하는 일 |
 |---|---|---|
 | Paseo 앱 | `C:\Program Files\Paseo\Paseo.exe` (Electron 앱: 화면·GPU·네트워크 프로세스) | 사용자가 보는 창. 데몬을 자식 프로세스로 띄운다 |
-| 데몬 | 같은 `Paseo.exe` 가 `resources\app.asar\dist\daemon\node-entrypoint-runner.js` 를 Node 스크립트로 실행(PID 24416) | 세션 실행·메시지 전달·끝남 알림·예약 실행. `127.0.0.1:6767`, `127.0.0.1:55912` 에서 대기 |
+| 데몬 | 같은 `Paseo.exe` 가 Node 로 두 번 뜬다. 감시 프로세스(`supervisor-entrypoint.js`, `~/.paseo/paseo.pid`)가 실제 데몬(`daemon-worker.js`)을 띄운다 | 세션 실행·메시지 전달·끝남 알림·예약 실행. `127.0.0.1:6767` 에서 에이전트용 MCP(HTTP `/mcp/agents`)와 앱용 WebSocket 을 받는다 |
 | 에이전트 세션 | 데몬의 자식 `claude.exe` 들. `--input-format stream-json --output-format stream-json`, `--permission-prompt-tool stdio`, `--resume=<세션 ID>` 로 실행 | JARVIS·PM·Worker 하나하나. 데몬이 표준 입출력으로 지시를 넣고 답과 권한 요청을 받는다 |
 | 터미널 워커 | `~/.paseo/terminal-worker/…/terminal-worker.mjs` | 데몬이 여는 터미널 |
 | 데이터 폴더 | `~/.paseo/`: `agents/`, `schedules/`, `finish-subscriptions.json`, `daemon.log`, `server-id`, `paseo.pid`, `config.json` | 에이전트 기록(제목·부모·라벨·Claude 세션 ID), 예약, 끝남 알림 구독, 로그 |
 
 - 대시보드의 에이전트·흐름 탭은 `~/.paseo/agents/` 기록을 읽는다(`dashboard/jarvis_data.py`).
-- 확인하지 않은 것: 두 포트 중 어느 쪽이 MCP 인지, Paseo 앱을 완전히 끄면 데몬과 세션이 함께 내려가는지(데몬의 부모가 앱 프로세스라 그럴 가능성이 높다).
+- 확인하지 않은 것: Paseo 앱을 완전히 끄면 데몬과 세션이 함께 내려가는지(데몬의 조상이 앱 프로세스라 그럴 가능성이 높다).
+- 데몬이 CLI 를 실행하고 입출력을 쥐는 원리, Codex·ACP 를 붙이는 방식은 [reference/paseo_internals.md](reference/paseo_internals.md) 에 쉽게 풀었다.
 
 #### 메시지가 전달되는 원리
 
@@ -100,7 +101,7 @@ Paseo 는 Claude 만이 아니라 여러 에이전트 CLI 를 감싸 같은 도�
 | 에이전트 만들기·정리 | `create_agent`, `archive_agent`, `kill_agent`, `update_agent` | PM·Worker 띄우기, 교체 뒤 옛 PM 정리(`kill_agent` 는 훅이 막음) |
 | 지시·상태 | `send_agent_prompt`, `get_agent_status`, `get_agent_activity`, `list_agents`, `cancel_agent`, `set_agent_mode` | `[배정]` 보내기, 살아 있는지 확인, 마지막 답 보기 |
 | 권한 | `list_pending_permissions`, `respond_to_permission` | PM·Worker 의 `[승인요청]` 허용 |
-| 예약 실행 | `create_schedule`, `run_schedule_once`, `pause`·`resume`·`delete_schedule`, `schedule_logs`, `create_heartbeat` | 07:20 아침 할일 정리 |
+| 예약 실행 | `create_schedule`, `run_schedule_once`, `pause`·`resume`·`delete_schedule`, `schedule_logs`, `create_heartbeat` | 매일 07:00 위키 정리, 07:20 아침 할일 정리, 월요일 07:05 위키 점검 |
 | 워크스페이스 | `list_workspaces`, `create_workspace`, `archive_workspace`, `rename_workspace` | PM 작업 폴더 연결 |
 | 터미널·스크립트 | `create_terminal`, `send_terminal_keys`, `capture_terminal`, `start`·`stop_workspace_script` | 아직 안 씀 |
 | 조회 | `list_providers`, `list_models`, `list_profiles`, `list_hosts`, `inspect_provider` | 모델 고를 때 |
@@ -287,8 +288,8 @@ sequenceDiagram
 
 닫힘은 두 가지로 나눈다. 다음 `[배정]` 전에 `jarvisctl pm-check <프로젝트>` 가 어느 쪽인지 알려 준다.
 
-- **프로세스만 닫힘**(archive 아님, `pm_state: closed`): 새로 띄우지 않고 이어 띄운다(2026-11-09 사용자 결정, lanekeeper 의 `claude respawn` 과 같은 생각). 닫힌 에이전트에 `send_agent_prompt` 를 보내면 Paseo 가 저장된 세션으로 다시 연다. 대화 맥락이 그대로 남고, SessionStart 훅(resume)이 규칙·인계 노트·열린 작업을 다시 넣는다. 컨텍스트가 기준(20만)을 넘었으면(`action: resume-rotate`) `[배정]` 대신 `[인계요청]` 을 보내 이어 띄우고 5.1 교체로 간다.
-- **archive·삭제**(`archived`·`missing`): 사용자나 교체 절차가 일부러 닫은 것이라 이어 띄우지 않는다. 아래처럼 새로 띄운다.
+- 프로세스만 닫힘(archive 아님, `pm_state: closed`): 새로 띄우지 않고 이어 띄운다(2026-11-09 사용자 결정, lanekeeper 의 `claude respawn` 과 같은 생각). 닫힌 에이전트에 `send_agent_prompt` 를 보내면 Paseo 가 저장된 세션으로 다시 연다. 대화 맥락이 그대로 남고, SessionStart 훅(resume)이 규칙·인계 노트·열린 작업을 다시 넣는다. 컨텍스트가 기준(20만)을 넘었으면(`action: resume-rotate`) `[배정]` 대신 `[인계요청]` 을 보내 이어 띄우고 5.1 교체로 간다.
+- archive·삭제(`archived`·`missing`): 사용자나 교체 절차가 일부러 닫은 것이라 이어 띄우지 않는다. 아래처럼 새로 띄운다.
 
 새로 띄울 때 JARVIS 는 다음 `[배정]` 때 `lock acquire --reason crash` 로 Provisioning 을 시작한다. 새 PM 은 마지막 `latest.md` 와 작업 파일로 맥락을 복원하고, SessionStart 맥락의 "이전 PM" 으로 옛 PM 의 Worker 를 찾아 `[완료]` 를 먼저 확인한다. 실제 파일·브랜치를 보고 이미 된 일을 중복하지 않는다. 장애 복구 PM 은 같은 프로젝트 이전 PM 이 남긴 Worker 를 닫을 수 있다.
 
@@ -320,8 +321,8 @@ JARVIS 가 교체 도중 새로 뜨면 `jarvisctl lock show <프로젝트>` 의 
 | PostToolUse (같은 matcher) | `agent_guard.py` | JARVIS · PM | PM detach, lock 후보 기록, 닫음 기록 | 구현, 자동 detach 실측 필요 |
 | PreCompact · SessionEnd | `session_event.py` | PM | 기록만 | 구현. SessionEnd 실측, PreCompact 실측 필요 |
 | PreToolUse (Edit·Write) | `jarvis_only_write.py` | PM · Worker · JARVIS 창 | PM·Worker 의 JARVIS 폴더 쓰기 차단. JARVIS 창의 `registry.yaml`·`occupancy.json`·결정 파일 직접 수정과 새 작업 파일 직접 생성 차단(jarvisctl 로) | 구현, 실측 필요 |
-| PreToolUse (Bash) | `git-message-style.py` | 모두 | 커밋 문구 검사(기존) | 구현 |
-| Paseo `agent.archive.after` | — | Paseo 데몬 | 사용자 archive 즉시 기록 | 미구현(결정 대기) |
+| PreToolUse (Bash·PowerShell) | `git-message-style.py` | 모두 | 커밋 문구 검사 | 구현 |
+| Paseo `agent.archive.after` | — | Paseo 데몬 | 사용자 archive 즉시 기록 | 하지 않음(보류, D-20261109-02). 대조 훅으로 충분 |
 
 훅이 예외로 실패할 때의 처리는 종류마다 다르다. 관측용 훅(SessionStart·Stop·SessionEnd·PreCompact·UserPromptSubmit)은 예외가 나면 조용히 통과한다(세션을 막지 않음). 보호 훅 `agent_guard` 의 PreToolUse 는 Paseo 관리 세션에서 예외가 나면 막는다(고장 난 가드가 통과시키지 않게). `jarvis_only_write` 는 판단이 끝난 차단만 exit 2 로 막는다.
 
@@ -394,7 +395,9 @@ PM 은 Claude 로만 띄우므로 Codex 훅은 범위 밖이다. Codex Worker �
 |---|---|---|
 | 1 | 훅 6개·`jarvisctl`·테스트, `CLAUDE.md`·`rules` 반영, `-pm` 제목·라벨 | 완료 (Codex 검토 반영) |
 | 2 | `jarvis` 플러그인 설치, 시험 에이전트로 훅 확인 | 완료: 시험 PM 에서 SessionStart 주입·표식, Stop Snapshot, Paseo archive 시 SessionEnd, 대조 알림 1회 확인. PM 생성·닫기 가드와 자동 detach 는 플러그인 설치 뒤 뜬 JARVIS 세션에서 PM 을 만들 때 확인 필요 |
-| 3 | JARVIS 여러 창: 번호 발급·registry 를 jarvisctl 로, 기본 수신자 개념 | 완료(2026-11-09). 남은 옛 JARVIS 창 정리는 사용자 승인 |
-| 4 | nipa 실제 교체 → `nipa-pm` | 완료(2026-11-09): 87.8만 → 6.8만 토큰, 표식 일치, detach 확인(수동). 옛 PM archive 는 사용자 승인 대기 |
-| 5 | Paseo 플러그인 `agent.archive.after` | 결정 대기(D-20261109-02) |
+| 3 | JARVIS 여러 창: 번호 발급·registry 를 jarvisctl 로, 기본 수신자 개념 | 완료(2026-11-09). 옛 JARVIS 창 정리 완료(D-20261109-05) |
+| 4 | nipa 실제 교체 → `nipa-pm` | 완료(2026-11-09): 87.8만 → 6.8만 토큰, 표식 일치, detach 확인(수동). 옛 PM 은 archive(D-20261109-05) |
+| 5 | Paseo 플러그인 `agent.archive.after` | 하지 않음(보류, D-20261109-02) |
 | 6 | 대시보드: 이전 PM·그 Worker 를 프로젝트 방에 "이전" 으로 | 완료 |
+| 7 | 닫힌 PM 이어 띄우기(`pm-check` 의 `resume`·`resume-rotate`) | 완료(2026-11-09, ask PM 으로 확인) |
+| 8 | JARVIS 창 시작 주입, 세션 종료(`session-end` 스킬)와 기본 수신자 넘기기 | 완료(2026-11-09). 새 창에서 주입과 `claim-jarvis` 확인 |

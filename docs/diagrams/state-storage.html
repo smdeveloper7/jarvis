@@ -12,7 +12,7 @@
 <figure>
 <svg viewBox="0 0 1100 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
 <title id="t">전체 저장 구조</title>
-<desc id="d">쓰는 쪽은 JARVIS 와 훅, scripts 둘이다. 훅은 Paseo 와 Claude 실행 기록을 읽어 상태와 대조하고 세션 이력과 lock 을 JARVIS State 에 쓴다. JARVIS 는 작업, 결정, 인계를 JARVIS State 에, 작업 단위마다 작업일지를 Obsidian raw 에, 할 일과 이슈를 Notion 과 Linear 에 쓴다. raw 는 정리 요청 때 wiki 로 정리되고, JARVIS State 의 결정 이유는 wiki 에 요약된다.</desc>
+<desc id="d">쓰는 쪽은 JARVIS 와 훅, scripts 둘이다. 훅은 Paseo 와 Claude 실행 기록을 읽어 상태와 대조하고 세션 이력과 lock 을 JARVIS State 에 쓴다. JARVIS 는 작업, 결정, 인계를 JARVIS State 에, 작업이 끝날 때마다 작업일지를 Obsidian raw 에, 할 일과 이슈를 Notion 과 Linear 에 쓴다. raw 는 매일 07:00 wiki 로 정리되고, 그때 JARVIS State 의 결정 파일에서 이유를 확인해 wiki 에 요약한다.</desc>
 <defs>
 <marker id="hd" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-down"/></marker>
 <marker id="hu" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-up"/></marker>
@@ -46,8 +46,8 @@
 <text x="650" y="276" class="box-sub" text-anchor="middle">하루 작업일지</text>
 <rect x="550" y="336" width="200" height="66" class="box "/>
 <text x="650" y="366" class="box-name" text-anchor="middle">wiki</text>
-<text x="650" y="388" class="box-sub" text-anchor="middle">결정 배경, 해결법</text>
-<path d="M 650,290 V 333" class="flow up" marker-end="url(#hu)"/><text x="662" y="317" class="read-t">정리 요청 때</text>
+<text x="650" y="388" class="box-sub" text-anchor="middle">개요, 결정, 해결법</text>
+<path d="M 650,290 V 333" class="flow up" marker-end="url(#hu)"/><text x="662" y="317" class="read-t">매일 07:00 정리</text>
 <text x="540" y="462" class="zone-t">Obsidian: 오래 남길 기록</text>
 
 <rect x="820" y="196" width="256" height="284" class="zone"/>
@@ -61,7 +61,7 @@
 
 <path d="M 330,116 V 193" class="flow up" marker-end="url(#hu)"/><text x="318" y="160" class="read-t" text-anchor="end">세션 이력, lock</text>
 <path d="M 590,116 V 156 H 400 V 193" class="flow up" marker-end="url(#hu)"/><text x="495" y="148" class="read-t" text-anchor="middle">작업, 결정, 인계</text>
-<path d="M 660,116 V 221" class="flow up" marker-end="url(#hu)"/><text x="672" y="176" class="read-t">작업 단위마다</text>
+<path d="M 660,116 V 221" class="flow up" marker-end="url(#hu)"/><text x="672" y="176" class="read-t">작업이 끝나면</text>
 <path d="M 740,116 V 156 H 948 V 221" class="flow up" marker-end="url(#hu)"/><text x="850" y="148" class="read-t" text-anchor="middle">할 일, 이슈</text>
 <path d="M 444,369 H 547" class="flow read" marker-end="url(#hr)"/><text x="482" y="359" class="read-t" text-anchor="middle">결정 이유</text><text x="482" y="389" class="read-t" text-anchor="middle">요약</text>
 </svg>

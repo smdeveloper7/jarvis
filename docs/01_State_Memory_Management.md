@@ -1,7 +1,7 @@
 # 01. State & Memory Management (상태·기억 관리)
 
 > **핵심 질문:** 무엇을 영구적으로 보존하고, 세션이 바뀌어도 어떻게 기억을 이어 가는가?
-> **버전:** v0.5 · 2026-11-09 · 기억 구조(기억 4단계 + 규칙 층)를 04 로 옮기고 겹치는 절은 04 로 연결
+> **버전:** v0.6 · 2026-11-09 · 그림 두 장을 기억 4단계 기준으로 다시 그림, 정해진 항목 갱신
 > **관련:** [02 Agent Lifecycle](02_Agent_Lifecycle_Management.md) · [03 Work Lifecycle](03_Work_Lifecycle_Management.md) · [04 기억 구조](04_Memory_Structure.md)
 > **실행 지침:** `CLAUDE.md`, `rules/` 는 이 문서를 운영 규칙으로 줄인 것이다. 둘이 다르면 이 문서를 고치고 규칙에 반영한다.
 
@@ -53,7 +53,7 @@ Source of Truth(원본) 는 어떤 정보에 대해 "여기 적힌 값이 맞다
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/state-storage-dark.png">
-  <img alt="전체 저장 구조: 쓰는 쪽은 JARVIS 와 훅·scripts 둘이다. 훅은 Paseo, Claude 실행 기록을 읽어 상태와 대조하고 세션 이력과 lock 을 JARVIS State 에 쓴다. JARVIS 는 작업, 결정, 인계를 JARVIS State 에, 작업 단위마다 작업일지를 Obsidian raw 에, 할 일과 이슈를 Notion 과 Linear 에 쓴다. raw 는 정리 요청 때 wiki 로 가고, State 의 결정 이유는 wiki 에 요약된다" src="images/state-storage-light.png" width="800">
+  <img alt="전체 저장 구조: 쓰는 쪽은 JARVIS 와 훅·scripts 둘이다. 훅은 Paseo, Claude 실행 기록을 읽어 상태와 대조하고 세션 이력과 lock 을 JARVIS State 에 쓴다. JARVIS 는 작업, 결정, 인계를 JARVIS State 에, 작업이 끝날 때마다 작업일지를 Obsidian raw 에, 할 일과 이슈를 Notion 과 Linear 에 쓴다. raw 는 매일 07:00 wiki 로 정리되고, 그때 State 의 결정 이유를 확인해 wiki 에 요약한다" src="images/state-storage-light.png" width="800">
 </picture>
 
 실선은 쓰기, 점선은 읽어서 반영하는 방향이다. 쓰는 쪽은 JARVIS 와 훅·스크립트 둘뿐이고, PM 과 Worker 는 메시지로 JARVIS 에게 넘긴다(4절). 저장소는 네 묶음이다.
@@ -120,17 +120,15 @@ Obsidian 은 장기 지식을 읽고 정리하는 데 쓴다. 실행 상태의 �
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/state-memory-dark.png">
-  <img alt="장기 기억과 지금 상태: 작업 단위가 끝나면 스크립트로 raw 에 작업일지를 더하고, 사용자가 정리를 요청하면 raw 를 wiki 로 정리한다. 결정 파일은 배경을 정리해 wiki 에 남긴다. 다음 세션은 필요할 때 wiki 를 검색한다. 진행 중인 작업과 열린 결정은 Obsidian 에 사본 없이 JARVIS 보드에서만 본다" src="images/state-memory-light.png" width="800">
+  <img alt="기억 흐름: 작업이 끝나면 jarvisctl 이 raw 에 작업일지를 한 건 더하고, 매일 07:00 raw 를 wiki(개요, 결정, 해결법)로 정리한다. 정리할 때 결정 파일에서 이유를 확인한다. wiki 는 규칙 층에 제안만 하고 사용자가 승인한 것만 들어간다. 다음 세션은 규칙을 항상 읽고, 시작 때 인계 노트와 진행 중인 일, wiki 요약을 받고, 그 밖에는 recall 로 찾는다. 진행 중인 작업과 열린 결정은 Obsidian 에 사본 없이 JARVIS 보드에서만 본다" src="images/state-memory-light.png" width="800">
 </picture>
 
 기억 단계 사이의 흐름은 [04](04_Memory_Structure.md) 가 원본이다. 줄이면 이렇다.
 
 - 작업 단위는 W 하나다. W 가 닫힐 때 `jarvisctl task --worklog` 가 일지(`raw/`)에 한 건 남긴다(W·D 번호 포함).
-- 매일 07:00 schedule(`wiki-curator`)이 일지를 지식(`wiki/<프로젝트>/` 개요·결정·해결법)으로 정리하고, 규칙 후보를 제안한다. 월요일에는 점검만 한다.
+- 매일 07:00 schedule(`wiki-curator`)이 일지를 지식(`wiki/<프로젝트>/` 개요·결정·해결법)으로 정리하고, 규칙 후보를 제안한다. 월요일 07:05 에는 위키 점검이 따로 돈다.
 - 세션 시작 때 훅이 인계 노트·열린 W·D·판단 기준·위키 요약을 넣고, 그 밖에는 기억 찾기로 검색한다.
 - 영구 지식은 사용자가 "세션 종료" 라고 한 창만 남긴다.
-
-위 그림은 2026-11-09 오전 기준(정리는 요청할 때만)이라 다시 그릴 예정이다.
 
 지금 상태(진행 중인 작업, 열린 결정, 운영 반영 대기, 점유)는 Obsidian 에 사본을 두지 않고 JARVIS 보드(`dashboard/`, "현황"·"결정" 탭)에서 본다. 보드는 JARVIS State 를 직접 읽는다. Obsidian 에는 정해진 결정의 이유와 배운 것처럼 오래 남길 지식만 둔다(2026-11-09 사용자 결정).
 
@@ -204,7 +202,8 @@ C:/Users/SMDEVELOPER/
 │   ├── rules/                       # coordinator.md, worker.md
 │   ├── hooks/                       # 플러그인 훅
 │   ├── scripts/                     # jarvisctl.py, linear.py, recall.py(기억 찾기)
-│   ├── skills/                      # git-message, recall
+│   ├── skills/                      # git-message, recall, session-end
+│   ├── tools/qmd/                   # 로컬 검색 엔진 qmd 시범 (설치물·색인은 git 제외)
 │   ├── docs/                        # 01·02·03·04 정책 문서
 │   └── state/                       # (git 제외)
 │       ├── tasks/                   # W-YYYYMMDD-NN.md
@@ -240,7 +239,6 @@ C:/Users/SMDEVELOPER/
 ### 8.2 `registry.yaml`
 
 ```yaml
-boss: 상문
 jarvis: <기본 수신 JARVIS Paseo 에이전트 ID>   # 아침 보고·주인 없는 보고를 받는 창 (쓰기 권한과 무관)
 projects:
   nipa:
@@ -341,6 +339,6 @@ Manager 노트(`manager/latest.md`, JARVIS 가 직접 쓴다):
 | wiki 정리 | 2026-11-09 새 구조로 옮기고 밀린 정리(11-01~) 반영. 매일 07:00 schedule, 월요일 점검 |
 | 기억 구조 | 결정됨: 기억 4단계 + 규칙 층(D-20261109-11). 원본 04 |
 | OneDrive 동기화 충돌 | raw 는 스크립트 잠금으로 추가. wiki 는 JARVIS 가 정리할 때만 고치므로 위험 낮음 |
-| claude-mem | 보류. 원본이 하나 더 생겨 기억 구조에 넣지 않는다. 의미 검색이 필요하면 qmd 와 함께 보조 검색으로 비교(04 10절 F1) |
+| claude-mem | 결정됨: 넣지 않음(2026-11-09). 원본이 하나 더 생긴다. 의미 검색은 qmd 시범으로 본다(04 10절 F1) |
 
 관련 문서: 세션 생성·교체·복구는 [02](02_Agent_Lifecycle_Management.md), 업무 단위와 외부 도구는 [03](03_Work_Lifecycle_Management.md), 기억 구조는 [04](04_Memory_Structure.md), 실행 지침은 `CLAUDE.md`.

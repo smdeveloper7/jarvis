@@ -12,7 +12,7 @@
 <figure>
 <svg viewBox="0 0 1100 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
 <title id="t">JARVIS 구성</title>
-<desc id="d">사용자는 Paseo 앱에서 JARVIS 와 대화한다. Paseo 안에서 JARVIS 는 Coordinator 에 배정하고 Coordinator 는 Worker 를 띄우며, 보고는 거꾸로 올라온다. JARVIS 는 Notion 할일 DB 에 할 일을 넣고 JARVIS 폴더에 작업, 결정, 점유, 운영 반영 대기를 쓴다. 플러그인 훅은 모든 세션에 걸려 폴더를 보호하고 커밋 문구를 검사한다. JARVIS 보드는 폴더, Notion, Paseo 기록을 읽고 사용자는 브라우저로 본다.</desc>
+<desc id="d">사용자는 Paseo 앱에서 JARVIS 와 대화한다. Paseo 안에서 JARVIS 는 Coordinator 에 배정하고 Coordinator 는 Worker 를 띄우며, 보고는 거꾸로 올라온다. JARVIS 는 Notion 할일 DB 에 할 일을 넣고 JARVIS 폴더에 작업, 결정, 점유, 운영 반영 대기를 쓴다. 플러그인 훅은 모든 세션에 걸려 PM 에게 시작 맥락을 넣고, PM 생성과 닫기를 지키고, 폴더를 보호하고, 커밋 문구를 검사한다. JARVIS 보드는 폴더, Notion, Paseo 기록을 읽고 사용자는 브라우저로 본다.</desc>
 <defs>
 <marker id="hd" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-down"/></marker>
 <marker id="hu" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" class="head-up"/></marker>
@@ -49,18 +49,19 @@
 <text x="710" y="298" class="box-name" text-anchor="middle">JARVIS 폴더</text>
 <text x="710" y="320" class="box-sub" text-anchor="middle">registry, criteria, state/</text>
 <path d="M 464,160 H 640 V 245" class="flow up" marker-end="url(#hu)"/><text x="568" y="184" class="read-t" text-anchor="middle">쓰기: 작업, 결정,</text><text x="568" y="202" class="read-t" text-anchor="middle">점유, 운영 반영 대기</text>
-<rect x="560" y="372" width="310" height="100" class="zone"/>
-<rect x="576" y="384" width="278" height="28" class="chip"/><text x="590" y="403" class="chip-t">폴더 보호: 다른 세션의 Edit, Write 막기</text>
-<rect x="576" y="418" width="278" height="28" class="chip"/><text x="590" y="437" class="chip-t">커밋, PR 문구 검사 (git-message)</text>
-<text x="576" y="464" class="zone-t">JARVIS 플러그인: 모든 세션에 걸리는 훅</text>
-<path d="M 710,384 V 343" class="flow down" marker-end="url(#hd)"/><text x="720" y="368" class="msg down-t">보호</text>
-<path d="M 560,422 H 488" class="flow read"/>
+<rect x="560" y="364" width="310" height="128" class="zone"/>
+<rect x="576" y="376" width="278" height="28" class="chip"/><text x="590" y="395" class="chip-t">세션 시작 맥락, PM 생성·닫기 가드</text>
+<rect x="576" y="408" width="278" height="28" class="chip"/><text x="590" y="427" class="chip-t">폴더 보호: 다른 세션의 Edit, Write 막기</text>
+<rect x="576" y="440" width="278" height="28" class="chip"/><text x="590" y="459" class="chip-t">커밋, PR 문구 검사 (git-message)</text>
+<text x="576" y="484" class="zone-t">JARVIS 플러그인: 모든 세션에 걸리는 훅</text>
+<path d="M 710,376 V 343" class="flow down" marker-end="url(#hd)"/><text x="720" y="362" class="msg down-t">보호</text>
+<path d="M 560,428 H 488" class="flow read"/>
 <rect x="920" y="190" width="156" height="80" class="box "/>
 <text x="998" y="227" class="box-name" text-anchor="middle">JARVIS 보드</text>
 <text x="998" y="249" class="box-sub" text-anchor="middle">127.0.0.1:4991</text>
 <path d="M 820,111 H 960 V 187" class="flow read" marker-start="url(#hr)" marker-end="url(#hr)"/><text x="890" y="102" class="read-t" text-anchor="middle">할 일 읽기, 완료 체크</text>
 <path d="M 820,294 H 960 V 273" class="flow read" marker-end="url(#hr)"/><text x="890" y="314" class="read-t" text-anchor="middle">state/ 읽기</text>
-<path d="M 488,500 H 1040 V 273" class="flow read" marker-end="url(#hr)"/><text x="900" y="492" class="read-t" text-anchor="middle">에이전트 기록, 대화 읽기</text>
+<path d="M 488,500 H 1040 V 273" class="flow read" marker-end="url(#hr)"/><text x="960" y="492" class="read-t" text-anchor="middle">에이전트 기록, 대화 읽기</text>
 <path d="M 1040,190 V 22 H 94 V 105" class="flow read" marker-end="url(#hr)"/><text x="760" y="40" class="read-t" text-anchor="middle">브라우저로 보기</text>
 </svg>
 </figure>

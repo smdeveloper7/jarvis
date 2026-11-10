@@ -1,8 +1,8 @@
 # 03. Work Lifecycle Management (업무 수명주기 관리)
 
 > **핵심 질문:** 프로젝트·기능·작업을 어떻게 만들고, 실행하고, 완료하는가?
-> **버전:** v0.4 · 2026-11-09 · 구조 재정리(정책·구현 변경 없음)
-> **관련:** [01 State & Memory](01_State_Memory_Management.md) · [02 Agent Lifecycle](02_Agent_Lifecycle_Management.md) · 원안 `Integrated_Work_Lifecycle_Management.md`(IWLM v0.1, 사용자 업로드 문서로 저장소 밖)
+> **버전:** v0.5 · 2026-11-09 · 작업일지를 작업 닫기에 묶음(04), 정해진 항목 갱신
+> **관련:** [01 State & Memory](01_State_Memory_Management.md) · [02 Agent Lifecycle](02_Agent_Lifecycle_Management.md) · [04 기억 구조](04_Memory_Structure.md) · 원안 `Integrated_Work_Lifecycle_Management.md`(IWLM v0.1, 사용자 업로드 문서로 저장소 밖)
 > **범위:** Notion · Linear · Obsidian · JARVIS state. 배포 이력(Jira)은 사용자가 수작업으로 남기며 이 문서의 자동화 범위 밖이다.
 
 ## 요약
@@ -33,7 +33,7 @@ flowchart TD
     ASSIGN --> BUILD["④ Worker 구현·테스트"]
     BUILD --> VERIFY{"PM 검증"}
     VERIFY -->|"미흡 · 보완"| BUILD
-    VERIFY -->|"통과 · 보고"| REPORT["⑤ W 완료 · 결과 코멘트<br/>작업일지 기록"]
+    VERIFY -->|"통과 · 보고"| REPORT["⑤ 작업 닫기 · 결과 코멘트<br/>작업일지 한 건이 함께 남음"]
     REPORT --> CHECK{"이슈 완료 조건 충족<br/>+ 열린 W 없음?"}
     CHECK -->|"아니오 · 남은 범위 진행"| ASSIGN
     CHECK -->|"예"| CLOSE["⑥ 이슈 완료<br/>하위가 모두 종료되면 기능도 완료"]
@@ -42,7 +42,7 @@ flowchart TD
     classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
 ```
 
-흐름은 다섯 단계다. 기능을 정의하고(Notion), PM 에게 분해안을 받아 작업을 만들고(Linear), 작업을 PM 에게 맡기고(JARVIS State), 결과를 검증해 이슈와 기능을 닫고, 배울 것을 Obsidian 에 남긴다. dev 에만 반영된 변경은 운영 반영 대기로 남는다.
+흐름은 다섯 단계다. 기능을 정의하고(Notion), PM 에게 분해안을 받아 작업을 만들고(Linear), 작업을 PM 에게 맡기고(JARVIS State), 결과를 검증해 이슈와 기능을 닫는다. 작업을 닫을 때 작업일지가 한 건 남고, 매일 정리가 그것을 Obsidian 위키로 옮긴다. dev 에만 반영된 변경은 운영 반영 대기로 남는다.
 
 ## 2. 도구별 역할
 
@@ -51,7 +51,7 @@ flowchart TD
 | Notion | 프로젝트·기능 정의, 개인 할일·일정 | 무엇을, 왜, 어떤 완료 조건으로 | 할일 DB 사용 중(`notion-todo` 스킬, 아침 정리 schedule). 기능 정의 DB 없음 |
 | Linear | 개발 작업 단위 | 무엇을, 어떤 순서로, 어디까지 했나 | 워크스페이스 `smdevelopr-project`, 팀 `PRO`, 프로젝트 KSM·agnetx·lxhousis. nipa = Linear Project `KSM` (사용자 결정 2026-11-09) |
 | JARVIS State | PM 에게 맡긴 위임 단위(W)와 결정(D) | 지금 누가 무엇을 하고 있나 | 사용 중 |
-| Obsidian (worklog) | 결정 배경, 해결법, 회고 | 다음에 무엇을 알아야 하나 | raw 사용 중, wiki 정리 멈춤 |
+| Obsidian (worklog) | 결정 배경, 해결법, 회고 | 다음에 무엇을 알아야 하나 | 일지는 작업을 닫을 때마다, 위키는 매일 07:00 정리(04) |
 | Jira | 배포 이력 | — | 사용자 수작업. 자동화 범위 밖 |
 
 Obsidian 노트만 보고 작업 상태를 판정하지 않는다. 상태의 원본은 Linear(작업)와 JARVIS State(위임·결정)다.
@@ -180,8 +180,8 @@ flowchart TB
 2. 분해. 쪼개기가 필요하면 PM 에게 "작업 분해안만" 을 `[배정]` 하고 `[계획]` 을 받는다.
 3. 이슈 만들기. JARVIS 가 Linear 에 상위 이슈(라벨 `Feature`, 예: PRO-9)와 하위 이슈(Create·Read·Update, 예: PRO-10~12)를 만든다. 같은 `--key` 로는 다시 만들지 않는다.
 4. 구현 위임. 하위 이슈마다 `jarvisctl new-task` 로 W 작업을 만들고 `linear:`·`feature:` 를 적은 뒤 PM 에게 `[배정]` 한다. 이슈는 `In Progress` 로 바꾼다.
-5. 보고와 집계. PM 의 `[보고]` 를 받으면 W 를 `done` 으로 바꾸고 이슈에 코멘트를 단다. 이슈 완료 조건이 충족됐고 그 이슈에 열린 W 가 없으면 이슈를 `Done` 으로, 하위가 모두 끝나면 상위 이슈와 Notion 기능 상태도 갱신한다.
-6. 기록. 작업일지(raw)에 남기고, dev 에만 반영됐으면 운영 반영 대기에 올린다.
+5. 보고와 집계. PM 의 `[보고]` 를 받으면 `jarvisctl task <W> --status done --worklog …` 로 작업을 닫고(작업일지 한 건이 함께 남는다) 이슈에 코멘트를 단다. 이슈 완료 조건이 충족됐고 그 이슈에 열린 W 가 없으면 이슈를 `Done` 으로, 하위가 모두 끝나면 상위 이슈와 Notion 기능 상태도 갱신한다.
+6. 운영 반영. dev 에만 반영됐으면 운영 반영 대기(`releases.json`)에 올린다.
 
 처음 몇 번의 Linear 쓰기(만들기·Done)는 사용자에게 확인받는다.
 
@@ -265,8 +265,8 @@ flowchart TB
 
 | # | 질문 | 상태 |
 |---|---|---|
-| 1 | Linear 와 Notion 할일 DB 의 관계 | 결정 대기(D-20261109-03). 추천: 개발 작업은 Linear, Notion 할일은 개인 할일·일정·루틴만. 확정 전까지 구현은 이 기준, Notion 할일 흐름은 바꾸지 않음 |
+| 1 | Linear 와 Notion 할일 DB 의 관계 | 결정됨(D-20261109-03): 개발 작업 상세는 Linear(Project > 기능 상위 이슈 > 작업 하위 이슈), Notion 할일에는 기능 단위 행 하나 |
 | 2 | Linear 에서 기능 표현 | 결정됨(D-20261109-06): 상위 이슈 + `Feature` 라벨, 그 아래 작업 하위 이슈 |
 | 3 | Notion 기능 정의 위치 | 결정됨(D-20261109-06): Notion 은 기능 단위. 파일럿은 할일 DB 의 기능 행에 이슈 제목만 둠. 별도 기능 DB 를 둘지는 확인 필요 |
 | 4 | `state/features/` 도입 | 미결정. 추천: 파일럿과 함께 도입 |
-| 5 | 지금 Notion 할일에 있는 NIPA 개발 작업을 Linear 로 옮길지 | 1 을 정한 뒤 |
+| 5 | 지금 Notion 할일에 있는 NIPA 개발 작업을 Linear 로 옮길지 | 미결정(1 은 정해짐) |
