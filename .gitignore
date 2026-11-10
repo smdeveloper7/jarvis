@@ -7,7 +7,7 @@ state/
 __pycache__/
 *.pyc
 
-./읽어볼내용.md
+/읽어볼내용.md
 # qmd 검색 엔진(시범): 설치물과 색인은 이 PC 에만
 tools/qmd/node_modules/
 tools/qmd/.qmd/
