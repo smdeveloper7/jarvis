@@ -1,15 +1,14 @@
 # 03. Work Lifecycle Management (업무 수명주기 관리)
 
 > **핵심 질문:** 프로젝트·기능·작업을 어떻게 만들고, 실행하고, 완료하는가?
-> **버전:** v0.5 · 2026-11-09 · 작업일지를 작업 닫기에 묶음(04), 정해진 항목 갱신
-> **관련:** [01 State & Memory](01_State_Memory_Management.md) · [02 Agent Lifecycle](02_Agent_Lifecycle_Management.md) · [04 기억 구조](04_Memory_Structure.md) · 원안 `Integrated_Work_Lifecycle_Management.md`(IWLM v0.1, 사용자 업로드 문서로 저장소 밖)
+> **버전:** v1.0 · 2026-11-10 · 다른 문서 참조와 끝난 파일럿 기록을 걷어냄
 > **범위:** Notion · Linear · Obsidian · JARVIS state. 배포 이력(Jira)은 사용자가 수작업으로 남기며 이 문서의 자동화 범위 밖이다.
 
 ## 요약
 
 ### 목적
 
-사용자의 요청이 기능이 되고, 기능이 작업으로 나뉘고, 작업이 PM 에게 맡겨져 완료되기까지의 흐름을 정한다. 각 단계의 정보를 어느 도구에 두고, 언제 완료로 보는지가 핵심이다.
+사용자의 요청이 기능이 되고, 기능이 작업으로 나뉘고, 작업이 PM 에게 맡겨져 완료되기까지의 흐름을 정한다. 각 단계의 정보를 어느 도구에 두고, 언제 완료로 보는지를 정한다.
 
 ### 핵심 원칙
 
@@ -21,7 +20,7 @@
 
 ### 범위
 
-이 문서는 업무 단위(프로젝트·기능·작업·위임), 상태 전이, 완료 기준, 외부 도구 동기화, 승인을 다룬다. 작업·결정 파일의 형식과 쓰기 권한은 [01](01_State_Memory_Management.md), PM 세션의 생성·교체는 [02](02_Agent_Lifecycle_Management.md) 가 정한다.
+이 문서는 업무 단위(프로젝트·기능·작업·위임), 상태 전이, 완료 기준, 외부 도구 동기화, 승인, 에이전트 사이 메시지 규약을 다룬다. 작업·결정 파일의 형식과 PM 세션의 생성·교체는 다른 문서의 몫이다.
 
 ## 1. 전체 업무 수명주기
 
@@ -42,7 +41,7 @@ flowchart TD
     classDef focal fill:#fbeee6,stroke:#9f3f16,stroke-width:2px,color:#23262f
 ```
 
-흐름은 다섯 단계다. 기능을 정의하고(Notion), PM 에게 분해안을 받아 작업을 만들고(Linear), 작업을 PM 에게 맡기고(JARVIS State), 결과를 검증해 이슈와 기능을 닫는다. 작업을 닫을 때 작업일지가 한 건 남고, 매일 정리가 그것을 Obsidian 위키로 옮긴다. dev 에만 반영된 변경은 운영 반영 대기로 남는다.
+흐름은 다섯 단계다. 기능을 정의하고(Notion), PM 에게 분해안을 받아 작업을 만들고(Linear), 작업을 PM 에게 맡기고(JARVIS State), 결과를 검증해 이슈와 기능을 닫는다. 작업을 닫을 때(`jarvisctl task <W> --status done --worklog …`) 작업일지가 한 건 남고, 매일 07:00 정리가 그것을 Obsidian 위키로 옮긴다. dev 에만 반영된 변경은 운영 반영 대기로 남는다.
 
 ## 2. 도구별 역할
 
@@ -51,7 +50,7 @@ flowchart TD
 | Notion | 프로젝트·기능 정의, 개인 할일·일정 | 무엇을, 왜, 어떤 완료 조건으로 | 할일 DB 사용 중(`notion-todo` 스킬, 아침 정리 schedule). 기능 정의 DB 없음 |
 | Linear | 개발 작업 단위 | 무엇을, 어떤 순서로, 어디까지 했나 | 워크스페이스 `smdevelopr-project`, 팀 `PRO`, 프로젝트 KSM·agnetx·lxhousis. nipa = Linear Project `KSM` (사용자 결정 2026-11-09) |
 | JARVIS State | PM 에게 맡긴 위임 단위(W)와 결정(D) | 지금 누가 무엇을 하고 있나 | 사용 중 |
-| Obsidian (worklog) | 결정 배경, 해결법, 회고 | 다음에 무엇을 알아야 하나 | 일지는 작업을 닫을 때마다, 위키는 매일 07:00 정리(04) |
+| Obsidian (worklog) | 결정 배경, 해결법, 회고 | 다음에 무엇을 알아야 하나 | 일지는 작업을 닫을 때마다, 위키는 매일 07:00 정리 |
 | Jira | 배포 이력 | — | 사용자 수작업. 자동화 범위 밖 |
 
 Obsidian 노트만 보고 작업 상태를 판정하지 않는다. 상태의 원본은 Linear(작업)와 JARVIS State(위임·결정)다.
@@ -88,7 +87,7 @@ Feature ID(`nipa:board`)는 "무엇을 만드는가"를, Linear Issue ID(`PRO-10
 
 ### 연결 규칙
 
-팀이 `PRO` 하나뿐이라 이슈 키는 모두 `PRO-n` 이고, 프로젝트 구분은 Linear Project 로 한다. JARVIS 프로젝트 키와 Linear Project 이름이 다를 수 있으므로(nipa ↔ KSM) 이름으로 짝짓지 않고 registry 의 `linear_project` 로만 연결한다. 기능·이슈 단위 연결은 registry 에 넣지 않고 W 작업 파일의 `linear:`·`feature:` 필드에 둔다. 기능 ↔ Notion ↔ 상위 이슈를 묶는 `state/features/` 는 제안 단계이고 아직 도입하지 않았다(9.3).
+팀이 `PRO` 하나뿐이라 이슈 키는 모두 `PRO-n` 이고, 프로젝트 구분은 Linear Project 로 한다. JARVIS 프로젝트 키와 Linear Project 이름이 다를 수 있으므로(nipa ↔ KSM) 이름으로 짝짓지 않고 registry 의 `linear_project` 로만 연결한다. 기능·이슈 단위 연결은 registry 에 넣지 않고 W 작업 파일의 `linear:`·`feature:` 필드에 둔다. 기능 ↔ Notion ↔ 상위 이슈를 묶는 `state/features/` 는 제안 단계이고 아직 도입하지 않았다.
 
 ## 4. 역할별 책임
 
@@ -102,7 +101,7 @@ Feature ID(`nipa:board`)는 "무엇을 만드는가"를, Linear Issue ID(`PRO-10
 
 ### 메시지 규약
 
-JARVIS·PM·Worker 는 머리말을 붙인 글로 일을 주고받는다. 글은 Paseo `send_agent_prompt` 로 오간다(전달 원리는 [02 2절 "실행 기반: Paseo"](02_Agent_Lifecycle_Management.md#실행-기반-paseo)). 머리말은 대시보드 흐름 탭과 SessionStart 맥락이 종류를 나누는 데도 쓴다.
+JARVIS·PM·Worker 는 머리말을 붙인 글로 일을 주고받는다. 글은 Paseo `send_agent_prompt` 로 오간다. 받는 쪽에는 `<paseo-system kind="agent-message" source-agent-id=…>` 로 감싼 글로 보인다. 머리말은 대시보드 흐름 탭과 SessionStart 맥락이 종류를 나누는 데도 쓴다.
 
 | 머리말 | 보내는 쪽 → 받는 쪽 | 뜻 |
 |---|---|---|
@@ -115,8 +114,8 @@ JARVIS·PM·Worker 는 머리말을 붙인 글로 일을 주고받는다. 글은
 | `[보고] W-…` | PM → JARVIS | 맡긴 일이 끝남. 형식은 아래 |
 | `[점유]` / `[해제]` | PM → JARVIS | 공유 자원을 쓰려 함 / 다 씀 |
 | `[점유허가]` / `[점유대기]` | JARVIS → PM | `jarvisctl occupy` 결과 |
-| `[인계요청]` / `[인계노트]` | JARVIS → PM / PM → JARVIS | PM 세션 교체(02 5절) |
-| `[준비]` | 새 PM → JARVIS | 맥락을 읽고 받은 상태 요약(02 3절) |
+| `[인계요청]` / `[인계노트]` | JARVIS → PM / PM → JARVIS | PM 세션 교체. 인계노트는 열린 일만 60줄 이하 |
+| `[준비]` | 새 PM → JARVIS | 새로 뜬 PM 이 맥락을 읽고 보내는 상태 요약(`맥락: jarvis-hooks v1#…` 표식, 프로젝트·작업 폴더, 열린 작업, 확인 필요) |
 | `[인계]` | JARVIS → PM | 기본 수신 JARVIS 가 바뀜 |
 | `[알림]` | 훅 → JARVIS | PM 이 닫힘 등 사건 |
 
@@ -194,7 +193,7 @@ flowchart TB
 5. 부분 실패: Linear 쓰기가 실패하면 실패 목록에 남긴다. 작업 파일과 별도라 W 가 `done` 이어도 빠지지 않는다. JARVIS 가 새로 뜰 때와 하루 정리 때 다시 시도한다.
 6. 공개 범위: 프롬프트, 토큰·비용, 내부 세션 ID 는 외부 도구에 올리지 않는다.
 
-구체적인 명령(`linear.py create --key <W-ID|기능ID>`, `linear.py pending`·`retry`)과 표식 형식은 9절.
+구체적인 명령과 표식 형식은 아래 기술 명세에 있다.
 
 ## 8. 승인과 예외 처리
 
@@ -202,14 +201,14 @@ flowchart TB
 
 1. `criteria.md` 에 기준이 있으면 JARVIS 가 그대로 정하고 근거를 남긴다.
 2. 아래는 항상 사용자에게 묻는다: git push·병합·태그 push, 운영 배포·Langflow 운영 반영, DB 데이터·스키마 변경, 서버 저장 설정 변경, 삭제·되돌리기 어려운 명령, 이미 돌린 평가 질문 재실행, 비용이 큰 일.
-3. 사용자가 정하면 결정 파일(D)에 이유와 함께 남기고(`jarvisctl decide`, 01), 기준으로 남길지 묻는다.
+3. 사용자가 정하면 결정 파일(D)에 이유와 함께 남기고(`jarvisctl decide`), 기준으로 남길지 묻는다.
 
 | 예외 | 처리 |
 |---|---|
 | 완료 조건이 정해지지 않은 기능 요청 | 사용자와 먼저 정한다 |
 | W 가 `cancelled` | 이슈는 그대로 두고 다시 맡길지 사용자에게 묻는다 |
 | Linear 쓰기 실패 | 실패 목록에 남기고 다시 시도(7절) |
-| 그 사이 이슈 상태가 바뀜 | 되돌리지 않고 충돌로 남긴다(9.2) |
+| 그 사이 이슈 상태가 바뀜 | 되돌리지 않고 충돌로 남긴다 |
 | Notion·Linear 에서 사람이 직접 바꿈 | 자동 반영하지 않고 JARVIS 가 확인 후 반영 |
 
 ## 9. 기술 구현 명세
@@ -249,24 +248,9 @@ flowchart TB
   status: in_progress   # 복사본. 원본은 Linear 이슈 상태, JARVIS 가 갱신
 ```
 
-## 10. 파일럿과 미결정 사항
+## 10. 아직 정하지 않은 것
 
-### 10.1 파일럿 (nipa)
-
-- [x] Notion 에 nipa 기능 1개 정의: "게시판 만들기" 행(할일 DB, 본문에 이슈 제목만), 2026-11-09
-- [x] 기능 1개를 Linear 이슈 2~3개로 나눔: PRO-9 아래 PRO-10·11·12(Create·Read·Update)
-- [ ] 하위 이슈를 W 작업과 연결해 PM 에게 맡김
-- [ ] PM 결과가 [보고] → W done → Linear Done → Notion 기능 상태로 이어짐
-- [ ] PM 세션을 교체해도 W 필드의 Linear·기능 링크로 맥락이 이어짐 (02)
-- [ ] 근거 없는 작업은 done 처리되지 않음
-- [ ] dev 반영 작업이 `releases.json` 에 대기로 남음
-
-### 10.2 결정 사항
-
-| # | 질문 | 상태 |
-|---|---|---|
-| 1 | Linear 와 Notion 할일 DB 의 관계 | 결정됨(D-20261109-03): 개발 작업 상세는 Linear(Project > 기능 상위 이슈 > 작업 하위 이슈), Notion 할일에는 기능 단위 행 하나 |
-| 2 | Linear 에서 기능 표현 | 결정됨(D-20261109-06): 상위 이슈 + `Feature` 라벨, 그 아래 작업 하위 이슈 |
-| 3 | Notion 기능 정의 위치 | 결정됨(D-20261109-06): Notion 은 기능 단위. 파일럿은 할일 DB 의 기능 행에 이슈 제목만 둠. 별도 기능 DB 를 둘지는 확인 필요 |
-| 4 | `state/features/` 도입 | 미결정. 추천: 파일럿과 함께 도입 |
-| 5 | 지금 Notion 할일에 있는 NIPA 개발 작업을 Linear 로 옮길지 | 미결정(1 은 정해짐) |
+- `state/features/`(기능 ↔ Notion ↔ Linear 상위 이슈 묶음) 도입 여부. 지금은 W 작업 파일의 `linear:`·`feature:` 필드로만 잇는다.
+- Notion 에 기능 정의 DB 를 따로 둘지. 파일럿은 할일 DB 의 기능 행에 이슈 제목만 두었다(D-20261109-06).
+- 지금 Notion 할일에 있는 NIPA 개발 작업을 Linear 로 옮길지. 새 일부터 "개발 작업은 Linear, Notion 할일은 기능 단위 행 하나" 기준(D-20261109-03)을 따른다.
+- PM 에게 Linear 쓰기를 열지는 운영해 보고 정한다.

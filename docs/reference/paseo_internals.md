@@ -1,6 +1,6 @@
 # Paseo 는 어떻게 돌아가나
 
-참고 자료다(정책 아님). JARVIS·PM·Worker 가 모두 올라타 있는 Paseo 가 안에서 무슨 일을 하는지 쉽게 풀었다. 정책 쪽 요약은 [02 2절 "실행 기반: Paseo"](../02_Agent_Lifecycle_Management.md#실행-기반-paseo) 에 있다.
+참고 자료다(정책 아님). JARVIS·PM·Worker 가 모두 올라타 있는 Paseo 가 안에서 무슨 일을 하는지 쉽게 풀었다. 정책 쪽 요약은 세션 문서(`docs/02`) 2절 에 있다.
 
 - 기준일: 2026-11-09, Paseo 0.15.2, Windows
 - 근거: 이 PC 의 프로세스 목록과 실행 인자, `~/.paseo/config.json`, `~/.paseo/daemon.log`, Paseo 앱 파일(`resources\app.asar`) 안의 문자열. Paseo 코드를 처음부터 읽은 것은 아니다. 직접 본 것과 미루어 본 것은 8절에서 나눈다.

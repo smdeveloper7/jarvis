@@ -1,6 +1,6 @@
 # lanekeeper 와 JARVIS 비교
 
-참고 자료다(정책 아님). JARVIS 는 lanekeeper 의 "허브가 맡기고 보고받는다" 모델과 대시보드를 가져와, 세션 실행과 메시지를 Paseo 로 바꾸고 프로젝트별 PM 층과 잠금·인계·업무 도구(Notion·Linear)를 더한 구현이다. Paseo 자체는 [02 2절 "실행 기반: Paseo"](../02_Agent_Lifecycle_Management.md#실행-기반-paseo) 에 있다.
+참고 자료다(정책 아님). JARVIS 는 lanekeeper 의 "허브가 맡기고 보고받는다" 모델과 대시보드를 가져와, 세션 실행과 메시지를 Paseo 로 바꾸고 프로젝트별 PM 층과 잠금·인계·업무 도구(Notion·Linear)를 더한 구현이다. Paseo 자체는 세션 문서(`docs/02`) 2절 에 있다.
 
 - 기준일: 2026-11-09
 - lanekeeper: [holiday0726/lanekeeper](https://github.com/holiday0726/lanekeeper) main(2026-11-05 커밋)의 `README.ko.md`, `templates/hub/CLAUDE.md`·`COORDINATION.md`, `hooks/hooks.json`·`hub_only_write.py`
